@@ -1,0 +1,34 @@
+# Maven / Java
+target/
+*.class
+*.jar
+*.war
+*.ear
+*.nar
+hs_err_pid*
+replay_pid*
+.mvn/timing.properties
+
+# Node / SvelteKit
+node_modules/
+.svelte-kit/
+build/
+dist/
+coverage/
+reports/
+.stryker-tmp/
+
+# Environment & Secrets
+.env
+.env.*
+!.env.example
+
+# IDE & OS
+.idea/
+*.iml
+.vscode/
+.DS_Store
+Thumbs.db
+
+# SDLC Ephemeral Cache
+.agent/.cache/

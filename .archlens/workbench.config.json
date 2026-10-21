@@ -1,0 +1,5 @@
+{
+  "serverUrl": "http://localhost:8088",
+  "protocolVersion": "1.0",
+  "description": "Visual Workbench communication endpoint and mailbox IPC configuration"
+}

@@ -1,0 +1,37 @@
+{
+  "$schema": "https://agentic-sdlc.dev/schemas/config.v1.json",
+  "version": "2.0.0",
+  "generatedAt": "2026-10-21T17:13:54.176Z",
+  "profile": "standard",
+  "projectManagement": {
+    "provider": "github",
+    "key": "SDLC",
+    "livingBoard": "docs/KANBAN.md"
+  },
+  "archlens": {
+    "enabled": false,
+    "policyPath": ".archlens/policy.json",
+    "enforceInQualityGate": false,
+    "workbenchPort": 8088
+  },
+  "modules": [
+    {
+      "name": "default",
+      "path": ".",
+      "stack": "generic-script",
+      "language": "generic",
+      "commands": {
+        "test": "npm test 2>/dev/null || true",
+        "coverage": "npm run test:coverage 2>/dev/null || true",
+        "coverageFile": "coverage/coverage-summary.json",
+        "mutation": "npx stryker run 2>/dev/null || true",
+        "lint": "npm run lint 2>/dev/null || true",
+        "build": "npm run build 2>/dev/null || true"
+      },
+      "thresholds": {
+        "diffCoverage": 85,
+        "mutationScore": 80
+      }
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "title": "quarkus-agui",
+  "src": "src",
+  "prefix": "",
+  "hierarchical": true,
+  "order": [
+    "domain",
+    "application",
+    "adapters"
+  ],
+  "levels": [
+    [
+      "domain"
+    ],
+    [
+      "application"
+    ],
+    [
+      "adapters"
+    ]
+  ],
+  "foreign": [
+    "java.",
+    "jakarta.",
+    "org.springframework.",
+    "io.quarkus."
+  ],
+  "omit": [
+    "target",
+    "build",
+    ".git",
+    "node_modules",
+    ".gradle",
+    ".idea",
+    ".vscode"
+  ],
+  "lang": "java"
+}
