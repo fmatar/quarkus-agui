@@ -30,5 +30,14 @@ reports/
 .DS_Store
 Thumbs.db
 
-# SDLC Ephemeral Cache
+# SDLC Ephemeral Cache & Local Agent Symlinks
 .agent/.cache/
+.quarkus/
+.claude/
+.codex/
+.cursor/
+.gemini/
+.grok/
+.impeccable/
+.opencode/
+.pi/

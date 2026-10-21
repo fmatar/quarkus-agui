@@ -6,13 +6,13 @@
 
     <parent>
         <groupId>org.agui</groupId>
-        <artifactId>ag-ui-java-parent</artifactId>
+        <artifactId>quarkus-svelte-skeleton-parent</artifactId>
         <version>0.1.0-SNAPSHOT</version>
-        <relativePath>../../../pom.xml</relativePath>
     </parent>
 
     <artifactId>quarkus-svelte-skeleton-backend</artifactId>
-    <name>AG-UI Reference Backend (Quarkus + LangChain4j)</name>
+    <name>AG-UI Showcase - OpsPilot Quarkus Orchestrator (:8080)</name>
+    <description>Quarkus 3.40.1.1 + Java 25 Orchestrator connecting MCP, A2A, LangChain4j, and AG-UI SSE</description>
 
     <dependencies>
         <dependency>
@@ -20,9 +20,49 @@
             <artifactId>quarkus-ag-ui</artifactId>
         </dependency>
         <dependency>
-            <groupId>org.junit.jupiter</groupId>
-            <artifactId>junit-jupiter</artifactId>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-rest-jackson</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-arc</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-junit5</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.rest-assured</groupId>
+            <artifactId>rest-assured</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>${quarkus.platform.group-id}</groupId>
+                <artifactId>quarkus-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>build</goal>
+                            <goal>generate-code</goal>
+                            <goal>generate-code-tests</goal>
+                            <goal>native-image-agent</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <groupId>org.pitest</groupId>
+                <artifactId>pitest-maven</artifactId>
+            </plugin>
+        </plugins>
+    </build>
 </project>

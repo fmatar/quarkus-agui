@@ -1,7 +1,7 @@
 {
   "$schema": "https://agentic-sdlc.dev/schemas/config.v1.json",
   "version": "2.0.0",
-  "generatedAt": "2026-10-21T17:40:00.000Z",
+  "generatedAt": "2026-10-21T19:26:00.000Z",
   "profile": "standard",
   "projectManagement": {
     "provider": "github",
@@ -21,12 +21,12 @@
       "stack": "java-quarkus-maven",
       "language": "java",
       "commands": {
-        "test": "mvn test",
-        "coverage": "mvn test jacoco:report",
+        "test": "./mvnw test",
+        "coverage": "./mvnw test jacoco:report",
         "coverageFile": "ag-ui-core/target/site/jacoco/jacoco.xml",
-        "mutation": "mvn test-compile org.pitest:pitest-maven:mutationCoverage",
-        "lint": "mvn test-compile",
-        "build": "mvn test-compile"
+        "mutation": "./mvnw test-compile org.pitest:pitest-maven:mutationCoverage",
+        "lint": "./mvnw test-compile",
+        "build": "./mvnw test-compile"
       },
       "thresholds": {
         "diffCoverage": 85,
@@ -36,15 +36,15 @@
     {
       "name": "quarkus-svelte-skeleton-frontend",
       "path": "examples/quarkus-svelte-skeleton/frontend",
-      "stack": "node-sveltekit",
+      "stack": "node-sveltekit-pnpm",
       "language": "typescript",
       "commands": {
-        "test": "npm test 2>/dev/null || true",
-        "coverage": "npm run test:coverage 2>/dev/null || true",
+        "test": "pnpm test",
+        "coverage": "pnpm run test:coverage",
         "coverageFile": "coverage/coverage-summary.json",
-        "mutation": "npx stryker run 2>/dev/null || true",
-        "lint": "npm run check 2>/dev/null || true",
-        "build": "npm run build 2>/dev/null || true"
+        "mutation": "pnpm run test:mutation 2>/dev/null || true",
+        "lint": "pnpm run check",
+        "build": "pnpm run build"
       },
       "thresholds": {
         "diffCoverage": 85,
