@@ -16,50 +16,14 @@
   },
   "modules": [
     {
-      "name": "ag-ui-core",
-      "path": "ag-ui-core",
-      "stack": "java-maven",
-      "language": "java",
-      "commands": {
-        "test": "mvn test",
-        "coverage": "mvn test jacoco:report",
-        "coverageFile": "target/site/jacoco/jacoco.xml",
-        "mutation": "mvn test-compile org.pitest:pitest-maven:mutationCoverage",
-        "lint": "mvn test-compile",
-        "build": "mvn test-compile"
-      },
-      "thresholds": {
-        "diffCoverage": 85,
-        "mutationScore": 80
-      }
-    },
-    {
-      "name": "quarkus-ag-ui-runtime",
-      "path": "quarkus-extension/runtime",
+      "name": "ag-ui-java-reactor",
+      "path": ".",
       "stack": "java-quarkus-maven",
       "language": "java",
       "commands": {
         "test": "mvn test",
         "coverage": "mvn test jacoco:report",
-        "coverageFile": "target/site/jacoco/jacoco.xml",
-        "mutation": "mvn test-compile org.pitest:pitest-maven:mutationCoverage",
-        "lint": "mvn test-compile",
-        "build": "mvn test-compile"
-      },
-      "thresholds": {
-        "diffCoverage": 85,
-        "mutationScore": 80
-      }
-    },
-    {
-      "name": "quarkus-ag-ui-deployment",
-      "path": "quarkus-extension/deployment",
-      "stack": "java-quarkus-maven",
-      "language": "java",
-      "commands": {
-        "test": "mvn test",
-        "coverage": "mvn test jacoco:report",
-        "coverageFile": "target/site/jacoco/jacoco.xml",
+        "coverageFile": "ag-ui-core/target/site/jacoco/jacoco.xml",
         "mutation": "mvn test-compile org.pitest:pitest-maven:mutationCoverage",
         "lint": "mvn test-compile",
         "build": "mvn test-compile"
