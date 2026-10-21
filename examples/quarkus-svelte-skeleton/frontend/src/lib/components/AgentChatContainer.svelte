@@ -1,14 +1,17 @@
 <script>
-	import { Activity, CheckCircle2, Cpu, Layers, Radio, Server, ShieldAlert, XCircle } from '@lucide/svelte';
+	import { CheckCircle2, Cpu, Radio, ShieldAlert, XCircle } from '@lucide/svelte';
 	import {
 		SCENARIO_PRESETS,
 		createInitialWorkbenchState,
 		parseSseChunk,
-		reduceAgUiEvent
+		reduceAgUiEvent,
+		updateServiceReplicasInState
 	} from '$lib/agui-client.js';
+	import ClusterStatePanel from './ClusterStatePanel.svelte';
 	import MessageHistory from './MessageHistory.svelte';
 	import StreamRenderer from './StreamRenderer.svelte';
 	import InputBar from './InputBar.svelte';
+	import ProtocolInspector from './ProtocolInspector.svelte';
 
 	const LLM_MODES = [
 		{ value: 'ollama:llama3.2:latest', label: 'Ollama • llama3.2:latest (Live LLM)' },
@@ -116,6 +119,19 @@
 		}
 	}
 
+	function handleAdjustReplicas(serviceName, delta) {
+		const updated = updateServiceReplicasInState(workbench.clusterState, serviceName, delta);
+		workbench = { ...workbench, clusterState: updated };
+		const targetSvc = updated?.services?.find((s) => s.serviceName === serviceName);
+		if (targetSvc) {
+			runScenarioPrompt(`Scale deployment ${serviceName} to ${targetSvc.replicas} replicas`);
+		}
+	}
+
+	function clearInspectorEvents() {
+		workbench = { ...workbench, events: [] };
+	}
+
 	function cancelStream() {
 		abortController?.abort();
 	}
@@ -169,44 +185,12 @@
 	</header>
 
 	<!-- Pane 1: MCP & A2A Topology + Live STATE_SNAPSHOT / STATE_DELTA Sidebar -->
-	<aside
-		class="workbench-sidebar workbench-pane flex flex-col gap-3 rounded-xl border border-slate-800 bg-slate-900/80 p-4"
-	>
-		<div class="flex items-center gap-2 text-xs font-semibold tracking-wider text-cyan-400 uppercase">
-			<Server class="size-4" />
-			<span>MCP Cluster State (:8081)</span>
-		</div>
-		<div class="space-y-2">
-			{#each workbench.clusterState?.services ?? [] as svc (svc.serviceName)}
-				<div class="rounded-lg border border-slate-800 bg-slate-950/70 p-2.5 text-xs">
-					<div class="flex items-center justify-between font-semibold text-slate-200">
-						<span>{svc.serviceName}</span>
-						<span
-							class="rounded px-1.5 py-0.5 text-[10px] {svc.status === 'HEALTHY'
-								? 'bg-emerald-950 text-emerald-300'
-								: 'bg-amber-950 text-amber-300'}"
-						>
-							{svc.status}
-						</span>
-					</div>
-					<div class="mt-1 flex items-center justify-between font-mono text-[11px] text-slate-400">
-						<span>Replicas: <strong class="text-cyan-300">{svc.replicas}</strong></span>
-						<span>CPU: {svc.cpuPercent}%</span>
-					</div>
-				</div>
-			{/each}
-		</div>
-
-		<div class="mt-2 flex items-center gap-2 text-xs font-semibold tracking-wider text-purple-400 uppercase">
-			<Layers class="size-4" />
-			<span>A2A Specialist (:8082)</span>
-		</div>
-		<ul class="space-y-1.5 text-xs text-slate-300">
-			<li class="rounded bg-slate-800/80 px-2.5 py-1.5 font-mono">audit-clean-architecture</li>
-			<li class="rounded bg-slate-800/80 px-2.5 py-1.5 font-mono">assess-security-posture</li>
-			<li class="rounded bg-slate-800/80 px-2.5 py-1.5 font-mono">plan-incident-remediation</li>
-		</ul>
-	</aside>
+	<ClusterStatePanel
+		clusterState={workbench.clusterState}
+		isStreaming={workbench.isStreaming}
+		onAdjustReplicas={handleAdjustReplicas}
+		onTriggerSkill={runScenarioPrompt}
+	/>
 
 	<!-- Pane 2: Center AG-UI Agent Chat -->
 	<section
@@ -262,29 +246,5 @@
 	</section>
 
 	<!-- Pane 3: Live AG-UI SSE Protocol Inspector -->
-	<aside
-		class="workbench-inspector workbench-pane flex flex-col rounded-xl border border-slate-800 bg-slate-900/80 p-4"
-	>
-		<div class="mb-3 flex items-center justify-between">
-			<div class="flex items-center gap-2 text-xs font-semibold tracking-wider text-emerald-400 uppercase">
-				<Activity class="size-4" />
-				<span>AG-UI SSE Wire Inspector</span>
-			</div>
-			<span class="rounded bg-slate-800 px-2 py-0.5 font-mono text-xs text-slate-300">
-				{workbench.events.length} frames
-			</span>
-		</div>
-
-		<div class="scrollable-region flex-1 space-y-2">
-			{#each workbench.events as evt (evt.id)}
-				<div class="rounded-lg border border-slate-800 bg-slate-950/90 p-2.5 font-mono text-xs">
-					<div class="flex items-center justify-between text-indigo-300">
-						<span class="font-bold">{evt.type}</span>
-						<span class="text-slate-500">{evt.id}</span>
-					</div>
-					<pre class="mt-1 overflow-x-auto text-[11px] text-slate-400">{JSON.stringify(evt.payload)}</pre>
-				</div>
-			{/each}
-		</div>
-	</aside>
+	<ProtocolInspector events={workbench.events} onClear={clearInspectorEvents} />
 </main>

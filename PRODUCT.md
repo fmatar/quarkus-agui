@@ -36,7 +36,7 @@ Fill the gap in Java/JVM ecosystems for the **AG-UI (Agent–User Interaction Pr
 | CAP-01 | Quarkus MCP Server (:8081) & Quarkus A2A Server (:8082) in Reference Showcase | `docs/specs/cap-01-mcp-a2a-servers.md` | None | `IMPLEMENTED (ADR-002)` |
 | CAP-02 | OpsPilot Quarkus Orchestrator (:8080) & SvelteKit + pnpm 3-Pane Baseline (:5173) | `docs/specs/cap-02-orchestrator-svelte-baseline.md` | CAP-01 | `IMPLEMENTED (ADR-002)` |
 | CAP-03 | In-Place AG-UI Protocol Engine in Orchestrator (Core 6 + MCP/A2A + State + HITL) | `docs/specs/cap-03-inplace-agui-backend.md` | CAP-02 | `IMPLEMENTED (ADR-002)` |
-| CAP-04 | Full 3-Pane SvelteKit + Skeleton UI + @lucide/svelte AG-UI Workbench | `docs/specs/cap-04-svelte-agui-workbench.md` | CAP-02 | `AMENDED (ADR-002)` |
+| CAP-04 | Full 3-Pane SvelteKit + Skeleton UI + @lucide/svelte AG-UI Workbench | `docs/specs/cap-04-svelte-agui-workbench.md` | CAP-02 | `IMPLEMENTED (ADR-002)` |
 | CAP-05 | Extract ag-ui-core Standalone Java 25 Library & Refactor Showcase | `docs/specs/cap-05-extract-agui-core.md` | CAP-03, CAP-04 | `AMENDED (ADR-002)` |
 | CAP-06 | Extract quarkus-ag-ui-runtime (AgUiBridge, AgUiMcpBridge, AgUiA2aBridge, Mutiny SSE) | `docs/specs/cap-06-extract-quarkus-runtime.md` | CAP-05 | `AMENDED (ADR-002)` |
 | CAP-07 | Extract quarkus-ag-ui-deployment, GraalVM 25 Reflection, Dev UI & Integration Tests | `docs/specs/cap-07-extract-quarkus-deployment-it.md` | CAP-06 | `AMENDED (ADR-002)` |

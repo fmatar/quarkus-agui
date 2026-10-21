@@ -3,8 +3,10 @@ import assert from 'node:assert/strict';
 import {
 	SCENARIO_PRESETS,
 	createInitialWorkbenchState,
+	filterInspectorEvents,
 	parseSseChunk,
-	reduceAgUiEvent
+	reduceAgUiEvent,
+	updateServiceReplicasInState
 } from '../src/lib/agui-client.js';
 
 test('parseSseChunk splits multi-frame SSE chunks on double newline and preserves remainder', () => {
@@ -145,6 +147,25 @@ test('reduceAgUiEvent handles HITL interrupted and cancelled RUN_FINISHED states
 	});
 	assert.equal(state.pendingApproval, null);
 	assert.ok(state.messages.at(-1).content.includes('cancelled'));
+});
+
+test('filterInspectorEvents and updateServiceReplicasInState support 3-pane workbench interactions', () => {
+	const sampleEvents = [
+		{ id: '1', type: 'RUN_STARTED' },
+		{ id: '2', type: 'TOOL_CALL' },
+		{ id: '3', type: 'STEP_STARTED' },
+		{ id: '4', type: 'TEXT_DELTA' }
+	];
+	assert.equal(filterInspectorEvents(sampleEvents, 'ALL').length, 4);
+	assert.equal(filterInspectorEvents(sampleEvents, 'MCP').length, 1);
+	assert.equal(filterInspectorEvents(sampleEvents, 'A2A').length, 1);
+	assert.equal(filterInspectorEvents(sampleEvents, 'AG-UI').length, 2);
+	assert.deepEqual(filterInspectorEvents(null, 'ALL'), []);
+
+	const initial = createInitialWorkbenchState();
+	const updated = updateServiceReplicasInState(initial.clusterState, 'payment-gateway', 2);
+	assert.equal(updated.services[0].replicas, 5);
+	assert.equal(updateServiceReplicasInState(null, 'payment-gateway', 1), null);
 });
 
 test('parseSseChunk and reduceAgUiEvent handle empty, malformed, STATUS, STEP_STARTED, and unknown events', () => {
