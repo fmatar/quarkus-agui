@@ -41,7 +41,7 @@ The **AG-UI (Agent–User Interaction Protocol)** standardizes real-time, bidire
 - [x] `pnpm` SvelteKit + `@skeletonlabs/skeleton-svelte` + `@lucide/svelte` 3-pane baseline UI (`:5173`).
 
 ### US-003 (`CAP-03`, #4): In-Place AG-UI Protocol Engine in Orchestrator (`:8080`)
-- [ ] Streams Core 6 + `STEP_STARTED`/`STEP_FINISHED` + `STATE_SNAPSHOT`/`STATE_DELTA` + HITL `interrupted` approvals (`POST /api/agent/approve`).
+- [x] Streams Core 6 + `STEP_STARTED`/`STEP_FINISHED` + `STATE_SNAPSHOT`/`STATE_DELTA` + HITL `interrupted` approvals (`POST /api/agent/approve`).
 
 ### US-004 (`CAP-04`, #5): Full 3-Pane SvelteKit + Skeleton UI + `@lucide/svelte` AG-UI Workbench (`:5173`)
 - [ ] `AgentChatContainer.svelte`, `MessageHistory.svelte`, `StreamRenderer.svelte`, `InputBar.svelte`, `ClusterStatePanel.svelte`, and `ProtocolInspector.svelte` (`\n\n` SSE frame parser + `AbortController`).

@@ -9,8 +9,8 @@ import {
 
 test('parseSseChunk splits multi-frame SSE chunks on double newline and preserves remainder', () => {
 	const raw =
-		'data: {"id":"1","type":"RUN_STARTED","threadId":"t1","timestamp":100,"payload":{"status":"started"}}\n\n' +
-		'data: {"id":"2","type":"TEXT_DELTA","threadId":"t1","timestamp":101,"payload":{"content":"Hello "}}\n\n' +
+		'data: {"id":"1","type":"RUN_STARTED","threadId":"t1","timestamp":100,"payload":{"status":"started"}}\r\n\r\n' +
+		'data:data: {"id":"2","type":"TEXT_DELTA","threadId":"t1","timestamp":101,"payload":{"content":"Hello "}}\n\n' +
 		'data: {"id":"3","type":"TEXT_DELTA"';
 
 	const { events, remainder } = parseSseChunk(raw);
@@ -20,7 +20,7 @@ test('parseSseChunk splits multi-frame SSE chunks on double newline and preserve
 	assert.equal(remainder, 'data: {"id":"3","type":"TEXT_DELTA"');
 });
 
-test('reduceAgUiEvent transitions state across RUN_STARTED, TOOL_CALL, STEP_FINISHED, TEXT_DELTA, and RUN_FINISHED', () => {
+test('reduceAgUiEvent transitions state across RUN_STARTED, STATE_SNAPSHOT, TOOL_CALL, STEP_FINISHED, TEXT_DELTA, and RUN_FINISHED', () => {
 	let state = createInitialWorkbenchState('thread-test');
 	assert.equal(state.isStreaming, false);
 
@@ -33,6 +33,20 @@ test('reduceAgUiEvent transitions state across RUN_STARTED, TOOL_CALL, STEP_FINI
 	});
 	assert.equal(state.isStreaming, true);
 	assert.equal(state.statusText, 'Run started (deterministic)');
+
+	state = reduceAgUiEvent(state, {
+		id: 'e1-snap',
+		type: 'STATE_SNAPSHOT',
+		threadId: 'thread-test',
+		timestamp: 1002,
+		payload: {
+			clusterState: {
+				cluster: 'quarkus-prod-us-east-1',
+				services: [{ serviceName: 'payment-gateway', status: 'HEALTHY', replicas: 4, cpuPercent: 40 }]
+			}
+		}
+	});
+	assert.equal(state.clusterState.services[0].replicas, 4);
 
 	state = reduceAgUiEvent(state, {
 		id: 'e2',
@@ -99,9 +113,38 @@ test('reduceAgUiEvent transitions state across RUN_STARTED, TOOL_CALL, STEP_FINI
 	assert.equal(state.messages.at(-1).content, 'Cluster is healthy.');
 });
 
-test('SCENARIO_PRESETS exposes four deterministic tri-protocol showcase scenarios', () => {
-	assert.equal(SCENARIO_PRESETS.length, 4);
+test('SCENARIO_PRESETS exposes five tri-protocol showcase scenarios including HITL approval', () => {
+	assert.equal(SCENARIO_PRESETS.length, 5);
 	assert.ok(SCENARIO_PRESETS.every((s) => s.id && s.label && s.prompt));
+});
+
+test('reduceAgUiEvent handles HITL interrupted and cancelled RUN_FINISHED states', () => {
+	let state = createInitialWorkbenchState('thread-hitl');
+	state = reduceAgUiEvent(state, {
+		id: 'h1',
+		type: 'TOOL_CALL',
+		payload: { callId: 'ch1', tool: 'scaleDeployment', requiresApproval: true }
+	});
+	assert.equal(state.mcpCalls[0].status, 'awaiting_approval');
+
+	state = reduceAgUiEvent(state, {
+		id: 'h2',
+		type: 'RUN_FINISHED',
+		payload: {
+			status: 'interrupted',
+			pendingAction: { toolName: 'scaleDeployment', serviceName: 'payment-gateway', replicas: 8 }
+		}
+	});
+	assert.equal(state.isStreaming, false);
+	assert.equal(state.pendingApproval.replicas, 8);
+
+	state = reduceAgUiEvent(state, {
+		id: 'h3',
+		type: 'RUN_FINISHED',
+		payload: { status: 'cancelled' }
+	});
+	assert.equal(state.pendingApproval, null);
+	assert.ok(state.messages.at(-1).content.includes('cancelled'));
 });
 
 test('parseSseChunk and reduceAgUiEvent handle empty, malformed, STATUS, STEP_STARTED, and unknown events', () => {
@@ -142,4 +185,3 @@ test('parseSseChunk and reduceAgUiEvent handle empty, malformed, STATUS, STEP_ST
 	});
 	assert.equal(state.isStreaming, false);
 });
-

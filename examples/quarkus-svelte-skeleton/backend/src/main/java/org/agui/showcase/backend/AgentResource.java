@@ -43,6 +43,21 @@ public class AgentResource {
     @Produces(MediaType.SERVER_SENT_EVENTS)
     @RestStreamElementType(MediaType.TEXT_PLAIN)
     public Multi<String> run(AgentRunRequest request) {
-        return orchestrator.streamRun(request);
+        return orchestrator.streamRun(request).map(AgentResource::unwrapSseDataPayload);
+    }
+
+    @POST
+    @Path("/approve")
+    @Produces(MediaType.SERVER_SENT_EVENTS)
+    @RestStreamElementType(MediaType.TEXT_PLAIN)
+    public Multi<String> approve(AgentApprovalRequest approval) {
+        return orchestrator.approvePendingAction(approval).map(AgentResource::unwrapSseDataPayload);
+    }
+
+    static String unwrapSseDataPayload(String rawFrame) {
+        if (rawFrame == null) {
+            return "";
+        }
+        return rawFrame.replaceFirst("^data:\\s*", "").stripTrailing();
     }
 }
