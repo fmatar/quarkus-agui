@@ -5,7 +5,7 @@
 > To refresh this board: `.agent/skills/sdlc-kanban/scripts/kanban-sync.sh`
 
 > **Repository**: `fmatar/quarkus-agui`  
-> **Last Synced**: `2026-10-21 17:58:23 UTC`
+> **Last Synced**: `2026-10-21 20:11:09 UTC`
 
 ---
 
@@ -13,14 +13,13 @@
 
 | 📥 Backlog | 📋 Ready | ⚡ In Progress | 🔍 In Review | ✅ Done |
 | :--- | :--- | :--- | :--- | :--- |
-|  | [#9 feat(CAP-08): Full-Stack E2E Verification, Performance Benchmarks & Developer Showcase](https://github.com/fmatar/quarkus-agui/issues/9) | [#1 feat: chore(genesis): initialize PRODUCT.md, multi-module architecture baseline, and specs for quarkus-agui](https://github.com/fmatar/quarkus-agui/issues/1) |  |  |
-|  | [#8 feat(CAP-06): Reference Quarkus + LangChain4j Agent Backend (examples/quarkus-svelte-skeleton)](https://github.com/fmatar/quarkus-agui/issues/8) |  |  |  |
-|  | [#7 feat(CAP-05): Quarkus AG-UI Extension JVM & GraalVM Native Integration Test Suite (quarkus-ag-ui-integration-tests)](https://github.com/fmatar/quarkus-agui/issues/7) |  |  |  |
-|  | [#6 feat(CAP-07): Reference SvelteKit + Skeleton UI Streaming Client (examples/quarkus-svelte-skeleton)](https://github.com/fmatar/quarkus-agui/issues/6) |  |  |  |
-|  | [#5 feat(CAP-04): Quarkus AG-UI Deployment Processor, GraalVM Reflection & Dev UI Inspector (quarkus-ag-ui-deployment)](https://github.com/fmatar/quarkus-agui/issues/5) |  |  |  |
-|  | [#4 feat(CAP-03): Quarkus AG-UI Runtime & LangChain4j TokenStream/Tool Bridge (quarkus-ag-ui-runtime)](https://github.com/fmatar/quarkus-agui/issues/4) |  |  |  |
-|  | [#3 feat(CAP-02): AG-UI SSE Frame Formatter & Flow.Publisher Reactive Adapters (ag-ui-core)](https://github.com/fmatar/quarkus-agui/issues/3) |  |  |  |
-|  | [#2 feat(CAP-01): AG-UI Core Event Schema & Payload Records (ag-ui-core)](https://github.com/fmatar/quarkus-agui/issues/2) |  |  |  |
+|  | [#9 feat(CAP-08): Migrate Showcase to quarkus-ag-ui Extension & Full E2E + Native Benchmarks](https://github.com/fmatar/quarkus-agui/issues/9) | [#2 feat(CAP-01): Quarkus MCP Server (:8081) & Quarkus A2A Server (:8082) in Reference Showcase](https://github.com/fmatar/quarkus-agui/issues/2) |  | [#1 feat: chore(genesis): initialize PRODUCT.md, multi-module architecture baseline, and specs for quarkus-agui](https://github.com/fmatar/quarkus-agui/issues/1) |
+|  | [#8 feat(CAP-07): Extract quarkus-ag-ui-deployment, GraalVM 25 Reflection, Dev UI & Integration Tests](https://github.com/fmatar/quarkus-agui/issues/8) |  |  |  |
+|  | [#7 feat(CAP-06): Extract quarkus-ag-ui-runtime (AgUiBridge, AgUiMcpBridge, AgUiA2aBridge, Mutiny SSE)](https://github.com/fmatar/quarkus-agui/issues/7) |  |  |  |
+|  | [#6 feat(CAP-05): Extract ag-ui-core Standalone Java 25 Library & Refactor Showcase](https://github.com/fmatar/quarkus-agui/issues/6) |  |  |  |
+|  | [#5 feat(CAP-04): Full 3-Pane SvelteKit + Skeleton UI + @lucide/svelte AG-UI Workbench](https://github.com/fmatar/quarkus-agui/issues/5) |  |  |  |
+|  | [#4 feat(CAP-03): In-Place AG-UI Protocol Engine in Orchestrator (Core 6 + MCP/A2A + State + HITL)](https://github.com/fmatar/quarkus-agui/issues/4) |  |  |  |
+|  | [#3 feat(CAP-02): OpsPilot Quarkus Orchestrator (:8080) & SvelteKit + pnpm 3-Pane Baseline (:5173)](https://github.com/fmatar/quarkus-agui/issues/3) |  |  |  |
 
 ---
 
@@ -28,15 +27,15 @@
 
 | Issue | Status | Priority | Component | Milestone | Spec / Contract |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| [#9 feat(CAP-08): Full-Stack E2E Verification, Performance Benchmarks & Developer Showcase](https://github.com/fmatar/quarkus-agui/issues/9) | `status:ready` | P2 - Medium | General | — | — |
-| [#8 feat(CAP-06): Reference Quarkus + LangChain4j Agent Backend (examples/quarkus-svelte-skeleton)](https://github.com/fmatar/quarkus-agui/issues/8) | `status:ready` | P2 - Medium | General | — | — |
-| [#7 feat(CAP-05): Quarkus AG-UI Extension JVM & GraalVM Native Integration Test Suite (quarkus-ag-ui-integration-tests)](https://github.com/fmatar/quarkus-agui/issues/7) | `status:ready` | P2 - Medium | General | — | — |
-| [#6 feat(CAP-07): Reference SvelteKit + Skeleton UI Streaming Client (examples/quarkus-svelte-skeleton)](https://github.com/fmatar/quarkus-agui/issues/6) | `status:ready` | P2 - Medium | General | — | — |
-| [#5 feat(CAP-04): Quarkus AG-UI Deployment Processor, GraalVM Reflection & Dev UI Inspector (quarkus-ag-ui-deployment)](https://github.com/fmatar/quarkus-agui/issues/5) | `status:ready` | P2 - Medium | General | — | — |
-| [#4 feat(CAP-03): Quarkus AG-UI Runtime & LangChain4j TokenStream/Tool Bridge (quarkus-ag-ui-runtime)](https://github.com/fmatar/quarkus-agui/issues/4) | `status:ready` | P2 - Medium | General | — | — |
-| [#3 feat(CAP-02): AG-UI SSE Frame Formatter & Flow.Publisher Reactive Adapters (ag-ui-core)](https://github.com/fmatar/quarkus-agui/issues/3) | `status:ready` | P2 - Medium | General | — | — |
-| [#2 feat(CAP-01): AG-UI Core Event Schema & Payload Records (ag-ui-core)](https://github.com/fmatar/quarkus-agui/issues/2) | `status:ready` | P2 - Medium | General | — | — |
-| [#1 feat: chore(genesis): initialize PRODUCT.md, multi-module architecture baseline, and specs for quarkus-agui](https://github.com/fmatar/quarkus-agui/issues/1) | `status:in-progress` | P2 - Medium | General | — | — |
+| [#9 feat(CAP-08): Migrate Showcase to quarkus-ag-ui Extension & Full E2E + Native Benchmarks](https://github.com/fmatar/quarkus-agui/issues/9) | `status:ready` | P2 - Medium | General | — | — |
+| [#8 feat(CAP-07): Extract quarkus-ag-ui-deployment, GraalVM 25 Reflection, Dev UI & Integration Tests](https://github.com/fmatar/quarkus-agui/issues/8) | `status:ready` | P2 - Medium | General | — | — |
+| [#7 feat(CAP-06): Extract quarkus-ag-ui-runtime (AgUiBridge, AgUiMcpBridge, AgUiA2aBridge, Mutiny SSE)](https://github.com/fmatar/quarkus-agui/issues/7) | `status:ready` | P2 - Medium | General | — | — |
+| [#6 feat(CAP-05): Extract ag-ui-core Standalone Java 25 Library & Refactor Showcase](https://github.com/fmatar/quarkus-agui/issues/6) | `status:ready` | P2 - Medium | General | — | — |
+| [#5 feat(CAP-04): Full 3-Pane SvelteKit + Skeleton UI + @lucide/svelte AG-UI Workbench](https://github.com/fmatar/quarkus-agui/issues/5) | `status:ready` | P2 - Medium | General | — | — |
+| [#4 feat(CAP-03): In-Place AG-UI Protocol Engine in Orchestrator (Core 6 + MCP/A2A + State + HITL)](https://github.com/fmatar/quarkus-agui/issues/4) | `status:ready` | P2 - Medium | General | — | — |
+| [#3 feat(CAP-02): OpsPilot Quarkus Orchestrator (:8080) & SvelteKit + pnpm 3-Pane Baseline (:5173)](https://github.com/fmatar/quarkus-agui/issues/3) | `status:ready` | P2 - Medium | General | — | — |
+| [#2 feat(CAP-01): Quarkus MCP Server (:8081) & Quarkus A2A Server (:8082) in Reference Showcase](https://github.com/fmatar/quarkus-agui/issues/2) | `status:in-progress` | P2 - Medium | General | — | — |
+| [#1 feat: chore(genesis): initialize PRODUCT.md, multi-module architecture baseline, and specs for quarkus-agui](https://github.com/fmatar/quarkus-agui/issues/1) | `status:done` | P2 - Medium | General | — | — |
 
 ---
 

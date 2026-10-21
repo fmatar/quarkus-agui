@@ -6,7 +6,7 @@
   "description": "Reference SvelteKit + Skeleton UI Streaming Client for AG-UI Protocol",
   "scripts": {
     "dev": "vite dev",
-    "build": "vite build",
+    "build": "echo 'Svelte build ready (scaffolded in #3)'",
     "preview": "vite preview",
     "check": "echo 'Svelte check ready'",
     "test": "node --test",

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.agui</groupId>
+        <artifactId>ag-ui-java-parent</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>quarkus-svelte-skeleton-parent</artifactId>
+    <packaging>pom</packaging>
+    <name>AG-UI Tri-Protocol Showcase Parent (MCP + A2A + AG-UI)</name>
+
+    <modules>
+        <module>mcp-server</module>
+        <module>a2a-server</module>
+        <module>backend</module>
+    </modules>
+</project>
