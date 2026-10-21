@@ -50,7 +50,7 @@ The **AG-UI (Agent–User Interaction Protocol)** standardizes real-time, bidire
 - [x] Zero-dependency Java 25 library (`org.agui.core.domain`, `application`, `adapters`) governed by Archlens concentric rings.
 
 ### US-006 (`CAP-06`, #7): Extract `quarkus-ag-ui-runtime`
-- [ ] `AgUiBridge`, `AgUiMcpBridge`, `AgUiA2aBridge`, and SmallRye Mutiny `Multi<AgUiEvent<?>>` SSE support.
+- [x] `AgUiBridge`, `AgUiMcpBridge`, `AgUiA2aBridge`, and SmallRye Mutiny `Multi<AgUiEvent<?>>` SSE support.
 
 ### US-007 (`CAP-07`, #8): Extract `quarkus-ag-ui-deployment` & Integration Tests
 - [ ] `AgUiProcessor`, `ReflectiveClassBuildItem`s for GraalVM 25, Quarkus Dev UI Inspector Card, and `@QuarkusTest`/`@QuarkusIntegrationTest` suites.

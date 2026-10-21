@@ -1,11 +1,11 @@
 {
-  "activeSessionId": 6,
+  "activeSessionId": 7,
   "sessions": {
-    "6": {
+    "7": {
       "active": true,
-      "issueId": 6,
+      "issueId": 7,
       "type": "feat",
-      "branch": "feature/issue-#6-extract-agui-core",
+      "branch": "feature/issue-#7-extract-quarkus-runtime",
       "worktree": null,
       "stage": 2,
       "stageName": "Intake & Specification",
@@ -18,8 +18,8 @@
         "mutationScore": null,
         "uiScreenshotPath": null,
         "checkpoints": {
-          "stage1": "2026-10-21T23:13:07.850Z",
-          "stage2": "2026-10-21T23:13:07.901Z",
+          "stage1": "2026-10-21T23:42:03.005Z",
+          "stage2": "2026-10-21T23:42:03.056Z",
           "stage3": null,
           "stage4": null,
           "stage5": null,
@@ -28,8 +28,8 @@
           "stage8": null
         }
       },
-      "startedAt": "2026-10-21T23:13:07.849Z",
-      "updatedAt": "2026-10-21T23:13:16.242Z",
+      "startedAt": "2026-10-21T23:42:03.004Z",
+      "updatedAt": "2026-10-21T23:42:13.222Z",
       "activeSubagents": []
     }
   }
