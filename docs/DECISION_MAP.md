@@ -31,6 +31,7 @@ flowchart TD
   SPEC_07["SPEC-07 (docs/specs/cap-07-reference-svelte-client.md)"]
   CAP_08["CAP-08: Full-Stack E2E Verification, Performance Benchmarks & Developer Showcase"]
   SPEC_08["SPEC-08 (docs/specs/cap-08-e2e-benchmarks-showcase.md)"]
+  ADR_001["ADR-001: Multi-Module Maven & SvelteKit Clean Architecture for AG-UI Protocol"]
   _1["Ticket #1 (feature/issue-#1-product-genesis)"]
   CAP_01 -->|specified_by| SPEC_01
   CAP_02 -->|specified_by| SPEC_02
@@ -54,6 +55,11 @@ flowchart TD
   CAP_05 -->|depends_on| CAP_08
   CAP_06 -->|depends_on| CAP_08
   CAP_07 -->|depends_on| CAP_08
+  _1 -->|triggered_drift_adr| ADR_001
+  CAP_01 -.->|ADR Drift| ADR_001
+  CAP_03 -.->|ADR Drift| ADR_001
+  CAP_04 -.->|ADR Drift| ADR_001
+  CAP_07 -.->|ADR Drift| ADR_001
   CAP_01 -->|realized_by| CAP_02
   CAP_01 -->|realized_by| CAP_03
   CAP_02 -->|realized_by| CAP_03
@@ -68,6 +74,7 @@ flowchart TD
   CAP_05 -->|realized_by| CAP_08
   CAP_06 -->|realized_by| CAP_08
   CAP_07 -->|realized_by| CAP_08
+  _1 -.->|ADR Drift| ADR_001
 ```
 
 ---
@@ -76,7 +83,7 @@ flowchart TD
 
 | ADR ID | Decision Title | Scope | Status | Triggered By | Supersedes / Amends |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| *None* | No architectural drift ADRs recorded yet | - | - | - | - |
+| **ADR-001** | Multi-Module Maven & SvelteKit Clean Architecture for AG-UI Protocol | `technical` | `accepted` | #1 | CAP-01, CAP-03, CAP-04, CAP-07 |
 
 ---
 

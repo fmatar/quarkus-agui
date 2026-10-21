@@ -53,13 +53,13 @@ flowchart TD
 
 | Capability ID | Capability Title | Functional Spec | Depends On | Status |
 | :--- | :--- | :--- | :--- | :--- |
-| CAP-01 | AG-UI Core Event Schema & Payload Records (ag-ui-core) | `docs/specs/cap-01-core-events.md` | None | `PLANNED` |
+| CAP-01 | AG-UI Core Event Schema & Payload Records (ag-ui-core) | `docs/specs/cap-01-core-events.md` | None | `AMENDED (ADR-001)` |
 | CAP-02 | AG-UI SSE Frame Formatter & Flow.Publisher Reactive Adapters (ag-ui-core) | `docs/specs/cap-02-sse-reactive-adapters.md` | CAP-01 | `PLANNED` |
-| CAP-03 | Quarkus AG-UI Runtime & LangChain4j TokenStream/Tool Bridge (quarkus-ag-ui-runtime) | `docs/specs/cap-03-quarkus-runtime-bridge.md` | CAP-01, CAP-02 | `PLANNED` |
-| CAP-04 | Quarkus AG-UI Deployment Processor, GraalVM Reflection & Dev UI Inspector (quarkus-ag-ui-deployment) | `docs/specs/cap-04-quarkus-deployment-devui.md` | CAP-01, CAP-02 | `PLANNED` |
+| CAP-03 | Quarkus AG-UI Runtime & LangChain4j TokenStream/Tool Bridge (quarkus-ag-ui-runtime) | `docs/specs/cap-03-quarkus-runtime-bridge.md` | CAP-01, CAP-02 | `AMENDED (ADR-001)` |
+| CAP-04 | Quarkus AG-UI Deployment Processor, GraalVM Reflection & Dev UI Inspector (quarkus-ag-ui-deployment) | `docs/specs/cap-04-quarkus-deployment-devui.md` | CAP-01, CAP-02 | `AMENDED (ADR-001)` |
 | CAP-05 | Quarkus AG-UI Extension JVM & GraalVM Native Integration Test Suite (quarkus-ag-ui-integration-tests) | `docs/specs/cap-05-extension-integration-tests.md` | CAP-03, CAP-04 | `PLANNED` |
 | CAP-06 | Reference Quarkus + LangChain4j Agent Backend (examples/quarkus-svelte-skeleton) | `docs/specs/cap-06-reference-backend.md` | CAP-03, CAP-04 | `PLANNED` |
-| CAP-07 | Reference SvelteKit + Skeleton UI Streaming Client (examples/quarkus-svelte-skeleton) | `docs/specs/cap-07-reference-svelte-client.md` | CAP-01, CAP-02 | `PLANNED` |
+| CAP-07 | Reference SvelteKit + Skeleton UI Streaming Client (examples/quarkus-svelte-skeleton) | `docs/specs/cap-07-reference-svelte-client.md` | CAP-01, CAP-02 | `AMENDED (ADR-001)` |
 | CAP-08 | Full-Stack E2E Verification, Performance Benchmarks & Developer Showcase | `docs/specs/cap-08-e2e-benchmarks-showcase.md` | CAP-05, CAP-06, CAP-07 | `PLANNED` |
 
 ---
@@ -74,4 +74,5 @@ flowchart TD
 <!-- ADR_INDEX_START -->
 | ADR ID | Title | Scope | Status | Ticket | Supersedes |
 | :--- | :--- | :--- | :--- | :--- | :--- |
+| ADR-001 | Multi-Module Maven & SvelteKit Clean Architecture for AG-UI Protocol | `technical` | `accepted` | #1 | CAP-01, CAP-03, CAP-04, CAP-07 |
 <!-- ADR_INDEX_END -->
