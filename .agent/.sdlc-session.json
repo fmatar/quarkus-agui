@@ -1,0 +1,36 @@
+{
+  "activeSessionId": 1,
+  "sessions": {
+    "1": {
+      "active": true,
+      "issueId": 1,
+      "type": "feat",
+      "branch": "feature/issue-#1-product-genesis",
+      "worktree": null,
+      "stage": 2,
+      "stageName": "Genesis Product Constitution & Initialization",
+      "remediationCount": 0,
+      "maxRemediations": 3,
+      "manifest": {
+        "specPath": null,
+        "prNumber": null,
+        "coverageReport": null,
+        "mutationScore": null,
+        "uiScreenshotPath": null,
+        "checkpoints": {
+          "stage1": null,
+          "stage2": "2026-10-21T17:38:31.432Z",
+          "stage3": null,
+          "stage4": null,
+          "stage5": null,
+          "stage6": null,
+          "stage7": null,
+          "stage8": null
+        }
+      },
+      "startedAt": "2026-10-21T17:38:31.432Z",
+      "updatedAt": "2026-10-21T17:38:31.432Z",
+      "activeSubagents": []
+    }
+  }
+}

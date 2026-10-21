@@ -1,7 +1,7 @@
 {
   "$schema": "https://agentic-sdlc.dev/schemas/config.v1.json",
   "version": "2.0.0",
-  "generatedAt": "2026-10-21T17:13:54.176Z",
+  "generatedAt": "2026-10-21T17:40:00.000Z",
   "profile": "standard",
   "projectManagement": {
     "provider": "github",
@@ -9,23 +9,77 @@
     "livingBoard": "docs/KANBAN.md"
   },
   "archlens": {
-    "enabled": false,
+    "enabled": true,
     "policyPath": ".archlens/policy.json",
-    "enforceInQualityGate": false,
+    "enforceInQualityGate": true,
     "workbenchPort": 8088
   },
   "modules": [
     {
-      "name": "default",
-      "path": ".",
-      "stack": "generic-script",
-      "language": "generic",
+      "name": "ag-ui-core",
+      "path": "ag-ui-core",
+      "stack": "java-maven",
+      "language": "java",
+      "commands": {
+        "test": "mvn test",
+        "coverage": "mvn test jacoco:report",
+        "coverageFile": "target/site/jacoco/jacoco.xml",
+        "mutation": "mvn test-compile org.pitest:pitest-maven:mutationCoverage",
+        "lint": "mvn test-compile",
+        "build": "mvn test-compile"
+      },
+      "thresholds": {
+        "diffCoverage": 85,
+        "mutationScore": 80
+      }
+    },
+    {
+      "name": "quarkus-ag-ui-runtime",
+      "path": "quarkus-extension/runtime",
+      "stack": "java-quarkus-maven",
+      "language": "java",
+      "commands": {
+        "test": "mvn test",
+        "coverage": "mvn test jacoco:report",
+        "coverageFile": "target/site/jacoco/jacoco.xml",
+        "mutation": "mvn test-compile org.pitest:pitest-maven:mutationCoverage",
+        "lint": "mvn test-compile",
+        "build": "mvn test-compile"
+      },
+      "thresholds": {
+        "diffCoverage": 85,
+        "mutationScore": 80
+      }
+    },
+    {
+      "name": "quarkus-ag-ui-deployment",
+      "path": "quarkus-extension/deployment",
+      "stack": "java-quarkus-maven",
+      "language": "java",
+      "commands": {
+        "test": "mvn test",
+        "coverage": "mvn test jacoco:report",
+        "coverageFile": "target/site/jacoco/jacoco.xml",
+        "mutation": "mvn test-compile org.pitest:pitest-maven:mutationCoverage",
+        "lint": "mvn test-compile",
+        "build": "mvn test-compile"
+      },
+      "thresholds": {
+        "diffCoverage": 85,
+        "mutationScore": 80
+      }
+    },
+    {
+      "name": "quarkus-svelte-skeleton-frontend",
+      "path": "examples/quarkus-svelte-skeleton/frontend",
+      "stack": "node-sveltekit",
+      "language": "typescript",
       "commands": {
         "test": "npm test 2>/dev/null || true",
         "coverage": "npm run test:coverage 2>/dev/null || true",
         "coverageFile": "coverage/coverage-summary.json",
         "mutation": "npx stryker run 2>/dev/null || true",
-        "lint": "npm run lint 2>/dev/null || true",
+        "lint": "npm run check 2>/dev/null || true",
         "build": "npm run build 2>/dev/null || true"
       },
       "thresholds": {
