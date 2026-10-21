@@ -3,13 +3,28 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Reference SvelteKit + Skeleton UI Streaming Client for AG-UI Protocol",
+  "description": "Reference SvelteKit (Svelte 5 Runes) + Skeleton UI + @lucide/svelte Streaming Workbench for AG-UI Protocol",
   "scripts": {
-    "dev": "vite dev",
-    "build": "echo 'Svelte build ready (scaffolded in #3)'",
+    "dev": "vite dev --port 5173",
+    "build": "vite build",
     "preview": "vite preview",
-    "check": "echo 'Svelte check ready'",
-    "test": "node --test",
-    "test:coverage": "node --test"
+    "check": "svelte-kit sync",
+    "test": "node --test tests/*.test.mjs",
+    "test:coverage": "node --test --experimental-test-coverage tests/*.test.mjs"
+  },
+  "dependencies": {
+    "@lucide/svelte": "^1.0.0",
+    "@skeletonlabs/skeleton": "^3.1.0",
+    "@skeletonlabs/skeleton-svelte": "^1.0.0"
+  },
+  "devDependencies": {
+    "@sveltejs/adapter-auto": "^4.0.0",
+    "@sveltejs/kit": "^2.16.0",
+    "@sveltejs/vite-plugin-svelte": "^5.0.0",
+    "@tailwindcss/vite": "^4.0.0",
+    "svelte": "^5.19.0",
+    "tailwindcss": "^4.0.0",
+    "typescript": "^5.7.3",
+    "vite": "^6.0.0"
   }
 }

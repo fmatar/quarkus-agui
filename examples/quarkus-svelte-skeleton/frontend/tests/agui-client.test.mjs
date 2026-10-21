@@ -1,0 +1,145 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {
+	SCENARIO_PRESETS,
+	createInitialWorkbenchState,
+	parseSseChunk,
+	reduceAgUiEvent
+} from '../src/lib/agui-client.js';
+
+test('parseSseChunk splits multi-frame SSE chunks on double newline and preserves remainder', () => {
+	const raw =
+		'data: {"id":"1","type":"RUN_STARTED","threadId":"t1","timestamp":100,"payload":{"status":"started"}}\n\n' +
+		'data: {"id":"2","type":"TEXT_DELTA","threadId":"t1","timestamp":101,"payload":{"content":"Hello "}}\n\n' +
+		'data: {"id":"3","type":"TEXT_DELTA"';
+
+	const { events, remainder } = parseSseChunk(raw);
+	assert.equal(events.length, 2);
+	assert.equal(events[0].type, 'RUN_STARTED');
+	assert.equal(events[1].payload.content, 'Hello ');
+	assert.equal(remainder, 'data: {"id":"3","type":"TEXT_DELTA"');
+});
+
+test('reduceAgUiEvent transitions state across RUN_STARTED, TOOL_CALL, STEP_FINISHED, TEXT_DELTA, and RUN_FINISHED', () => {
+	let state = createInitialWorkbenchState('thread-test');
+	assert.equal(state.isStreaming, false);
+
+	state = reduceAgUiEvent(state, {
+		id: 'e1',
+		type: 'RUN_STARTED',
+		threadId: 'thread-test',
+		timestamp: 1000,
+		payload: { threadId: 'thread-test', status: 'started', llmMode: 'deterministic' }
+	});
+	assert.equal(state.isStreaming, true);
+	assert.equal(state.statusText, 'Run started (deterministic)');
+
+	state = reduceAgUiEvent(state, {
+		id: 'e2',
+		type: 'TOOL_CALL',
+		threadId: 'thread-test',
+		timestamp: 1005,
+		payload: {
+			callId: 'c1',
+			tool: 'inspectClusterHealth',
+			protocol: 'MCP',
+			server: 'quarkus-mcp-cluster-ops (:8081)',
+			args: {}
+		}
+	});
+	assert.equal(state.mcpCalls.length, 1);
+	assert.equal(state.mcpCalls[0].tool, 'inspectClusterHealth');
+
+	state = reduceAgUiEvent(state, {
+		id: 'e3',
+		type: 'TOOL_RESULT',
+		threadId: 'thread-test',
+		timestamp: 1010,
+		payload: {
+			callId: 'c1',
+			tool: 'inspectClusterHealth',
+			result: { cluster: 'quarkus-prod-us-east-1' }
+		}
+	});
+	assert.equal(state.mcpCalls[0].status, 'completed');
+
+	state = reduceAgUiEvent(state, {
+		id: 'e4',
+		type: 'STEP_FINISHED',
+		threadId: 'thread-test',
+		timestamp: 1015,
+		payload: {
+			stepId: 's1',
+			agentName: 'Sentinel-A2A-Auditor',
+			skillId: 'audit-clean-architecture',
+			summary: 'Zero outward violations'
+		}
+	});
+	assert.equal(state.a2aSteps.length, 1);
+	assert.equal(state.a2aSteps[0].agentName, 'Sentinel-A2A-Auditor');
+
+	state = reduceAgUiEvent(state, {
+		id: 'e5',
+		type: 'TEXT_DELTA',
+		threadId: 'thread-test',
+		timestamp: 1020,
+		payload: { content: 'Cluster is healthy.' }
+	});
+	assert.equal(state.streamBuffer, 'Cluster is healthy.');
+
+	state = reduceAgUiEvent(state, {
+		id: 'e6',
+		type: 'RUN_FINISHED',
+		threadId: 'thread-test',
+		timestamp: 1025,
+		payload: { status: 'completed' }
+	});
+	assert.equal(state.isStreaming, false);
+	assert.equal(state.messages.at(-1).role, 'assistant');
+	assert.equal(state.messages.at(-1).content, 'Cluster is healthy.');
+});
+
+test('SCENARIO_PRESETS exposes four deterministic tri-protocol showcase scenarios', () => {
+	assert.equal(SCENARIO_PRESETS.length, 4);
+	assert.ok(SCENARIO_PRESETS.every((s) => s.id && s.label && s.prompt));
+});
+
+test('parseSseChunk and reduceAgUiEvent handle empty, malformed, STATUS, STEP_STARTED, and unknown events', () => {
+	assert.deepEqual(parseSseChunk(''), { events: [], remainder: '' });
+	assert.deepEqual(parseSseChunk('\n\ndata: \n\ndata: {invalid}\n\n'), {
+		events: [],
+		remainder: ''
+	});
+
+	let state = createInitialWorkbenchState();
+	assert.equal(reduceAgUiEvent(state, null), state);
+
+	state = reduceAgUiEvent(state, {
+		id: 's1',
+		type: 'STATUS',
+		payload: { message: 'Executing MCP tool' }
+	});
+	assert.equal(state.statusText, 'Executing MCP tool');
+
+	state = reduceAgUiEvent(state, {
+		id: 's2',
+		type: 'STEP_STARTED',
+		payload: { agentName: 'Sentinel-A2A-Auditor', skillId: 'audit-clean-architecture' }
+	});
+	assert.equal(state.statusText, 'A2A Delegation: Sentinel-A2A-Auditor (audit-clean-architecture)');
+
+	state = reduceAgUiEvent(state, {
+		id: 's3',
+		type: 'CUSTOM_EVENT',
+		payload: {}
+	});
+	assert.equal(state.events.length, 3);
+
+	state = reduceAgUiEvent(state, {
+		id: 's4',
+		type: 'RUN_FINISHED',
+		payload: {}
+	});
+	assert.equal(state.isStreaming, false);
+});
+

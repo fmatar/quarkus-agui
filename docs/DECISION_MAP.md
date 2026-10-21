@@ -108,7 +108,7 @@ flowchart TD
 | Capability ID | Description | Current Status |
 | :--- | :--- | :--- |
 | **CAP-01** | Wave 1 — Quarkus MCP Server (`:8081`) & Quarkus A2A Server (`:8082`) | `IMPLEMENTED` |
-| **CAP-02** | Wave 1 — OpsPilot Orchestrator (`:8080`) & SvelteKit/Skeleton Baseline UI (`:5173`) | `PLANNED` |
+| **CAP-02** | Wave 1 — OpsPilot Orchestrator (`:8080`) & SvelteKit/Skeleton Baseline UI (`:5173`) | `IMPLEMENTED` |
 | **CAP-03** | Wave 2 — Full In-Place AG-UI Protocol Engine in Showcase Backend (`:8080`) | `PLANNED` |
 | **CAP-04** | Wave 2 — Full AG-UI SvelteKit + Skeleton UI Workbench (`:5173`) | `PLANNED` |
 | **CAP-05** | Wave 3 — Extract Plain Java 25 Zero-Dependency Library (`ag-ui-core`) | `PLANNED` |
