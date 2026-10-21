@@ -270,3 +270,47 @@ export function reduceAgUiEvent(state, event) {
 			};
 	}
 }
+
+/**
+ * Filters protocol inspector events by protocol family ('ALL', 'AG-UI', 'MCP', 'A2A').
+ *
+ * @param {Array<any>} events
+ * @param {string} filter
+ */
+export function filterInspectorEvents(events, filter = 'ALL') {
+	if (!Array.isArray(events) || filter === 'ALL') {
+		return events ?? [];
+	}
+	if (filter === 'MCP') {
+		return events.filter((e) => e.type === 'TOOL_CALL' || e.type === 'TOOL_RESULT');
+	}
+	if (filter === 'A2A') {
+		return events.filter((e) => e.type === 'STEP_STARTED' || e.type === 'STEP_FINISHED');
+	}
+	return events.filter(
+		(e) =>
+			e.type !== 'TOOL_CALL' &&
+			e.type !== 'TOOL_RESULT' &&
+			e.type !== 'STEP_STARTED' &&
+			e.type !== 'STEP_FINISHED'
+	);
+}
+
+/**
+ * Mutates local replica count in clusterState for bidirectional UI-to-Agent state editing.
+ *
+ * @param {any} clusterState
+ * @param {string} serviceName
+ * @param {number} delta
+ */
+export function updateServiceReplicasInState(clusterState, serviceName, delta) {
+	if (!clusterState?.services) return clusterState;
+	return {
+		...clusterState,
+		services: clusterState.services.map((svc) =>
+			svc.serviceName === serviceName
+				? { ...svc, replicas: Math.max(1, (svc.replicas ?? 1) + delta) }
+				: svc
+		)
+	};
+}

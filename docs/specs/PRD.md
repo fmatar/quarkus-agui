@@ -44,7 +44,7 @@ The **AG-UI (Agent–User Interaction Protocol)** standardizes real-time, bidire
 - [x] Streams Core 6 + `STEP_STARTED`/`STEP_FINISHED` + `STATE_SNAPSHOT`/`STATE_DELTA` + HITL `interrupted` approvals (`POST /api/agent/approve`).
 
 ### US-004 (`CAP-04`, #5): Full 3-Pane SvelteKit + Skeleton UI + `@lucide/svelte` AG-UI Workbench (`:5173`)
-- [ ] `AgentChatContainer.svelte`, `MessageHistory.svelte`, `StreamRenderer.svelte`, `InputBar.svelte`, `ClusterStatePanel.svelte`, and `ProtocolInspector.svelte` (`\n\n` SSE frame parser + `AbortController`).
+- [x] `AgentChatContainer.svelte`, `MessageHistory.svelte`, `StreamRenderer.svelte`, `InputBar.svelte`, `ClusterStatePanel.svelte`, and `ProtocolInspector.svelte` (`\n\n` SSE frame parser + `AbortController`).
 
 ### US-005 (`CAP-05`, #6): Extract `ag-ui-core` Standalone Java 25 Library
 - [ ] Zero-dependency Java 25 library (`org.agui.core.domain`, `application`, `adapters`) governed by Archlens concentric rings.

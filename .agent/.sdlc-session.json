@@ -1,11 +1,11 @@
 {
-  "activeSessionId": 4,
+  "activeSessionId": 5,
   "sessions": {
-    "4": {
+    "5": {
       "active": true,
-      "issueId": 4,
+      "issueId": 5,
       "type": "feat",
-      "branch": "feature/issue-#4-inplace-agui-backend",
+      "branch": "feature/issue-#5-svelte-agui-workbench",
       "worktree": null,
       "stage": 2,
       "stageName": "Intake & Specification",
@@ -18,8 +18,8 @@
         "mutationScore": null,
         "uiScreenshotPath": null,
         "checkpoints": {
-          "stage1": "2026-10-21T23:01:48.452Z",
-          "stage2": "2026-10-21T23:01:48.502Z",
+          "stage1": "2026-10-21T23:05:29.964Z",
+          "stage2": "2026-10-21T23:05:30.014Z",
           "stage3": null,
           "stage4": null,
           "stage5": null,
@@ -28,8 +28,8 @@
           "stage8": null
         }
       },
-      "startedAt": "2026-10-21T23:01:48.451Z",
-      "updatedAt": "2026-10-21T23:01:58.262Z",
+      "startedAt": "2026-10-21T23:05:29.963Z",
+      "updatedAt": "2026-10-21T23:05:39.563Z",
       "activeSubagents": []
     }
   }
