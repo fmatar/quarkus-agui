@@ -1,0 +1,36 @@
+{
+  "activeSessionId": 3,
+  "sessions": {
+    "3": {
+      "active": true,
+      "issueId": 3,
+      "type": "feat",
+      "branch": "feature/issue-#3-orchestrator-svelte-baseline",
+      "worktree": null,
+      "stage": 1,
+      "stageName": "Intake & Specification",
+      "remediationCount": 0,
+      "maxRemediations": 3,
+      "manifest": {
+        "specPath": null,
+        "prNumber": null,
+        "coverageReport": null,
+        "mutationScore": null,
+        "uiScreenshotPath": null,
+        "checkpoints": {
+          "stage1": "2026-10-21T21:09:07.124Z",
+          "stage2": null,
+          "stage3": null,
+          "stage4": null,
+          "stage5": null,
+          "stage6": null,
+          "stage7": null,
+          "stage8": null
+        }
+      },
+      "startedAt": "2026-10-21T21:09:07.124Z",
+      "updatedAt": "2026-10-21T21:09:07.124Z",
+      "activeSubagents": []
+    }
+  }
+}
