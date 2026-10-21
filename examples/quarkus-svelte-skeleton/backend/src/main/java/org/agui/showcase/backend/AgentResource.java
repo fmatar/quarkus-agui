@@ -9,6 +9,7 @@ import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
 import java.util.Map;
+import org.agui.core.adapters.AgUiSseFormatter;
 import org.jboss.resteasy.reactive.RestStreamElementType;
 
 /**
@@ -55,9 +56,6 @@ public class AgentResource {
     }
 
     static String unwrapSseDataPayload(String rawFrame) {
-        if (rawFrame == null) {
-            return "";
-        }
-        return rawFrame.replaceFirst("^data:\\s*", "").stripTrailing();
+        return AgUiSseFormatter.unwrapSseData(rawFrame);
     }
 }

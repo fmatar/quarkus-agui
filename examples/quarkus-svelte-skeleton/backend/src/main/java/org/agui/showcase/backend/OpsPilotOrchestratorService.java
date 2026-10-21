@@ -23,6 +23,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import org.agui.core.adapters.AgUiSseFormatter;
+import org.agui.core.domain.AgUiEvent;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 /**
@@ -39,6 +41,7 @@ public class OpsPilotOrchestratorService {
     private final McpGatewayClient mcpClient;
     private final A2aGatewayClient a2aClient;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final AgUiSseFormatter sseFormatter = new AgUiSseFormatter();
     private final Map<String, Map<String, Object>> pendingApprovals = new ConcurrentHashMap<>();
     private final HttpClient httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(3))
@@ -487,17 +490,8 @@ public class OpsPilotOrchestratorService {
     }
 
     private String formatSseEvent(String threadId, String type, Map<String, Object> payload) {
-        Map<String, Object> envelope = new LinkedHashMap<>();
-        envelope.put("id", "evt-" + UUID.randomUUID().toString().substring(0, 8));
-        envelope.put("type", type);
-        envelope.put("threadId", threadId);
-        envelope.put("timestamp", System.currentTimeMillis());
-        envelope.put("payload", payload);
-        try {
-            return "data: " + objectMapper.writeValueAsString(envelope) + "\n\n";
-        } catch (JsonProcessingException e) {
-            throw new IllegalStateException("Failed to serialize AG-UI event", e);
-        }
+        AgUiEvent<Map<String, Object>> event = AgUiEvent.ofType(type, threadId, payload);
+        return sseFormatter.formatSse(event);
     }
 
     private String resolveThreadId(AgentRunRequest request) {
