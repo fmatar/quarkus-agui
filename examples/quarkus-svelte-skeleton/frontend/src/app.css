@@ -1,0 +1,67 @@
+@import 'tailwindcss';
+
+/* Modern Web Guidance (css-layout): 2D layout-first grid-template-areas & dvh viewport */
+.workbench-grid {
+	display: grid;
+	min-block-size: 100dvh;
+	inline-size: 100%;
+	grid-template-columns: minmax(260px, 320px) minmax(0, 1fr) minmax(300px, 380px);
+	grid-template-areas:
+		'header header header'
+		'sidebar chat inspector';
+	grid-template-rows: auto 1fr;
+	gap: 1rem;
+	padding: 1rem;
+}
+
+@media (max-width: 1024px) {
+	.workbench-grid {
+		grid-template-columns: 1fr;
+		grid-template-areas:
+			'header'
+			'sidebar'
+			'chat'
+			'inspector';
+	}
+}
+
+.workbench-header {
+	grid-area: header;
+}
+.workbench-sidebar {
+	grid-area: sidebar;
+}
+.workbench-chat {
+	grid-area: chat;
+}
+.workbench-inspector {
+	grid-area: inspector;
+}
+
+/* Modern Web Guidance (interactions-in-complex-layouts): isolate layout/style/paint reflows per pane */
+.workbench-pane {
+	content-visibility: auto;
+	contain-intrinsic-size: auto 320px auto 760px;
+	min-inline-size: 0;
+}
+
+@supports not (content-visibility: auto) {
+	.workbench-pane {
+		contain: layout style paint;
+	}
+}
+
+/* Modern Web Guidance (css-layout): reserve scrollbar space & prevent scroll chaining */
+.scrollable-region {
+	overflow-y: auto;
+	scrollbar-gutter: stable;
+	overscroll-behavior: contain;
+	min-inline-size: 0;
+}
+
+.scenario-bar {
+	display: flex;
+	flex-wrap: wrap;
+	flex-wrap: balance;
+	gap: 0.5rem;
+}

@@ -1,14 +1,14 @@
 {
-  "activeSessionId": 2,
+  "activeSessionId": 3,
   "sessions": {
-    "2": {
+    "3": {
       "active": true,
-      "issueId": 2,
+      "issueId": 3,
       "type": "feat",
-      "branch": "feature/issue-#2-mcp-a2a-servers-and-adr-002",
+      "branch": "feature/issue-#3-orchestrator-svelte-baseline",
       "worktree": null,
-      "stage": 2,
-      "stageName": "ADR-002 Product Re-Sequencing & Wave 1 MCP + A2A Servers",
+      "stage": 1,
+      "stageName": "Intake & Specification",
       "remediationCount": 0,
       "maxRemediations": 3,
       "manifest": {
@@ -18,8 +18,8 @@
         "mutationScore": null,
         "uiScreenshotPath": null,
         "checkpoints": {
-          "stage1": null,
-          "stage2": "2026-10-21T19:25:49.912Z",
+          "stage1": "2026-10-21T21:09:07.124Z",
+          "stage2": null,
           "stage3": null,
           "stage4": null,
           "stage5": null,
@@ -28,8 +28,8 @@
           "stage8": null
         }
       },
-      "startedAt": "2026-10-21T19:25:49.911Z",
-      "updatedAt": "2026-10-21T19:25:49.912Z",
+      "startedAt": "2026-10-21T21:09:07.124Z",
+      "updatedAt": "2026-10-21T21:09:07.124Z",
       "activeSubagents": []
     }
   }

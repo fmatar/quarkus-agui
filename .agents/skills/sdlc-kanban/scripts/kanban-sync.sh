@@ -94,19 +94,39 @@ for issue in issues:
 
     # Extract Priority
     priority = "P2 - Medium"
+    priority_map = {
+        "priority:critical": "P0 - Critical",
+        "priority:high": "P1 - High",
+        "priority:medium": "P2 - Medium",
+        "priority:low": "P3 - Low"
+    }
     for l in labels:
-        if l.startswith("priority:"):
+        if l in priority_map:
+            priority = priority_map[l]
+        elif l.startswith("priority:"):
             priority = l.replace("priority:", "").capitalize()
 
     # Extract Component
-    component = "General"
+    component = "Architecture"
     for l in labels:
         if l.startswith("component:"):
-            component = l.replace("component:", "").capitalize()
+            raw_comp = l.replace("component:", "")
+            component = "DevOps" if raw_comp == "devops" else raw_comp.capitalize()
+
+    # Extract Quality Gate
+    gate = "Pending"
+    for l in labels:
+        if l.startswith("gate:"):
+            gate = l.replace("gate:", "").capitalize()
 
     # Look for spec / PRD links in body
-    spec_match = re.search(r'\[(PRD|SRS|Spec|Architecture)[^\]]*\]\(([^)]+)\)', body)
-    spec_link = f"[{spec_match.group(1)}]({spec_match.group(2)})" if spec_match else "—"
+    spec_match = re.search(r'\[(SPEC-\d+|PRD|SRS|Spec|Architecture)[^\]]*\]\(([^)]+)\)', body, re.IGNORECASE)
+    if spec_match:
+        spec_link = f"[{spec_match.group(1)}]({spec_match.group(2)})"
+    elif "PRODUCT.md" in body:
+        spec_link = "[PRODUCT.md](PRODUCT.md)"
+    else:
+        spec_link = "—"
 
     traceability_rows.append({
         'num': num,
@@ -116,6 +136,7 @@ for issue in issues:
         'milestone': milestone.get('title') if milestone else "—",
         'priority': priority,
         'component': component,
+        'gate': f"`{gate}`",
         'spec': spec_link
     })
 
@@ -131,11 +152,11 @@ for i in range(max_rows):
 
 print("\n---\n")
 print("## 🎯 End-to-End Traceability Matrix\n")
-print("| Issue | Status | Priority | Component | Milestone | Spec / Contract |")
+print("| Issue | Status | Priority | Component | Quality Gate | Spec Link |")
 print("| :--- | :--- | :--- | :--- | :--- | :--- |")
 
 for row in sorted(traceability_rows, key=lambda x: x['num'], reverse=True):
-    print(f"| [#{row['num']} {row['title']}]({row['url']}) | {row['status']} | {row['priority']} | {row['component']} | {row['milestone']} | {row['spec']} |")
+    print(f"| [#{row['num']} {row['title']}]({row['url']}) | {row['status']} | {row['priority']} | {row['component']} | {row['gate']} | {row['spec']} |")
 
 PYEOF
 

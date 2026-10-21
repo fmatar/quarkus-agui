@@ -37,8 +37,8 @@ The **AG-UI (Agent–User Interaction Protocol)** standardizes real-time, bidire
 - [x] `a2a-server` (`:8082`) exposes `GET /.well-known/agent.json` (`AgentCard`) and `POST /api/a2a/tasks/send` (`audit-clean-architecture`, `assess-security-posture`, `plan-incident-remediation`).
 
 ### US-002 (`CAP-02`, #3): OpsPilot Quarkus Orchestrator (`:8080`) & SvelteKit + `pnpm` Baseline (`:5173`)
-- [ ] Dual-Mode LangChain4j Orchestrator (`:8080`) invoking `:8081` MCP and `:8082` A2A.
-- [ ] `pnpm` SvelteKit + `@skeletonlabs/skeleton-svelte` + `@lucide/svelte` 3-pane baseline UI (`:5173`).
+- [x] Dual-Mode LangChain4j Orchestrator (`:8080`) invoking `:8081` MCP and `:8082` A2A.
+- [x] `pnpm` SvelteKit + `@skeletonlabs/skeleton-svelte` + `@lucide/svelte` 3-pane baseline UI (`:5173`).
 
 ### US-003 (`CAP-03`, #4): In-Place AG-UI Protocol Engine in Orchestrator (`:8080`)
 - [ ] Streams Core 6 + `STEP_STARTED`/`STEP_FINISHED` + `STATE_SNAPSHOT`/`STATE_DELTA` + HITL `interrupted` approvals (`POST /api/agent/approve`).

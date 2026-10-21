@@ -115,18 +115,21 @@ export function transitionPMState({ issueId, state = 'in-progress', repoRoot = '
   const targetId = Number(issueId) || issueId;
   const normalizedState = String(state).toLowerCase().trim();
 
-  let statusDisplayName = 'In progress';
+  let statusDisplayName = 'In Progress';
   if (normalizedState === 'backlog' || normalizedState === 'todo') {
-    statusDisplayName = 'Todo';
+    statusDisplayName = 'Backlog';
   } else if (normalizedState === 'ready') {
     statusDisplayName = 'Ready';
   } else if (normalizedState === 'in-progress' || normalizedState === 'inprogress' || normalizedState === 'in progress') {
-    statusDisplayName = 'In progress';
+    statusDisplayName = 'In Progress';
   } else if (normalizedState === 'in-review' || normalizedState === 'inreview' || normalizedState === 'review') {
-    statusDisplayName = 'In review';
+    statusDisplayName = 'In Review';
   } else if (normalizedState === 'done' || normalizedState === 'closed') {
     statusDisplayName = 'Done';
   }
+
+  const gateDisplayName = statusDisplayName === 'Done' ? 'Passed' : 'Pending';
+  const gateLabel = statusDisplayName === 'Done' ? 'gate:passed' : 'gate:pending';
 
   let projectUpdated = false;
   let labelUpdated = false;
@@ -136,11 +139,17 @@ export function transitionPMState({ issueId, state = 'in-progress', repoRoot = '
     try {
       const stateLabel = `status:${normalizedState}`;
       const statusLabels = ['status:backlog', 'status:ready', 'status:in-progress', 'status:in-review', 'status:done'];
-      const toRemove = statusLabels.filter((l) => l !== stateLabel).join(',');
+      const gateLabels = ['gate:pending', 'gate:passed', 'gate:failed'];
+      const toRemove = [...statusLabels.filter((l) => l !== stateLabel), ...gateLabels.filter((l) => l !== gateLabel)].join(',');
       try {
         execSync(`gh issue edit ${targetId} --remove-label "${toRemove}" 2>/dev/null || true`, { cwd: repoRoot, stdio: 'pipe' });
       } catch {}
-      execSync(`gh issue edit ${targetId} --add-label "${stateLabel}" 2>/dev/null || true`, { cwd: repoRoot, stdio: 'pipe' });
+      execSync(`gh issue edit ${targetId} --add-assignee "@me" --add-label "${stateLabel},${gateLabel}" 2>/dev/null || true`, { cwd: repoRoot, stdio: 'pipe' });
+      if (statusDisplayName === 'Done') {
+        try {
+          execSync(`gh issue close ${targetId} 2>/dev/null || true`, { cwd: repoRoot, stdio: 'pipe' });
+        } catch {}
+      }
       labelUpdated = true;
     } catch {}
 
@@ -162,7 +171,28 @@ export function transitionPMState({ issueId, state = 'in-progress', repoRoot = '
                 id
                 number
                 title
-                fields(first: 20) {
+                fields(first: 25) {
+                  nodes {
+                    ... on ProjectV2SingleSelectField {
+                      id
+                      name
+                      options {
+                        id
+                        name
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+          user(login: $owner) {
+            projectsV2(first: 10) {
+              nodes {
+                id
+                number
+                title
+                fields(first: 25) {
                   nodes {
                     ... on ProjectV2SingleSelectField {
                       id
@@ -186,10 +216,20 @@ export function transitionPMState({ issueId, state = 'in-progress', repoRoot = '
 
         if (gqlOutput) {
           const gqlData = JSON.parse(gqlOutput);
-          const projects = gqlData.data?.repository?.projectsV2?.nodes || [];
+          const repoProjects = gqlData.data?.repository?.projectsV2?.nodes || [];
+          const userProjects = (gqlData.data?.user?.projectsV2?.nodes || []).filter((p) =>
+            p && p.title && p.title.toLowerCase().includes(repoName.toLowerCase())
+          );
+          const seenIds = new Set();
+          const projects = [...repoProjects, ...userProjects].filter((p) => {
+            if (!p || seenIds.has(p.id)) return false;
+            seenIds.add(p.id);
+            return true;
+          });
 
           for (const prj of projects) {
             const statusField = prj.fields?.nodes?.find((f) => f && f.name && f.name.toLowerCase() === 'status');
+            const gateField = prj.fields?.nodes?.find((f) => f && f.name && f.name.toLowerCase() === 'quality gate');
             if (statusField && statusField.options && statusField.options.length > 0) {
               let matchedOption = statusField.options.find((opt) => opt.name.toLowerCase() === statusDisplayName.toLowerCase());
               if (!matchedOption) {
@@ -202,7 +242,7 @@ export function transitionPMState({ issueId, state = 'in-progress', repoRoot = '
               if (!matchedOption) {
                 if (statusDisplayName === 'Ready' || statusDisplayName === 'Backlog') {
                   matchedOption = statusField.options.find((opt) => opt.name.toLowerCase() === 'todo');
-                } else if (statusDisplayName === 'In review') {
+                } else if (statusDisplayName === 'In Review') {
                   matchedOption = statusField.options.find((opt) => opt.name.toLowerCase().includes('progress'));
                 }
               }
@@ -240,12 +280,24 @@ export function transitionPMState({ issueId, state = 'in-progress', repoRoot = '
                     `gh project item-edit --id "${itemId}" --project-id "${prj.id}" --field-id "${statusField.id}" --single-select-option-id "${matchedOption.id}" 2>/dev/null || true`,
                     { cwd: repoRoot, stdio: 'pipe' }
                   );
+                  if (gateField && gateField.options) {
+                    const gateOpt = gateField.options.find((o) => o.name.toLowerCase() === gateDisplayName.toLowerCase());
+                    if (gateOpt) {
+                      try {
+                        execSync(
+                          `gh project item-edit --id "${itemId}" --project-id "${prj.id}" --field-id "${gateField.id}" --single-select-option-id "${gateOpt.id}" 2>/dev/null || true`,
+                          { cwd: repoRoot, stdio: 'pipe' }
+                        );
+                      } catch {}
+                    }
+                  }
                   projectUpdated = true;
                   projectDetails = {
                     projectNumber: prj.number,
                     projectTitle: prj.title,
                     statusField: statusField.name,
-                    statusValue: matchedOption.name
+                    statusValue: matchedOption.name,
+                    qualityGate: gateDisplayName
                   };
                   break;
                 }
