@@ -12,12 +12,20 @@
 
     <artifactId>quarkus-ag-ui</artifactId>
     <name>Quarkus AG-UI - Runtime</name>
-    <description>Quarkus Runtime Module for AG-UI SSE Auto-Configuration, Mutiny, and LangChain4j TokenStream Bridge</description>
+    <description>Quarkus Runtime Module for AG-UI SSE Auto-Configuration, Mutiny, and LangChain4j/MCP/A2A Bridges</description>
 
     <dependencies>
         <dependency>
             <groupId>org.agui</groupId>
             <artifactId>ag-ui-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-arc</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.smallrye.reactive</groupId>
+            <artifactId>mutiny</artifactId>
         </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
