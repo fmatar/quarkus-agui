@@ -1,7 +1,7 @@
 {
   "title": "quarkus-agui",
-  "src": "src",
-  "prefix": "",
+  "src": "ag-ui-core/src/main/java",
+  "prefix": "org.agui.core",
   "hierarchical": true,
   "order": [
     "domain",
@@ -22,14 +22,17 @@
   "foreign": [
     "java.",
     "jakarta.",
-    "org.springframework.",
-    "io.quarkus."
+    "io.quarkus.",
+    "io.smallrye.",
+    "dev.langchain4j.",
+    "com.fasterxml.jackson."
   ],
   "omit": [
     "target",
     "build",
     ".git",
     "node_modules",
+    ".svelte-kit",
     ".gradle",
     ".idea",
     ".vscode"
