@@ -47,7 +47,7 @@ The **AG-UI (Agent–User Interaction Protocol)** standardizes real-time, bidire
 - [x] `AgentChatContainer.svelte`, `MessageHistory.svelte`, `StreamRenderer.svelte`, `InputBar.svelte`, `ClusterStatePanel.svelte`, and `ProtocolInspector.svelte` (`\n\n` SSE frame parser + `AbortController`).
 
 ### US-005 (`CAP-05`, #6): Extract `ag-ui-core` Standalone Java 25 Library
-- [ ] Zero-dependency Java 25 library (`org.agui.core.domain`, `application`, `adapters`) governed by Archlens concentric rings.
+- [x] Zero-dependency Java 25 library (`org.agui.core.domain`, `application`, `adapters`) governed by Archlens concentric rings.
 
 ### US-006 (`CAP-06`, #7): Extract `quarkus-ag-ui-runtime`
 - [ ] `AgUiBridge`, `AgUiMcpBridge`, `AgUiA2aBridge`, and SmallRye Mutiny `Multi<AgUiEvent<?>>` SSE support.

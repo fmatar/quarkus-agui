@@ -111,7 +111,7 @@ flowchart TD
 | **CAP-02** | Wave 1 — OpsPilot Orchestrator (`:8080`) & SvelteKit/Skeleton Baseline UI (`:5173`) | `IMPLEMENTED` |
 | **CAP-03** | Wave 2 — Full In-Place AG-UI Protocol Engine in Showcase Backend (`:8080`) | `IMPLEMENTED` |
 | **CAP-04** | Wave 2 — Full AG-UI SvelteKit + Skeleton UI Workbench (`:5173`) | `IMPLEMENTED` |
-| **CAP-05** | Wave 3 — Extract Plain Java 25 Zero-Dependency Library (`ag-ui-core`) | `PLANNED` |
+| **CAP-05** | Wave 3 — Extract Plain Java 25 Zero-Dependency Library (`ag-ui-core`) | `IMPLEMENTED` |
 | **CAP-06** | Wave 4 — Extract Quarkus AG-UI Runtime & Bridges (`quarkus-ag-ui`) | `PLANNED` |
 | **CAP-07** | Wave 4 — Quarkus AG-UI Deployment Processor, GraalVM 25 Reflection & Dev UI | `PLANNED` |
 | **CAP-08** | Wave 4 — Migrate Showcase to `quarkus-ag-ui` Extension, Benchmarks & Native Verification | `PLANNED` |

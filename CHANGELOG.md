@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- feat(wave3): extract zero-dependency Java 25 `ag-ui-core` library (`org.agui.core.domain`, `application`, `adapters`: `AgUiEvent`, 10 typed payload records, `AgUiSseFormatter`, `AgUiFlowAdapter`) and refactor showcase backend ([#6](https://github.com/fmatar/quarkus-agui/issues/6))
 - feat(wave2): implement `ClusterStatePanel.svelte` (bidirectional replica state stepper & A2A skill triggers) and `ProtocolInspector.svelte` (`ALL`/`AG-UI`/`MCP`/`A2A` filter tabs) in the 3-Pane SvelteKit Workbench ([#5](https://github.com/fmatar/quarkus-agui/issues/5))
 - feat(wave2): implement in-place AG-UI protocol engine (`STATE_SNAPSHOT`, `STATE_DELTA`, HITL `interrupted` approval gate `POST /api/agent/approve`) and live local Ollama LLM token streaming (`llama3.2:latest`, `qwen3.5:4b`, `ministral-3:8b`) on Java 25 Virtual Threads ([#4](https://github.com/fmatar/quarkus-agui/issues/4))
 - feat(wave1): implement OpsPilot Quarkus Orchestrator (`:8080`) with Dual-Mode LangChain4j and `pnpm` + SvelteKit 5 + `@skeletonlabs/skeleton-svelte` + `@lucide/svelte` 3-pane workbench baseline (`:5173`) ([#3](https://github.com/fmatar/quarkus-agui/issues/3))
