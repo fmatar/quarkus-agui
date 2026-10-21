@@ -26,6 +26,12 @@ export const SCENARIO_PRESETS = [
 		label: '4. Logs & Security Posture',
 		protocol: 'AG-UI + MCP + A2A',
 		prompt: 'Query service logs for payment-gateway and assess security posture'
+	},
+	{
+		id: 'hitl-scale',
+		label: '5. HITL Scale (8 Replicas)',
+		protocol: 'HITL Approval',
+		prompt: 'Scale deployment payment-gateway to 8 replicas for peak load'
 	}
 ];
 
@@ -35,6 +41,37 @@ export function createInitialWorkbenchState(threadId = 'thread-opspilot-1') {
 		isStreaming: false,
 		statusText: 'Idle — Ready',
 		streamBuffer: '',
+		pendingApproval: null,
+		clusterState: {
+			cluster: 'quarkus-prod-us-east-1',
+			uri: 'cluster://topology',
+			services: [
+				{
+					serviceName: 'payment-gateway',
+					status: 'DEGRADED',
+					replicas: 3,
+					cpuPercent: 78,
+					memoryMb: 420,
+					region: 'us-east-1'
+				},
+				{
+					serviceName: 'order-processor',
+					status: 'HEALTHY',
+					replicas: 2,
+					cpuPercent: 34,
+					memoryMb: 256,
+					region: 'us-east-1'
+				},
+				{
+					serviceName: 'identity-provider',
+					status: 'HEALTHY',
+					replicas: 2,
+					cpuPercent: 22,
+					memoryMb: 192,
+					region: 'us-west-2'
+				}
+			]
+		},
 		messages: [
 			{
 				id: 'msg-welcome',
@@ -62,7 +99,8 @@ export function parseSseChunk(buffer) {
 	if (!buffer) {
 		return { events: [], remainder: '' };
 	}
-	const parts = buffer.split('\n\n');
+	const normalized = buffer.replace(/\r\n/g, '\n');
+	const parts = normalized.split('\n\n');
 	const remainder = parts.pop() ?? '';
 	const events = [];
 
@@ -71,7 +109,7 @@ export function parseSseChunk(buffer) {
 		if (!trimmed) continue;
 		for (const line of trimmed.split('\n')) {
 			if (line.startsWith('data:')) {
-				const jsonStr = line.slice(5).trim();
+				const jsonStr = line.replace(/^(?:data:\s*)+/, '').trim();
 				if (!jsonStr) continue;
 				try {
 					events.push(JSON.parse(jsonStr));
@@ -103,9 +141,18 @@ export function reduceAgUiEvent(state, event) {
 				...state,
 				isStreaming: true,
 				streamBuffer: '',
+				pendingApproval: null,
 				mcpCalls: [],
 				a2aSteps: [],
-				statusText: `Run started (${payload.llmMode ?? 'deterministic'})`,
+				statusText: `Run started (${payload.llmMode ?? payload.status ?? 'deterministic'})`,
+				events: nextEvents
+			};
+
+		case 'STATE_SNAPSHOT':
+		case 'STATE_DELTA':
+			return {
+				...state,
+				clusterState: payload.clusterState ?? state.clusterState,
 				events: nextEvents
 			};
 
@@ -127,7 +174,7 @@ export function reduceAgUiEvent(state, event) {
 						tool: payload.tool,
 						server: payload.server ?? 'quarkus-mcp-cluster-ops (:8081)',
 						args: payload.args ?? {},
-						status: 'running',
+						status: payload.requiresApproval ? 'awaiting_approval' : 'running',
 						result: null
 					}
 				],
@@ -176,7 +223,24 @@ export function reduceAgUiEvent(state, event) {
 			};
 
 		case 'RUN_FINISHED': {
-			const finalReply = state.streamBuffer.trim();
+			if (payload.status === 'interrupted') {
+				return {
+					...state,
+					isStreaming: false,
+					pendingApproval: payload.pendingAction ?? {
+						toolName: 'scaleDeployment',
+						serviceName: 'payment-gateway',
+						replicas: 8
+					},
+					statusText: 'HITL Gate — Awaiting Operator Approval',
+					events: nextEvents
+				};
+			}
+			const finalReply =
+				state.streamBuffer.trim() ||
+				(payload.status === 'cancelled'
+					? 'Operator rejected high-replica scale action. Run cancelled safely.'
+					: '');
 			const assistantMsg = finalReply
 				? [
 						{
@@ -191,6 +255,7 @@ export function reduceAgUiEvent(state, event) {
 			return {
 				...state,
 				isStreaming: false,
+				pendingApproval: null,
 				statusText: `Completed (${payload.status ?? 'completed'})`,
 				streamBuffer: '',
 				messages: [...state.messages, ...assistantMsg],

@@ -5,7 +5,7 @@
 > To refresh this board: `.agent/skills/sdlc-kanban/scripts/kanban-sync.sh`
 
 > **Repository**: `fmatar/quarkus-agui`  
-> **Last Synced**: `2026-10-21 20:52:46 UTC`
+> **Last Synced**: `2026-10-21 21:11:05 UTC`
 
 ---
 
@@ -13,9 +13,9 @@
 
 | 📥 Backlog | 📋 Ready | ⚡ In Progress | 🔍 In Review | ✅ Done |
 | :--- | :--- | :--- | :--- | :--- |
-|  | [#9 feat(CAP-08): Migrate Showcase to quarkus-ag-ui Extension & Full E2E + Native Benchmarks](https://github.com/fmatar/quarkus-agui/issues/9) | [#3 feat(CAP-02): OpsPilot Quarkus Orchestrator (:8080) & SvelteKit + pnpm 3-Pane Baseline (:5173)](https://github.com/fmatar/quarkus-agui/issues/3) |  | [#2 feat(CAP-01): Quarkus MCP Server (:8081) & Quarkus A2A Server (:8082) in Reference Showcase](https://github.com/fmatar/quarkus-agui/issues/2) |
-|  | [#8 feat(CAP-07): Extract quarkus-ag-ui-deployment, GraalVM 25 Reflection, Dev UI & Integration Tests](https://github.com/fmatar/quarkus-agui/issues/8) |  |  | [#1 feat: chore(genesis): initialize PRODUCT.md, multi-module architecture baseline, and specs for quarkus-agui](https://github.com/fmatar/quarkus-agui/issues/1) |
-|  | [#7 feat(CAP-06): Extract quarkus-ag-ui-runtime (AgUiBridge, AgUiMcpBridge, AgUiA2aBridge, Mutiny SSE)](https://github.com/fmatar/quarkus-agui/issues/7) |  |  |  |
+|  | [#9 feat(CAP-08): Migrate Showcase to quarkus-ag-ui Extension & Full E2E + Native Benchmarks](https://github.com/fmatar/quarkus-agui/issues/9) |  |  | [#3 feat(CAP-02): OpsPilot Quarkus Orchestrator (:8080) & SvelteKit + pnpm 3-Pane Baseline (:5173)](https://github.com/fmatar/quarkus-agui/issues/3) |
+|  | [#8 feat(CAP-07): Extract quarkus-ag-ui-deployment, GraalVM 25 Reflection, Dev UI & Integration Tests](https://github.com/fmatar/quarkus-agui/issues/8) |  |  | [#2 feat(CAP-01): Quarkus MCP Server (:8081) & Quarkus A2A Server (:8082) in Reference Showcase](https://github.com/fmatar/quarkus-agui/issues/2) |
+|  | [#7 feat(CAP-06): Extract quarkus-ag-ui-runtime (AgUiBridge, AgUiMcpBridge, AgUiA2aBridge, Mutiny SSE)](https://github.com/fmatar/quarkus-agui/issues/7) |  |  | [#1 feat: chore(genesis): initialize PRODUCT.md, multi-module architecture baseline, and specs for quarkus-agui](https://github.com/fmatar/quarkus-agui/issues/1) |
 |  | [#6 feat(CAP-05): Extract ag-ui-core Standalone Java 25 Library & Refactor Showcase](https://github.com/fmatar/quarkus-agui/issues/6) |  |  |  |
 |  | [#5 feat(CAP-04): Full 3-Pane SvelteKit + Skeleton UI + @lucide/svelte AG-UI Workbench](https://github.com/fmatar/quarkus-agui/issues/5) |  |  |  |
 |  | [#4 feat(CAP-03): In-Place AG-UI Protocol Engine in Orchestrator (Core 6 + MCP/A2A + State + HITL)](https://github.com/fmatar/quarkus-agui/issues/4) |  |  |  |
@@ -32,7 +32,7 @@
 | [#6 feat(CAP-05): Extract ag-ui-core Standalone Java 25 Library & Refactor Showcase](https://github.com/fmatar/quarkus-agui/issues/6) | `status:ready` | P1 - High | Architecture | `Pending` | [SPEC-05](docs/specs/cap-05-extract-agui-core.md) |
 | [#5 feat(CAP-04): Full 3-Pane SvelteKit + Skeleton UI + @lucide/svelte AG-UI Workbench](https://github.com/fmatar/quarkus-agui/issues/5) | `status:ready` | P0 - Critical | Frontend | `Pending` | [SPEC-04](docs/specs/cap-04-svelte-agui-workbench.md) |
 | [#4 feat(CAP-03): In-Place AG-UI Protocol Engine in Orchestrator (Core 6 + MCP/A2A + State + HITL)](https://github.com/fmatar/quarkus-agui/issues/4) | `status:ready` | P0 - Critical | Backend | `Pending` | [SPEC-03](docs/specs/cap-03-inplace-agui-backend.md) |
-| [#3 feat(CAP-02): OpsPilot Quarkus Orchestrator (:8080) & SvelteKit + pnpm 3-Pane Baseline (:5173)](https://github.com/fmatar/quarkus-agui/issues/3) | `status:in-progress` | P0 - Critical | Backend | `Pending` | [SPEC-02](docs/specs/cap-02-orchestrator-svelte-baseline.md) |
+| [#3 feat(CAP-02): OpsPilot Quarkus Orchestrator (:8080) & SvelteKit + pnpm 3-Pane Baseline (:5173)](https://github.com/fmatar/quarkus-agui/issues/3) | `status:done` | P0 - Critical | Backend | `Passed` | [SPEC-02](docs/specs/cap-02-orchestrator-svelte-baseline.md) |
 | [#2 feat(CAP-01): Quarkus MCP Server (:8081) & Quarkus A2A Server (:8082) in Reference Showcase](https://github.com/fmatar/quarkus-agui/issues/2) | `status:done` | P0 - Critical | Backend | `Passed` | [SPEC-01](docs/specs/cap-01-mcp-a2a-servers.md) |
 | [#1 feat: chore(genesis): initialize PRODUCT.md, multi-module architecture baseline, and specs for quarkus-agui](https://github.com/fmatar/quarkus-agui/issues/1) | `status:done` | P0 - Critical | Architecture | `Passed` | [PRODUCT.md](PRODUCT.md) |
 

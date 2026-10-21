@@ -58,8 +58,41 @@ class AgentResourceTest {
                 .statusCode(200)
                 .contentType(containsString("text/event-stream"))
                 .body(containsString("RUN_STARTED"))
+                .body(containsString("STATE_SNAPSHOT"))
                 .body(containsString("TOOL_CALL"))
+                .body(containsString("STATE_DELTA"))
                 .body(containsString("TEXT_DELTA"))
                 .body(containsString("RUN_FINISHED"));
+    }
+
+    @Test
+    void approveEndpointResumesInterruptedHitlRun() {
+        given()
+                .contentType("application/json")
+                .body(Map.of(
+                        "threadId", "thread-hitl-http",
+                        "prompt", "Scale deployment payment-gateway to 8 replicas",
+                        "state", Map.of(),
+                        "mode", "deterministic"))
+                .when()
+                .post("/api/agent/run")
+                .then()
+                .statusCode(200)
+                .body(containsString("interrupted"));
+
+        given()
+                .contentType("application/json")
+                .body(Map.of(
+                        "threadId", "thread-hitl-http",
+                        "approved", true,
+                        "reason", "Approved for peak traffic"))
+                .when()
+                .post("/api/agent/approve")
+                .then()
+                .statusCode(200)
+                .contentType(containsString("text/event-stream"))
+                .body(containsString("TOOL_RESULT"))
+                .body(containsString("STATE_DELTA"))
+                .body(containsString("completed"));
     }
 }
