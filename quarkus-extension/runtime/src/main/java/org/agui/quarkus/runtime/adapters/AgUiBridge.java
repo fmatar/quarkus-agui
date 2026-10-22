@@ -20,7 +20,7 @@ public class AgUiBridge {
 
     private final AgUiSseFormatter formatter = new AgUiSseFormatter();
 
-    public Multi<AgUiEvent<?>> streamTokens(String threadId, Iterable<String> tokens) {
+    public List<AgUiEvent<?>> buildTokenEvents(String threadId, Iterable<String> tokens) {
         Objects.requireNonNull(threadId, "threadId must not be null");
         Objects.requireNonNull(tokens, "tokens must not be null");
         List<AgUiEvent<?>> events = new ArrayList<>();
@@ -31,7 +31,11 @@ public class AgUiBridge {
             }
         }
         events.add(AgUiEvent.of(AgUiEventType.RUN_FINISHED, threadId, new RunFinishedPayload(threadId, "completed")));
-        return Multi.createFrom().iterable(events);
+        return events;
+    }
+
+    public Multi<AgUiEvent<?>> streamTokens(String threadId, Iterable<String> tokens) {
+        return Multi.createFrom().iterable(buildTokenEvents(threadId, tokens));
     }
 
     public Multi<String> streamSseFrames(Iterable<AgUiEvent<?>> events) {

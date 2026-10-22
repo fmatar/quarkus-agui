@@ -1,0 +1,14 @@
+name: "Quarkus AG-UI"
+description: "AG-UI (Agent-User Interaction) Protocol Extension for Quarkus 3.40.1.1 and Java 25"
+metadata:
+  keywords:
+    - "ag-ui"
+    - "ai"
+    - "agent"
+    - "mcp"
+    - "a2a"
+    - "sse"
+  categories:
+    - "web"
+    - "ai"
+  status: "preview"

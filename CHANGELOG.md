@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- feat(wave4): implement `quarkus-ag-ui-deployment` (`AgUiProcessor`, GraalVM 25 `ReflectiveClassBuildItem`s, `AdditionalBeanBuildItem`, Dev UI Inspector metadata) and `quarkus-ag-ui-integration-tests` ([#8](https://github.com/fmatar/quarkus-agui/issues/8))
 - feat(wave4): extract `quarkus-ag-ui` runtime module (`AgUiBridge`, `AgUiMcpBridge`, `AgUiA2aBridge`) with SmallRye Mutiny `Multi<AgUiEvent<?>>` and SSE streaming ([#7](https://github.com/fmatar/quarkus-agui/issues/7))
 - feat(wave3): extract zero-dependency Java 25 `ag-ui-core` library (`org.agui.core.domain`, `application`, `adapters`: `AgUiEvent`, 10 typed payload records, `AgUiSseFormatter`, `AgUiFlowAdapter`) and refactor showcase backend ([#6](https://github.com/fmatar/quarkus-agui/issues/6))
 - feat(wave2): implement `ClusterStatePanel.svelte` (bidirectional replica state stepper & A2A skill triggers) and `ProtocolInspector.svelte` (`ALL`/`AG-UI`/`MCP`/`A2A` filter tabs) in the 3-Pane SvelteKit Workbench ([#5](https://github.com/fmatar/quarkus-agui/issues/5))
