@@ -1,67 +1,145 @@
 @import 'tailwindcss';
 
-/* Modern Web Guidance (css-layout): 2D layout-first grid-template-areas & dvh viewport */
+/* ==========================================================================
+   Cyber-Industrial Telemetry & SRE Command Center Theme
+   Substrate: Deep Obsidian (#070a12) & Frosted Glass (#0d1322 / #111827)
+   Phosphor Signals: Emerald (#10b981), Amber (#f59e0b), Crimson (#ef4444), Cyan (#38bdf8), Violet (#a855f7)
+   ========================================================================== */
+
+:root {
+	--bg-substrate: #070a12;
+	--bg-panel: rgba(13, 19, 34, 0.75);
+	--bg-panel-subtle: rgba(17, 24, 39, 0.6);
+	--border-subtle: rgba(56, 189, 248, 0.12);
+	--border-glow: rgba(56, 189, 248, 0.25);
+	--glow-cyan: 0 0 20px -5px rgba(56, 189, 248, 0.3);
+	--glow-emerald: 0 0 20px -5px rgba(16, 185, 129, 0.3);
+	--glow-amber: 0 0 20px -5px rgba(245, 158, 11, 0.3);
+	--glow-crimson: 0 0 20px -5px rgba(239, 68, 68, 0.3);
+	--glow-violet: 0 0 20px -5px rgba(168, 85, 247, 0.3);
+}
+
+html, body {
+	height: 100%;
+	width: 100%;
+	overflow: hidden; /* Lock outer window scrolling */
+	background-color: var(--bg-substrate);
+	color: #f1f5f9;
+}
+
+body {
+	background-image:
+		radial-gradient(ellipse at 50% 0%, rgba(56, 189, 248, 0.08) 0%, transparent 60%),
+		radial-gradient(ellipse at 85% 90%, rgba(168, 85, 247, 0.05) 0%, transparent 50%),
+		linear-gradient(to right, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+		linear-gradient(to bottom, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+	background-size: 100% 100%, 100% 100%, 32px 32px, 32px 32px;
+	font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+	width: 6px;
+	height: 6px;
+}
+::-webkit-scrollbar-track {
+	background: rgba(11, 15, 25, 0.5);
+}
+::-webkit-scrollbar-thumb {
+	background: rgba(56, 189, 248, 0.2);
+	border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+	background: rgba(56, 189, 248, 0.4);
+}
+
+/* Text Selection */
+::selection {
+	background: rgba(56, 189, 248, 0.3);
+	color: #ffffff;
+}
+
+/* 2D Layout Grid - Pinned 100dvh Viewport */
 .workbench-grid {
 	display: grid;
-	min-block-size: 100dvh;
-	inline-size: 100%;
-	grid-template-columns: minmax(260px, 320px) minmax(0, 1fr) minmax(300px, 380px);
+	height: 100dvh;
+	max-height: 100dvh;
+	width: 100vw;
+	overflow: hidden;
+	grid-template-columns: minmax(280px, 320px) minmax(0, 1fr) var(--inspector-col, minmax(320px, 400px));
 	grid-template-areas:
 		'header header header'
 		'sidebar chat inspector';
-	grid-template-rows: auto 1fr;
-	gap: 1rem;
-	padding: 1rem;
+	grid-template-rows: auto minmax(0, 1fr);
+	gap: 0.875rem;
+	padding: 0.875rem;
+	box-sizing: border-box;
 }
 
-@media (max-width: 1024px) {
+.workbench-grid.inspector-collapsed {
+	grid-template-columns: minmax(280px, 320px) minmax(0, 1fr) 0px;
+	grid-template-areas:
+		'header header header'
+		'sidebar chat inspector';
+}
+
+@media (max-width: 1200px) {
+	.workbench-grid {
+		grid-template-columns: minmax(260px, 300px) minmax(0, 1fr);
+		grid-template-areas:
+			'header header'
+			'sidebar chat';
+	}
+	.workbench-inspector {
+		display: none;
+	}
+}
+
+@media (max-width: 860px) {
 	.workbench-grid {
 		grid-template-columns: 1fr;
 		grid-template-areas:
 			'header'
-			'sidebar'
-			'chat'
-			'inspector';
+			'chat';
+	}
+	.workbench-sidebar {
+		display: none;
 	}
 }
 
-.workbench-header {
-	grid-area: header;
-}
-.workbench-sidebar {
-	grid-area: sidebar;
-}
-.workbench-chat {
-	grid-area: chat;
-}
-.workbench-inspector {
-	grid-area: inspector;
+.workbench-header { grid-area: header; }
+.workbench-sidebar { grid-area: sidebar; }
+.workbench-chat { grid-area: chat; }
+.workbench-inspector { grid-area: inspector; }
+
+/* Cyber-Glass Panels */
+.cyber-card {
+	background: var(--bg-panel);
+	backdrop-filter: blur(16px);
+	-webkit-backdrop-filter: blur(16px);
+	border: 1px solid var(--border-subtle);
+	box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.45);
+	transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
-/* Modern Web Guidance (interactions-in-complex-layouts): isolate layout/style/paint reflows per pane */
-.workbench-pane {
-	content-visibility: auto;
-	contain-intrinsic-size: auto 320px auto 760px;
-	min-inline-size: 0;
+.cyber-card:hover {
+	border-color: var(--border-glow);
 }
 
-@supports not (content-visibility: auto) {
-	.workbench-pane {
-		contain: layout style paint;
-	}
+/* Micro Status Pulsers */
+@keyframes pulse-dot {
+	0%, 100% { opacity: 1; transform: scale(1); }
+	50% { opacity: 0.4; transform: scale(0.85); }
 }
 
-/* Modern Web Guidance (css-layout): reserve scrollbar space & prevent scroll chaining */
+.animate-pulse-dot {
+	animation: pulse-dot 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
 .scrollable-region {
 	overflow-y: auto;
 	scrollbar-gutter: stable;
 	overscroll-behavior: contain;
 	min-inline-size: 0;
-}
-
-.scenario-bar {
-	display: flex;
-	flex-wrap: wrap;
-	flex-wrap: balance;
-	gap: 0.5rem;
+	min-block-size: 0;
 }

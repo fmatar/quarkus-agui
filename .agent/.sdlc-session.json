@@ -1,5 +1,5 @@
 {
-  "activeSessionId": 21,
+  "activeSessionId": 23,
   "sessions": {
     "21": {
       "active": true,
@@ -30,6 +30,37 @@
       },
       "startedAt": "2026-10-22T14:42:36.499Z",
       "updatedAt": "2026-10-22T14:42:36.500Z",
+      "activeSubagents": []
+    },
+    "23": {
+      "active": true,
+      "issueId": 23,
+      "type": "feat",
+      "branch": "feature/issue-#23-ui-redesign-cyber-industrial",
+      "worktree": null,
+      "stage": 5,
+      "stageName": "Documentation, Showcase & Changelog Sync",
+      "remediationCount": 0,
+      "maxRemediations": 3,
+      "manifest": {
+        "specPath": null,
+        "prNumber": null,
+        "coverageReport": null,
+        "mutationScore": null,
+        "uiScreenshotPath": null,
+        "checkpoints": {
+          "stage1": null,
+          "stage2": null,
+          "stage3": "2026-10-22T17:44:18.018Z",
+          "stage4": "2026-10-22T17:44:27.358Z",
+          "stage5": "2026-10-22T17:44:33.796Z",
+          "stage6": null,
+          "stage7": null,
+          "stage8": null
+        }
+      },
+      "startedAt": "2026-10-22T17:44:18.018Z",
+      "updatedAt": "2026-10-22T17:44:33.844Z",
       "activeSubagents": []
     }
   }

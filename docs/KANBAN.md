@@ -13,6 +13,8 @@
 
 | 📥 Backlog | 📋 Ready | ⚡ In Progress | 🔍 In Review | ✅ Done |
 | :--- | :--- | :--- | :--- | :--- |
+| | #7866: [FEAT] feat(ui): redesign SRE workbench with cyber-industrial aesthetic, markdown parser, and stable viewport | | | |
+| | #2463: [FEAT] feat(ui): redesign SRE workbench with cyber-industrial aesthetic, markdown parser, and stable viewport | | | |
 | | #6464: [FEAT] feat: refactor(a2a): clean up legacy Wave 1 A2A artifacts in favor of official a2a-java 1.4.0.Final server | | | |
 |  |  |  |  | [#9 feat(CAP-08): Migrate Showcase to quarkus-ag-ui Extension & Full E2E + Native Benchmarks](https://github.com/fmatar/quarkus-agui/issues/9) |
 |  |  |  |  | [#8 feat(CAP-07): Extract quarkus-ag-ui-deployment, GraalVM 25 Reflection, Dev UI & Integration Tests](https://github.com/fmatar/quarkus-agui/issues/8) |
