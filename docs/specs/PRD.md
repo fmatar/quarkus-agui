@@ -53,7 +53,7 @@ The **AG-UI (Agent–User Interaction Protocol)** standardizes real-time, bidire
 - [x] `AgUiBridge`, `AgUiMcpBridge`, `AgUiA2aBridge`, and SmallRye Mutiny `Multi<AgUiEvent<?>>` SSE support.
 
 ### US-007 (`CAP-07`, #8): Extract `quarkus-ag-ui-deployment` & Integration Tests
-- [ ] `AgUiProcessor`, `ReflectiveClassBuildItem`s for GraalVM 25, Quarkus Dev UI Inspector Card, and `@QuarkusTest`/`@QuarkusIntegrationTest` suites.
+- [x] `AgUiProcessor`, `ReflectiveClassBuildItem`s for GraalVM 25, Quarkus Dev UI Inspector Card, and `@QuarkusTest`/`@QuarkusIntegrationTest` suites.
 
 ### US-008 (`CAP-08`, #9): Migrate Showcase to `quarkus-ag-ui` Extension & Native Benchmarks
 - [ ] Showcase `backend` consumes `org.agui:quarkus-ag-ui`; verified `< 10ms` serialization overhead and portable `-Dnative` / `-Dnative-container` GraalVM 25 builds (`< 50MB` RSS).

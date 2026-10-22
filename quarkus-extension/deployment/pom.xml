@@ -12,12 +12,20 @@
 
     <artifactId>quarkus-ag-ui-deployment</artifactId>
     <name>Quarkus AG-UI - Deployment</name>
-    <description>Quarkus Build-Time Module for GraalVM Reflection, JAX-RS SSE Bindings, and Dev UI Inspector Card</description>
+    <description>Quarkus Build-Time Module for GraalVM 25 Reflection, CDI Beans, and Dev UI Inspector Card</description>
 
     <dependencies>
         <dependency>
             <groupId>org.agui</groupId>
             <artifactId>quarkus-ag-ui</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-core-deployment</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-arc-deployment</artifactId>
         </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
