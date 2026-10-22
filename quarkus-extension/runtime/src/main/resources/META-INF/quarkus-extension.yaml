@@ -1,5 +1,9 @@
 name: "Quarkus AG-UI"
 description: "AG-UI (Agent-User Interaction) Protocol Extension for Quarkus 3.40.1.1 and Java 25"
+artifact: "org.agui:quarkus-ag-ui::jar:0.1.0-SNAPSHOT"
+group-id: "org.agui"
+artifact-id: "quarkus-ag-ui"
+version: "0.1.0-SNAPSHOT"
 metadata:
   keywords:
     - "ag-ui"

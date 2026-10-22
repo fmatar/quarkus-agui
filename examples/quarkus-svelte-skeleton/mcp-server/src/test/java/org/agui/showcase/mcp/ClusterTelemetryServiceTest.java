@@ -92,5 +92,9 @@ class ClusterTelemetryServiceTest {
             new McpToolInvocationRequest("nonExistentTool", Map.of())
         );
         assertTrue(unknownRes.isError());
+
+        var resourceContents = service.clusterTopologyResource();
+        assertEquals("cluster://topology", resourceContents.uri());
+        assertTrue(resourceContents.text().contains("payment-service"));
     }
 }
