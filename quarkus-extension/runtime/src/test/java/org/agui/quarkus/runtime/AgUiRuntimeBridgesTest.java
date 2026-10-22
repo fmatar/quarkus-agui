@@ -81,5 +81,86 @@ class AgUiRuntimeBridgesTest {
         assertEquals(2, events.size());
         assertEquals("STEP_STARTED", events.getFirst().type());
         assertEquals("STEP_FINISHED", events.getLast().type());
+
+        org.a2aproject.sdk.spec.Message agentMsg = org.a2aproject.sdk.A2A.toAgentMessage("Zero outward violations");
+        assertEquals("Zero outward violations", a2aBridge.extractMessageText(agentMsg));
+        assertEquals("", a2aBridge.extractMessageText(null));
+
+        org.a2aproject.sdk.spec.Artifact artifact = org.a2aproject.sdk.spec.Artifact.builder()
+                .artifactId("art-1")
+                .name("arch-report")
+                .parts(new org.a2aproject.sdk.spec.TextPart("Clean ring boundaries verified"))
+                .build();
+        org.a2aproject.sdk.spec.Task taskWithArtifact = org.a2aproject.sdk.spec.Task.builder()
+                .id("task-a2a-1")
+                .contextId("ctx-1")
+                .status(new org.a2aproject.sdk.spec.TaskStatus(org.a2aproject.sdk.spec.TaskState.TASK_STATE_COMPLETED, agentMsg, null))
+                .artifacts(List.of(artifact))
+                .build();
+        List<AgUiEvent<?>> taskEvents = a2aBridge.fromA2aTask("thread-a2a", "Sentinel-A2A-Auditor", "audit-clean-architecture", taskWithArtifact);
+        assertEquals(2, taskEvents.size());
+        assertEquals("STEP_FINISHED", taskEvents.getLast().type());
+        org.agui.core.domain.StepPayload lastStep = (org.agui.core.domain.StepPayload) taskEvents.getLast().payload();
+        assertEquals("Clean ring boundaries verified", lastStep.summary());
+        assertEquals("Sentinel-A2A-Auditor", lastStep.agentName());
+
+        org.a2aproject.sdk.spec.Task taskWithStatusOnly = org.a2aproject.sdk.spec.Task.builder()
+                .id("task-a2a-2")
+                .contextId("ctx-2")
+                .status(new org.a2aproject.sdk.spec.TaskStatus(org.a2aproject.sdk.spec.TaskState.TASK_STATE_COMPLETED, agentMsg, null))
+                .build();
+        assertEquals("Zero outward violations", a2aBridge.extractTaskSummary(taskWithStatusOnly));
+
+        org.a2aproject.sdk.spec.Task taskWithStateOnly = org.a2aproject.sdk.spec.Task.builder()
+                .id("task-a2a-3")
+                .contextId("ctx-3")
+                .status(new org.a2aproject.sdk.spec.TaskStatus(org.a2aproject.sdk.spec.TaskState.TASK_STATE_WORKING))
+                .build();
+        assertEquals("TASK_STATE_WORKING", a2aBridge.extractTaskSummary(taskWithStateOnly));
+
+        org.a2aproject.sdk.spec.AgentCard card = org.a2aproject.sdk.spec.AgentCard.builder()
+                .name("Sentinel-A2A-Auditor")
+                .description("Auditor")
+                .version("1.4.0")
+                .url("http://localhost:8082")
+                .preferredTransport("JSONRPC")
+                .supportedInterfaces(List.of(new org.a2aproject.sdk.spec.AgentInterface("JSONRPC", "http://localhost:8082")))
+                .defaultInputModes(List.of("text/plain"))
+                .defaultOutputModes(List.of("text/plain"))
+                .capabilities(org.a2aproject.sdk.spec.AgentCapabilities.builder().streaming(true).build())
+                .skills(List.of())
+                .build();
+
+        var msgStep = a2aBridge.fromA2aClientEvent(
+                "thread-a2a",
+                "audit-clean-architecture",
+                new org.a2aproject.sdk.client.MessageEvent(agentMsg),
+                card);
+        assertEquals("STEP_FINISHED", msgStep.type());
+        assertEquals("Sentinel-A2A-Auditor", msgStep.payload().agentName());
+        assertEquals("Zero outward violations", msgStep.payload().summary());
+
+        var taskStep = a2aBridge.fromA2aClientEvent(
+                "thread-a2a",
+                "audit-clean-architecture",
+                new org.a2aproject.sdk.client.TaskEvent(taskWithArtifact),
+                null);
+        assertEquals("STEP_FINISHED", taskStep.type());
+        assertEquals("A2A-Agent", taskStep.payload().agentName());
+        assertEquals("Clean ring boundaries verified", taskStep.payload().summary());
+
+        var updateStep = a2aBridge.fromA2aClientEvent(
+                "thread-a2a",
+                "audit-clean-architecture",
+                new org.a2aproject.sdk.client.TaskUpdateEvent(
+                        taskWithStateOnly,
+                        new org.a2aproject.sdk.spec.TaskStatusUpdateEvent(
+                                "task-a2a-3",
+                                new org.a2aproject.sdk.spec.TaskStatus(org.a2aproject.sdk.spec.TaskState.TASK_STATE_WORKING),
+                                "ctx-3",
+                                Map.of())),
+                card);
+        assertEquals("STEP_STARTED", updateStep.type());
+        assertEquals("TASK_STATE_WORKING", updateStep.payload().summary());
     }
 }

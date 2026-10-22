@@ -23,6 +23,13 @@ class A2aAgentResourceTest {
             .body("name", equalTo("Sentinel-A2A-Auditor"))
             .body("capabilities.streaming", equalTo(true))
             .body("skills.size()", equalTo(3));
+
+        given()
+            .when().get("/.well-known/agent-card.json")
+            .then()
+            .statusCode(200)
+            .body("name", equalTo("Sentinel-A2A-Auditor"))
+            .body("skills.size()", equalTo(3));
     }
 
     @Test

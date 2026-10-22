@@ -1,5 +1,9 @@
 package org.agui.showcase.mcp;
 
+import io.quarkiverse.mcp.server.Resource;
+import io.quarkiverse.mcp.server.TextResourceContents;
+import io.quarkiverse.mcp.server.Tool;
+import io.quarkiverse.mcp.server.ToolArg;
 import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
 
@@ -37,7 +41,9 @@ public class ClusterTelemetryService {
         logs.add(new LogEntry("2026-10-21T19:00:15Z", "auth-service", "INFO", "OIDC token verification cache hit ratio at 98.2%"));
     }
 
-    public Map<String, Object> inspectClusterHealth(String region) {
+    @Tool(description = "Inspect cluster health, pod replicas, CPU, and memory across services")
+    public Map<String, Object> inspectClusterHealth(
+            @ToolArg(description = "Target AWS region", defaultValue = "us-east-1") String region) {
         String resolvedRegion = (region == null || region.isBlank()) ? "us-east-1" : region.trim();
         List<ServiceStatus> ordered = List.of(
             services.get("api-gateway"),
@@ -53,7 +59,11 @@ public class ClusterTelemetryService {
         return snapshot;
     }
 
-    public List<LogEntry> queryServiceLogs(String serviceName, String severity, int limit) {
+    @Tool(description = "Query recent structured logs by service name and severity")
+    public List<LogEntry> queryServiceLogs(
+            @ToolArg(description = "Microservice name", defaultValue = "payment-service") String serviceName,
+            @ToolArg(description = "Log severity filter", defaultValue = "ALL") String severity,
+            @ToolArg(description = "Maximum number of log entries", defaultValue = "5") int limit) {
         String targetService = (serviceName == null || serviceName.isBlank()) ? "payment-service" : serviceName.trim();
         String targetSeverity = (severity == null || severity.isBlank()) ? "ALL" : severity.trim().toUpperCase();
         int clampedLimit = Math.max(1, Math.min(limit, 50));
@@ -65,7 +75,10 @@ public class ClusterTelemetryService {
             .toList();
     }
 
-    public ServiceStatus scaleDeployment(String serviceName, int targetReplicas) {
+    @Tool(description = "Scale service deployment replica count between 1 and 20")
+    public ServiceStatus scaleDeployment(
+            @ToolArg(description = "Microservice name") String serviceName,
+            @ToolArg(description = "Target replica count (1..20)") int targetReplicas) {
         if (serviceName == null || serviceName.isBlank() || !services.containsKey(serviceName.trim())) {
             throw new IllegalArgumentException("Unknown service: " + serviceName);
         }
@@ -79,6 +92,11 @@ public class ClusterTelemetryService {
         ServiceStatus updated = new ServiceStatus(key, newStatus, targetReplicas, scaledCpu, current.memoryMb());
         services.put(key, updated);
         return updated;
+    }
+
+    @Resource(uri = "cluster://topology", description = "Live cluster topology and replica health snapshot", mimeType = "application/json")
+    public TextResourceContents clusterTopologyResource() {
+        return TextResourceContents.create("cluster://topology", getTopologySnapshot().toString());
     }
 
     public Map<String, Object> getTopologySnapshot() {

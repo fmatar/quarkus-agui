@@ -69,4 +69,18 @@ class SpecialistAuditAgentServiceTest {
             new A2aTaskRequest("task-x", "audit-clean-architecture", "   ", Map.of())
         ));
     }
+
+    @Test
+    void officialA2aSdkConfigurationProducesPublicAgentCardAndResolvesSkills() {
+        SentinelA2aAgentConfiguration config = new SentinelA2aAgentConfiguration();
+        org.a2aproject.sdk.spec.AgentCard sdkCard = config.publicAgentCard();
+        assertEquals("Sentinel-A2A-Auditor", sdkCard.name());
+        assertEquals(3, sdkCard.skills().size());
+        assertNotNull(config.agentExecutor(service));
+
+        assertEquals("assess-security-posture", SentinelA2aAgentConfiguration.resolveSkillId("Audit security posture", Map.of()));
+        assertEquals("plan-incident-remediation", SentinelA2aAgentConfiguration.resolveSkillId("Scale remediation", Map.of()));
+        assertEquals("audit-clean-architecture", SentinelA2aAgentConfiguration.resolveSkillId("Check rings", Map.of()));
+        assertEquals("assess-security-posture", SentinelA2aAgentConfiguration.resolveSkillId("Check rings", Map.of("skillId", "assess-security-posture")));
+    }
 }

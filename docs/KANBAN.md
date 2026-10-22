@@ -5,7 +5,7 @@
 > To refresh this board: `.agent/skills/sdlc-kanban/scripts/kanban-sync.sh`
 
 > **Repository**: `fmatar/quarkus-agui`  
-> **Last Synced**: `2026-10-21 23:46:54 UTC`
+> **Last Synced**: `2026-10-22 05:29:40 UTC`
 
 ---
 
@@ -13,8 +13,10 @@
 
 | 📥 Backlog | 📋 Ready | ⚡ In Progress | 🔍 In Review | ✅ Done |
 | :--- | :--- | :--- | :--- | :--- |
-|  | [#9 feat(CAP-08): Migrate Showcase to quarkus-ag-ui Extension & Full E2E + Native Benchmarks](https://github.com/fmatar/quarkus-agui/issues/9) |  |  | [#7 feat(CAP-06): Extract quarkus-ag-ui-runtime (AgUiBridge, AgUiMcpBridge, AgUiA2aBridge, Mutiny SSE)](https://github.com/fmatar/quarkus-agui/issues/7) |
-|  | [#8 feat(CAP-07): Extract quarkus-ag-ui-deployment, GraalVM 25 Reflection, Dev UI & Integration Tests](https://github.com/fmatar/quarkus-agui/issues/8) |  |  | [#6 feat(CAP-05): Extract ag-ui-core Standalone Java 25 Library & Refactor Showcase](https://github.com/fmatar/quarkus-agui/issues/6) |
+|  |  |  |  | [#9 feat(CAP-08): Migrate Showcase to quarkus-ag-ui Extension & Full E2E + Native Benchmarks](https://github.com/fmatar/quarkus-agui/issues/9) |
+|  |  |  |  | [#8 feat(CAP-07): Extract quarkus-ag-ui-deployment, GraalVM 25 Reflection, Dev UI & Integration Tests](https://github.com/fmatar/quarkus-agui/issues/8) |
+|  |  |  |  | [#7 feat(CAP-06): Extract quarkus-ag-ui-runtime (AgUiBridge, AgUiMcpBridge, AgUiA2aBridge, Mutiny SSE)](https://github.com/fmatar/quarkus-agui/issues/7) |
+|  |  |  |  | [#6 feat(CAP-05): Extract ag-ui-core Standalone Java 25 Library & Refactor Showcase](https://github.com/fmatar/quarkus-agui/issues/6) |
 |  |  |  |  | [#5 feat(CAP-04): Full 3-Pane SvelteKit + Skeleton UI + @lucide/svelte AG-UI Workbench](https://github.com/fmatar/quarkus-agui/issues/5) |
 |  |  |  |  | [#4 feat(CAP-03): In-Place AG-UI Protocol Engine in Orchestrator (Core 6 + MCP/A2A + State + HITL)](https://github.com/fmatar/quarkus-agui/issues/4) |
 |  |  |  |  | [#3 feat(CAP-02): OpsPilot Quarkus Orchestrator (:8080) & SvelteKit + pnpm 3-Pane Baseline (:5173)](https://github.com/fmatar/quarkus-agui/issues/3) |
@@ -27,8 +29,8 @@
 
 | Issue | Status | Priority | Component | Quality Gate | Spec Link |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| [#9 feat(CAP-08): Migrate Showcase to quarkus-ag-ui Extension & Full E2E + Native Benchmarks](https://github.com/fmatar/quarkus-agui/issues/9) | `status:ready` | P1 - High | Architecture | `Pending` | [SPEC-08](docs/specs/cap-08-migrate-showcase-e2e-benchmarks.md) |
-| [#8 feat(CAP-07): Extract quarkus-ag-ui-deployment, GraalVM 25 Reflection, Dev UI & Integration Tests](https://github.com/fmatar/quarkus-agui/issues/8) | `status:ready` | P1 - High | DevOps | `Pending` | [SPEC-07](docs/specs/cap-07-extract-quarkus-deployment-it.md) |
+| [#9 feat(CAP-08): Migrate Showcase to quarkus-ag-ui Extension & Full E2E + Native Benchmarks](https://github.com/fmatar/quarkus-agui/issues/9) | `status:done` | P1 - High | Architecture | `Passed` | [SPEC-08](docs/specs/cap-08-migrate-showcase-e2e-benchmarks.md) |
+| [#8 feat(CAP-07): Extract quarkus-ag-ui-deployment, GraalVM 25 Reflection, Dev UI & Integration Tests](https://github.com/fmatar/quarkus-agui/issues/8) | `status:done` | P1 - High | DevOps | `Passed` | [SPEC-07](docs/specs/cap-07-extract-quarkus-deployment-it.md) |
 | [#7 feat(CAP-06): Extract quarkus-ag-ui-runtime (AgUiBridge, AgUiMcpBridge, AgUiA2aBridge, Mutiny SSE)](https://github.com/fmatar/quarkus-agui/issues/7) | `status:done` | P1 - High | Backend | `Passed` | [SPEC-06](docs/specs/cap-06-extract-quarkus-runtime.md) |
 | [#6 feat(CAP-05): Extract ag-ui-core Standalone Java 25 Library & Refactor Showcase](https://github.com/fmatar/quarkus-agui/issues/6) | `status:done` | P1 - High | Architecture | `Passed` | [SPEC-05](docs/specs/cap-05-extract-agui-core.md) |
 | [#5 feat(CAP-04): Full 3-Pane SvelteKit + Skeleton UI + @lucide/svelte AG-UI Workbench](https://github.com/fmatar/quarkus-agui/issues/5) | `status:done` | P0 - Critical | Frontend | `Passed` | [SPEC-04](docs/specs/cap-04-svelte-agui-workbench.md) |
