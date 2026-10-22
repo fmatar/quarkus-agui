@@ -1,5 +1,5 @@
 {
-  "activeSessionId": 23,
+  "activeSessionId": 25,
   "sessions": {
     "21": {
       "active": true,
@@ -61,6 +61,37 @@
       },
       "startedAt": "2026-10-22T17:44:18.018Z",
       "updatedAt": "2026-10-22T17:44:33.844Z",
+      "activeSubagents": []
+    },
+    "25": {
+      "active": true,
+      "issueId": 25,
+      "type": "bug",
+      "branch": "feature/issue-#25-fix-hitl-pod-controls",
+      "worktree": null,
+      "stage": 4,
+      "stageName": "Implementation & Tests Passing",
+      "remediationCount": 0,
+      "maxRemediations": 3,
+      "manifest": {
+        "specPath": null,
+        "prNumber": null,
+        "coverageReport": null,
+        "mutationScore": null,
+        "uiScreenshotPath": null,
+        "checkpoints": {
+          "stage1": null,
+          "stage2": "2026-10-22T17:50:43.702Z",
+          "stage3": null,
+          "stage4": "2026-10-22T17:56:43.654Z",
+          "stage5": null,
+          "stage6": null,
+          "stage7": null,
+          "stage8": null
+        }
+      },
+      "startedAt": "2026-10-22T17:50:43.701Z",
+      "updatedAt": "2026-10-22T17:56:43.765Z",
       "activeSubagents": []
     }
   }

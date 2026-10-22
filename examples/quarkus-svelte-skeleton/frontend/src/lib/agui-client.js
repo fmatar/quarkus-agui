@@ -163,10 +163,21 @@ export function reduceAgUiEvent(state, event) {
 				events: nextEvents
 			};
 
-		case 'TOOL_CALL':
+		case 'TOOL_CALL': {
+			const requiresApproval = Boolean(payload.requiresApproval);
+			const pendingApproval = requiresApproval
+				? {
+						callId: payload.callId,
+						toolName: payload.tool,
+						serviceName: payload.args?.serviceName ?? 'payment-gateway',
+						replicas: payload.args?.replicas ?? 6
+					}
+				: state.pendingApproval;
+
 			return {
 				...state,
-				statusText: `MCP Tool: ${payload.tool}`,
+				statusText: requiresApproval ? 'HITL Gate — Awaiting Operator Approval' : `MCP Tool: ${payload.tool}`,
+				pendingApproval,
 				mcpCalls: [
 					...state.mcpCalls,
 					{
@@ -174,12 +185,13 @@ export function reduceAgUiEvent(state, event) {
 						tool: payload.tool,
 						server: payload.server ?? 'quarkus-mcp-cluster-ops (:8081)',
 						args: payload.args ?? {},
-						status: payload.requiresApproval ? 'awaiting_approval' : 'running',
+						status: requiresApproval ? 'awaiting_approval' : 'running',
 						result: null
 					}
 				],
 				events: nextEvents
 			};
+		}
 
 		case 'TOOL_RESULT':
 			return {
@@ -227,10 +239,10 @@ export function reduceAgUiEvent(state, event) {
 				return {
 					...state,
 					isStreaming: false,
-					pendingApproval: payload.pendingAction ?? {
+					pendingApproval: payload.pendingAction ?? state.pendingApproval ?? {
 						toolName: 'scaleDeployment',
 						serviceName: 'payment-gateway',
-						replicas: 8
+						replicas: 6
 					},
 					statusText: 'HITL Gate — Awaiting Operator Approval',
 					events: nextEvents

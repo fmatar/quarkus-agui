@@ -125,20 +125,24 @@ test('reduceAgUiEvent handles HITL interrupted and cancelled RUN_FINISHED states
 	state = reduceAgUiEvent(state, {
 		id: 'h1',
 		type: 'TOOL_CALL',
-		payload: { callId: 'ch1', tool: 'scaleDeployment', requiresApproval: true }
+		payload: { callId: 'ch1', tool: 'scaleDeployment', requiresApproval: true, args: { serviceName: 'order-processor', replicas: 7 } }
 	});
 	assert.equal(state.mcpCalls[0].status, 'awaiting_approval');
+	assert.ok(state.pendingApproval);
+	assert.equal(state.pendingApproval.serviceName, 'order-processor');
+	assert.equal(state.pendingApproval.replicas, 7);
+	assert.equal(state.statusText, 'HITL Gate — Awaiting Operator Approval');
 
 	state = reduceAgUiEvent(state, {
 		id: 'h2',
 		type: 'RUN_FINISHED',
 		payload: {
 			status: 'interrupted',
-			pendingAction: { toolName: 'scaleDeployment', serviceName: 'payment-gateway', replicas: 8 }
+			pendingAction: { toolName: 'scaleDeployment', serviceName: 'order-processor', replicas: 7 }
 		}
 	});
 	assert.equal(state.isStreaming, false);
-	assert.equal(state.pendingApproval.replicas, 8);
+	assert.equal(state.pendingApproval.replicas, 7);
 
 	state = reduceAgUiEvent(state, {
 		id: 'h3',

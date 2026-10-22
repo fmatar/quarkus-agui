@@ -108,7 +108,14 @@ public class OpsPilotOrchestratorService {
             mcpCalls.add(mcpClient.callTool("queryServiceLogs", Map.of("serviceName", "payment-gateway")));
         } else if (lower.contains("scale")) {
             int replicas = extractReplicas(lower, 4);
-            String svc = lower.contains("order-processor") ? "order-processor" : "payment-gateway";
+            String svc = "payment-gateway";
+            if (lower.contains("order-processor") || lower.contains("order")) {
+                svc = "order-processor";
+            } else if (lower.contains("identity-provider") || lower.contains("identity")) {
+                svc = "identity-provider";
+            } else if (lower.contains("payment-service") || lower.contains("payment")) {
+                svc = "payment-gateway";
+            }
             mcpCalls.add(mcpClient.callTool("scaleDeployment", Map.of("serviceName", svc, "replicas", replicas)));
         } else {
             mcpCalls.add(mcpClient.callTool("inspectClusterHealth", Map.of()));
@@ -255,7 +262,14 @@ public class OpsPilotOrchestratorService {
                 } else if (lower.contains("scale")) {
                     toolName = "scaleDeployment";
                     int replicas = extractReplicas(lower, 4);
-                    String svc = lower.contains("order-processor") ? "order-processor" : "payment-gateway";
+                    String svc = "payment-gateway";
+                    if (lower.contains("order-processor") || lower.contains("order")) {
+                        svc = "order-processor";
+                    } else if (lower.contains("identity-provider") || lower.contains("identity")) {
+                        svc = "identity-provider";
+                    } else if (lower.contains("payment-service") || lower.contains("payment")) {
+                        svc = "payment-gateway";
+                    }
                     args = Map.of("serviceName", svc, "replicas", replicas);
                 }
 
@@ -402,7 +416,14 @@ public class OpsPilotOrchestratorService {
     private boolean checkAndRecordHitlInterrupt(String threadId, String prompt, String lower, List<String> frames) {
         if (lower.contains("scale")) {
             int requestedReplicas = extractReplicas(lower, 4);
-            String svc = lower.contains("order-processor") ? "order-processor" : "payment-gateway";
+            String svc = "payment-gateway";
+            if (lower.contains("order-processor") || lower.contains("order")) {
+                svc = "order-processor";
+            } else if (lower.contains("identity-provider") || lower.contains("identity")) {
+                svc = "identity-provider";
+            } else if (lower.contains("payment-service") || lower.contains("payment")) {
+                svc = "payment-gateway";
+            }
             if (requestedReplicas > HITL_REPLICA_THRESHOLD) {
                 String callId = "call-hitl-" + UUID.randomUUID().toString().substring(0, 6);
                 Map<String, Object> pendingAction = Map.of(
@@ -560,13 +581,21 @@ public class OpsPilotOrchestratorService {
     }
 
     private int extractReplicas(String text, int fallback) {
-        for (String token : text.split("\\s+")) {
+        if (text == null) {
+            return fallback;
+        }
+        // Match patterns like "to 8 replicas", "to 8", "8 replicas"
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("\\b(?:to\\s+)?(\\d+)\\s*(?:replicas?|pods?)?\\b", java.util.regex.Pattern.CASE_INSENSITIVE).matcher(text);
+        int candidate = fallback;
+        while (m.find()) {
             try {
-                return Integer.parseInt(token.replaceAll("[^0-9]", ""));
+                int val = Integer.parseInt(m.group(1));
+                if (val > 0 && val <= 50) {
+                    candidate = val;
+                }
             } catch (NumberFormatException ignored) {
-                // continue scanning tokens
             }
         }
-        return fallback;
+        return candidate;
     }
 }
