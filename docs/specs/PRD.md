@@ -56,4 +56,4 @@ The **AG-UI (Agent–User Interaction Protocol)** standardizes real-time, bidire
 - [x] `AgUiProcessor`, `ReflectiveClassBuildItem`s for GraalVM 25, Quarkus Dev UI Inspector Card, and `@QuarkusTest`/`@QuarkusIntegrationTest` suites.
 
 ### US-008 (`CAP-08`, #9): Migrate Showcase to `quarkus-ag-ui` Extension & Native Benchmarks
-- [ ] Showcase `backend` consumes `org.agui:quarkus-ag-ui`; verified `< 10ms` serialization overhead and portable `-Dnative` / `-Dnative-container` GraalVM 25 builds (`< 50MB` RSS).
+- [x] Showcase `backend` consumes `org.agui:quarkus-ag-ui`; verified `< 10ms` serialization overhead and portable `-Dnative` / `-Dnative-container` GraalVM 25 builds (`< 50MB` RSS).

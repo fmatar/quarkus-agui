@@ -23,8 +23,10 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import org.agui.core.adapters.AgUiSseFormatter;
 import org.agui.core.domain.AgUiEvent;
+import org.agui.quarkus.runtime.adapters.AgUiA2aBridge;
+import org.agui.quarkus.runtime.adapters.AgUiBridge;
+import org.agui.quarkus.runtime.adapters.AgUiMcpBridge;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 /**
@@ -40,8 +42,10 @@ public class OpsPilotOrchestratorService {
 
     private final McpGatewayClient mcpClient;
     private final A2aGatewayClient a2aClient;
+    private final AgUiBridge agUiBridge;
+    private final AgUiMcpBridge agUiMcpBridge;
+    private final AgUiA2aBridge agUiA2aBridge;
     private final ObjectMapper objectMapper = new ObjectMapper();
-    private final AgUiSseFormatter sseFormatter = new AgUiSseFormatter();
     private final Map<String, Map<String, Object>> pendingApprovals = new ConcurrentHashMap<>();
     private final HttpClient httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(3))
@@ -50,20 +54,45 @@ public class OpsPilotOrchestratorService {
     @ConfigProperty(name = "agui.ollama.base-url", defaultValue = "http://127.0.0.1:11434")
     String ollamaBaseUrl = "http://127.0.0.1:11434";
 
-    @Inject
     public OpsPilotOrchestratorService(McpGatewayClient mcpClient, A2aGatewayClient a2aClient) {
+        this(mcpClient, a2aClient, new AgUiBridge(), new AgUiMcpBridge(), new AgUiA2aBridge());
+    }
+
+    @Inject
+    public OpsPilotOrchestratorService(
+            McpGatewayClient mcpClient,
+            A2aGatewayClient a2aClient,
+            AgUiBridge agUiBridge,
+            AgUiMcpBridge agUiMcpBridge,
+            AgUiA2aBridge agUiA2aBridge) {
         this.mcpClient = mcpClient;
         this.a2aClient = a2aClient;
+        this.agUiBridge = agUiBridge;
+        this.agUiMcpBridge = agUiMcpBridge;
+        this.agUiA2aBridge = agUiA2aBridge;
     }
 
     public Map<String, Object> getCatalog() {
         return Map.of(
                 "orchestrator", "OpsPilot-Quarkus-Orchestrator",
+                "extension", "org.agui:quarkus-ag-ui",
                 "llmMode", resolveMode(null),
                 "defaultOllamaModel", DEFAULT_OLLAMA_MODEL,
                 "mcpTools", mcpClient.listTools(),
                 "a2aAgent", a2aClient.getAgentCard(),
                 "clusterState", mcpClient.readClusterState());
+    }
+
+    public AgUiBridge agUiBridge() {
+        return agUiBridge;
+    }
+
+    public AgUiMcpBridge agUiMcpBridge() {
+        return agUiMcpBridge;
+    }
+
+    public AgUiA2aBridge agUiA2aBridge() {
+        return agUiA2aBridge;
     }
 
     public AgentChatResponse executeChat(AgentRunRequest request) {
@@ -491,7 +520,7 @@ public class OpsPilotOrchestratorService {
 
     private String formatSseEvent(String threadId, String type, Map<String, Object> payload) {
         AgUiEvent<Map<String, Object>> event = AgUiEvent.ofType(type, threadId, payload);
-        return sseFormatter.formatSse(event);
+        return agUiBridge.formatter().formatSse(event);
     }
 
     private String resolveThreadId(AgentRunRequest request) {

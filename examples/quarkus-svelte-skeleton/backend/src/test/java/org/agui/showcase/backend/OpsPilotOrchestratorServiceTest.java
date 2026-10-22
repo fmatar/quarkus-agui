@@ -54,7 +54,11 @@ class OpsPilotOrchestratorServiceTest {
     void catalogReturnsMcpToolsA2aAgentCardAndClusterState() {
         Map<String, Object> catalog = service.getCatalog();
         assertEquals("deterministic", catalog.get("llmMode"));
+        assertEquals("org.agui:quarkus-ag-ui", catalog.get("extension"));
         assertEquals("llama3.2:latest", catalog.get("defaultOllamaModel"));
+        assertNotNull(service.agUiBridge());
+        assertNotNull(service.agUiMcpBridge());
+        assertNotNull(service.agUiA2aBridge());
         List<?> mcpTools = (List<?>) catalog.get("mcpTools");
         assertNotNull(mcpTools);
         assertEquals(3, mcpTools.size());
