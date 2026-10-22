@@ -1,14 +1,14 @@
 {
-  "activeSessionId": 8,
+  "activeSessionId": 21,
   "sessions": {
-    "8": {
+    "21": {
       "active": true,
-      "issueId": 8,
+      "issueId": 21,
       "type": "feat",
-      "branch": "feature/issue-#8-extract-quarkus-deployment-it",
+      "branch": "feature/issue-#21-a2a-official-cleanup",
       "worktree": null,
-      "stage": 2,
-      "stageName": "Intake & Specification",
+      "stage": 5,
+      "stageName": "Quality Gates & Architecture Verification",
       "remediationCount": 0,
       "maxRemediations": 3,
       "manifest": {
@@ -18,18 +18,18 @@
         "mutationScore": null,
         "uiScreenshotPath": null,
         "checkpoints": {
-          "stage1": "2026-10-21T23:49:15.149Z",
-          "stage2": "2026-10-21T23:49:15.199Z",
+          "stage1": null,
+          "stage2": null,
           "stage3": null,
           "stage4": null,
-          "stage5": null,
+          "stage5": "2026-10-22T14:42:36.500Z",
           "stage6": null,
           "stage7": null,
           "stage8": null
         }
       },
-      "startedAt": "2026-10-21T23:49:15.148Z",
-      "updatedAt": "2026-10-21T23:49:24.510Z",
+      "startedAt": "2026-10-22T14:42:36.499Z",
+      "updatedAt": "2026-10-22T14:42:36.500Z",
       "activeSubagents": []
     }
   }

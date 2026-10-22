@@ -13,6 +13,7 @@
 
 | 📥 Backlog | 📋 Ready | ⚡ In Progress | 🔍 In Review | ✅ Done |
 | :--- | :--- | :--- | :--- | :--- |
+| | #6464: [FEAT] feat: refactor(a2a): clean up legacy Wave 1 A2A artifacts in favor of official a2a-java 1.4.0.Final server | | | |
 |  |  |  |  | [#9 feat(CAP-08): Migrate Showcase to quarkus-ag-ui Extension & Full E2E + Native Benchmarks](https://github.com/fmatar/quarkus-agui/issues/9) |
 |  |  |  |  | [#8 feat(CAP-07): Extract quarkus-ag-ui-deployment, GraalVM 25 Reflection, Dev UI & Integration Tests](https://github.com/fmatar/quarkus-agui/issues/8) |
 |  |  |  |  | [#7 feat(CAP-06): Extract quarkus-ag-ui-runtime (AgUiBridge, AgUiMcpBridge, AgUiA2aBridge, Mutiny SSE)](https://github.com/fmatar/quarkus-agui/issues/7) |

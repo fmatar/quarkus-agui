@@ -71,25 +71,17 @@ public class SentinelA2aAgentConfiguration {
     @Produces
     @ApplicationScoped
     public AgentExecutor agentExecutor(SpecialistAuditAgentService auditService) {
-        return new AgentExecutor() {
-            @Override
-            public void execute(RequestContext context, AgentEmitter emitter) {
-                String userInput = context.getUserInput();
-                String prompt = (userInput == null || userInput.isBlank()) ? "Audit architecture" : userInput;
-                Map<String, Object> metadata = context.getMetadata() != null ? context.getMetadata() : Map.of();
-                A2aTaskResponse response = auditService.executeTask(
-                        new A2aTaskRequest(context.getTaskId(), resolveSkillId(prompt, metadata), prompt, metadata));
-                emitter.complete(emitter.newAgentMessage(List.of(new TextPart(response.summary())), Map.of()));
-            }
-
-            @Override
-            public void cancel(RequestContext context, AgentEmitter emitter) {
-                emitter.cancel(emitter.newAgentMessage(List.of(new TextPart("Cancelled")), Map.of()));
-            }
+        return (context, emitter) -> {
+            String prompt = context.getUserInput();
+            SpecialistAuditAgentService.AuditResult result = auditService.performAudit(
+                    resolveSkillId(prompt, context.getMetadata()),
+                    (prompt == null || prompt.isBlank()) ? "Audit architecture" : prompt,
+                    context.getMetadata());
+            emitter.complete(emitter.newAgentMessage(List.of(new TextPart(result.summary())), Map.of()));
         };
     }
 
-    static String resolveSkillId(String prompt, Map<String, Object> metadata) {
+    public static String resolveSkillId(String prompt, Map<String, Object> metadata) {
         if (metadata != null && metadata.get("skillId") instanceof String metaSkill && !metaSkill.isBlank()) {
             return metaSkill.trim();
         }
