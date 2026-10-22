@@ -40,7 +40,7 @@ Fill the gap in Java/JVM ecosystems for the **AG-UI (Agent–User Interaction Pr
 | CAP-05 | Extract ag-ui-core Standalone Java 25 Library & Refactor Showcase | `docs/specs/cap-05-extract-agui-core.md` | CAP-03, CAP-04 | `IMPLEMENTED (ADR-002)` |
 | CAP-06 | Extract quarkus-ag-ui-runtime (AgUiBridge, AgUiMcpBridge, AgUiA2aBridge, Mutiny SSE) | `docs/specs/cap-06-extract-quarkus-runtime.md` | CAP-05 | `IMPLEMENTED (ADR-002)` |
 | CAP-07 | Extract quarkus-ag-ui-deployment, GraalVM 25 Reflection, Dev UI & Integration Tests | `docs/specs/cap-07-extract-quarkus-deployment-it.md` | CAP-06 | `IMPLEMENTED (ADR-002)` |
-| CAP-08 | Migrate Showcase to quarkus-ag-ui Extension & Full E2E + Native Benchmarks | `docs/specs/cap-08-migrate-showcase-e2e-benchmarks.md` | CAP-07 | `AMENDED (ADR-002)` |
+| CAP-08 | Migrate Showcase to quarkus-ag-ui Extension & Full E2E + Native Benchmarks | `docs/specs/cap-08-migrate-showcase-e2e-benchmarks.md` | CAP-07 | `IMPLEMENTED (ADR-002)` |
 
 ---
 

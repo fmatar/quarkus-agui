@@ -114,4 +114,4 @@ flowchart TD
 | **CAP-05** | Wave 3 — Extract Plain Java 25 Zero-Dependency Library (`ag-ui-core`) | `IMPLEMENTED` |
 | **CAP-06** | Wave 4 — Extract Quarkus AG-UI Runtime & Bridges (`quarkus-ag-ui`) | `IMPLEMENTED` |
 | **CAP-07** | Wave 4 — Quarkus AG-UI Deployment Processor, GraalVM 25 Reflection & Dev UI | `IMPLEMENTED` |
-| **CAP-08** | Wave 4 — Migrate Showcase to `quarkus-ag-ui` Extension, Benchmarks & Native Verification | `PLANNED` |
+| **CAP-08** | Wave 4 — Migrate Showcase to `quarkus-ag-ui` Extension, Benchmarks & Native Verification | `IMPLEMENTED` |
