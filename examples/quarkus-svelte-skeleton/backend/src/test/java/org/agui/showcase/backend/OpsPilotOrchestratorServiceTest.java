@@ -120,6 +120,19 @@ class OpsPilotOrchestratorServiceTest {
         assertEquals("COMPLETED", res.status());
         assertTrue(res.mcpCalls().stream().anyMatch(c -> "scaleDeployment".equals(c.get("toolName"))));
         assertTrue(res.a2aHandoffs().stream().anyMatch(h -> "plan-incident-remediation".equals(h.get("skillId"))));
+        Map<String, Object> handoff = res.a2aHandoffs().getFirst();
+        assertEquals("order-processor", ((Map<?, ?>) handoff.get("report")).get("targetService"));
+
+        AgentRunRequest idReq = new AgentRunRequest(
+                "thread-scale-id",
+                "Scale deployment identity-provider to 5 replicas",
+                Map.of(),
+                "deterministic");
+        AgentChatResponse idRes = service.executeChat(idReq);
+        assertEquals("COMPLETED", idRes.status());
+        Map<String, Object> idHandoff = idRes.a2aHandoffs().getFirst();
+        assertEquals("identity-provider", ((Map<?, ?>) idHandoff.get("report")).get("targetService"));
+        assertEquals(5, ((Map<?, ?>) idHandoff.get("report")).get("recommendedReplicas"));
     }
 
     @Test

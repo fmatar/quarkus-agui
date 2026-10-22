@@ -60,11 +60,28 @@ public class McpGatewayClient {
                         "description", "Scales a deployment to the requested replica count."));
     }
 
+    private static final List<String> CANONICAL_SERVICE_ORDER = List.of(
+            "payment-gateway",
+            "order-processor",
+            "identity-provider");
+
     public Map<String, Object> readClusterState() {
+        List<Map<String, Object>> ordered = new java.util.ArrayList<>();
+        for (String svcName : CANONICAL_SERVICE_ORDER) {
+            Map<String, Object> svc = services.get(svcName);
+            if (svc != null) {
+                ordered.add(svc);
+            }
+        }
+        for (Map.Entry<String, Map<String, Object>> entry : services.entrySet()) {
+            if (!CANONICAL_SERVICE_ORDER.contains(entry.getKey())) {
+                ordered.add(entry.getValue());
+            }
+        }
         return Map.of(
                 "uri", "cluster://topology",
                 "cluster", "quarkus-prod-us-east-1",
-                "services", List.copyOf(services.values()));
+                "services", List.copyOf(ordered));
     }
 
     public Map<String, Object> callTool(String toolName, Map<String, Object> arguments) {
