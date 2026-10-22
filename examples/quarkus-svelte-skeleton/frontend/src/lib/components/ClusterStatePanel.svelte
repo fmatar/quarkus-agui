@@ -13,6 +13,18 @@
 
 	let { clusterState, isStreaming = false, onAdjustReplicas, onTriggerSkill } = $props();
 
+	const CANONICAL_SERVICE_ORDER = ['payment-gateway', 'order-processor', 'identity-provider'];
+	let orderedServices = $derived(
+		[...(clusterState?.services ?? [])].sort((a, b) => {
+			const idxA = CANONICAL_SERVICE_ORDER.indexOf(a.serviceName);
+			const idxB = CANONICAL_SERVICE_ORDER.indexOf(b.serviceName);
+			if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+			if (idxA !== -1) return -1;
+			if (idxB !== -1) return 1;
+			return (a.serviceName ?? '').localeCompare(b.serviceName ?? '');
+		})
+	);
+
 	function getStatusColor(status) {
 		switch (status) {
 			case 'HEALTHY':
@@ -60,7 +72,7 @@
 
 		<!-- Workload Cards -->
 		<div class="space-y-2.5">
-			{#each clusterState?.services ?? [] as svc (svc.serviceName)}
+			{#each orderedServices as svc (svc.serviceName)}
 				{@const st = getStatusColor(svc.status)}
 				<div
 					class="group relative overflow-hidden rounded-xl bg-slate-950/60 p-3.5 ring-1 ring-slate-800/80 transition-all hover:bg-slate-900/60 hover:ring-cyan-500/30"

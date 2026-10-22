@@ -41,6 +41,33 @@ public class A2aGatewayClient {
 
     public Map<String, Object> delegateTask(String taskId, String skillId, String prompt) {
         String resolvedSkill = (skillId == null || skillId.isBlank()) ? "audit-clean-architecture" : skillId;
+        String lowerPrompt = prompt == null ? "" : prompt.toLowerCase(java.util.Locale.ROOT);
+        String targetService = "payment-gateway";
+        if (lowerPrompt.contains("identity-provider") || lowerPrompt.contains("identity")) {
+            targetService = "identity-provider";
+        } else if (lowerPrompt.contains("order-processor") || lowerPrompt.contains("order")) {
+            targetService = "order-processor";
+        } else if (lowerPrompt.contains("payment-service") || lowerPrompt.contains("payment")) {
+            targetService = "payment-gateway";
+        }
+
+        int targetReplicas = 4;
+        java.util.regex.Matcher rm = java.util.regex.Pattern.compile(
+                "\\b(?:to\\s+)?(\\d+)\\s*(?:replicas?|pods?)?\\b",
+                java.util.regex.Pattern.CASE_INSENSITIVE).matcher(lowerPrompt);
+        while (rm.find()) {
+            try {
+                int parsed = Integer.parseInt(rm.group(1));
+                if (parsed > 0 && parsed <= 50) {
+                    targetReplicas = parsed;
+                }
+            } catch (NumberFormatException ignored) {
+            }
+        }
+
+        final String finalTargetService = targetService;
+        final int finalTargetReplicas = targetReplicas;
+
         Map<String, Object> report = switch (resolvedSkill) {
             case "audit-clean-architecture" -> Map.of(
                     "ringCompliance", "CONFORMING",
@@ -53,10 +80,14 @@ public class A2aGatewayClient {
                     "graalvmNativeReady", true,
                     "verdict", "Zero critical CVEs; GraalVM 25 native reflection boundary locked.");
             case "plan-incident-remediation" -> Map.of(
-                    "targetService", "payment-gateway",
-                    "recommendedReplicas", 4,
+                    "targetService", finalTargetService,
+                    "recommendedReplicas", finalTargetReplicas,
                     "hitlThreshold", 5,
-                    "verdict", "Scale payment-gateway to 4 replicas (auto-approved) or >5 replicas (requires HITL approval).");
+                    "verdict", String.format(
+                            "Scale %s to %d replicas (%s).",
+                            finalTargetService,
+                            finalTargetReplicas,
+                            finalTargetReplicas <= 5 ? "auto-approved" : "requires HITL approval"));
             default -> throw new IllegalArgumentException("Unsupported A2A skill: " + resolvedSkill);
         };
 
