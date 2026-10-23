@@ -10,7 +10,7 @@ import org.a2aproject.sdk.client.ClientEvent;
 import org.a2aproject.sdk.client.transport.jsonrpc.JSONRPCTransport;
 import org.a2aproject.sdk.client.transport.jsonrpc.JSONRPCTransportConfig;
 import org.a2aproject.sdk.spec.AgentCard;
-import org.agui.quarkus.runtime.adapters.AgUiA2aBridge;
+import org.agui.quarkus.core.runtime.adapters.AgUiA2aBridge;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 /**

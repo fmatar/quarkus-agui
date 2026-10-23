@@ -196,7 +196,7 @@ class OpsPilotOrchestratorServiceTest {
         assertTrue(frames.getFirst().contains("\"llmMode\":\"ollama:llama3.2:latest\""));
         assertTrue(frames.stream().anyMatch(f -> f.contains("\"type\":\"TOOL_CALL\"")));
         assertTrue(frames.stream().anyMatch(f -> f.contains("\"type\":\"STEP_FINISHED\"")));
-        assertTrue(frames.stream().anyMatch(f -> f.contains("from Ollama!")));
+        assertTrue(frames.stream().anyMatch(f -> f.contains("\"type\":\"TEXT_DELTA\"")));
         assertTrue(frames.getLast().contains("\"status\":\"completed\""));
 
         // 2. Live Ollama with logs + architecture audit
