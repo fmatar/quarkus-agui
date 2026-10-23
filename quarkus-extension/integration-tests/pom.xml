@@ -17,11 +17,29 @@
     <dependencies>
         <dependency>
             <groupId>org.agui</groupId>
+            <artifactId>quarkus-ag-ui-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.agui</groupId>
+            <artifactId>quarkus-ag-ui-sse</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.agui</groupId>
             <artifactId>quarkus-ag-ui</artifactId>
         </dependency>
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-rest-jackson</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.agui</groupId>
+            <artifactId>quarkus-ag-ui-core-deployment</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.agui</groupId>
+            <artifactId>quarkus-ag-ui-sse-deployment</artifactId>
+            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.agui</groupId>

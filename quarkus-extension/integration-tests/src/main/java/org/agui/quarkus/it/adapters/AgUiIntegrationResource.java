@@ -13,9 +13,9 @@ import java.util.Map;
 import org.agui.core.domain.A2aHandoffPayload;
 import org.agui.core.domain.AgUiEvent;
 import org.agui.core.domain.McpToolMetadata;
-import org.agui.quarkus.runtime.adapters.AgUiA2aBridge;
-import org.agui.quarkus.runtime.adapters.AgUiBridge;
-import org.agui.quarkus.runtime.adapters.AgUiMcpBridge;
+import org.agui.quarkus.core.runtime.adapters.AgUiA2aBridge;
+import org.agui.quarkus.core.runtime.adapters.AgUiBridge;
+import org.agui.quarkus.core.runtime.adapters.AgUiMcpBridge;
 import org.jboss.resteasy.reactive.RestStreamElementType;
 
 /**
