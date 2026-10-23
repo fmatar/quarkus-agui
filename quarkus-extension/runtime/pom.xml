@@ -11,29 +11,21 @@
     </parent>
 
     <artifactId>quarkus-ag-ui</artifactId>
-    <name>Quarkus AG-UI - Runtime</name>
-    <description>Quarkus Runtime Module for AG-UI SSE Auto-Configuration, Mutiny, and LangChain4j/MCP/A2A Bridges</description>
+    <name>Quarkus AG-UI - Runtime Starter</name>
+    <description>Quarkus AG-UI Starter Module combining Core, SSE, and WebSockets Adapters</description>
 
     <dependencies>
         <dependency>
             <groupId>org.agui</groupId>
-            <artifactId>ag-ui-core</artifactId>
+            <artifactId>quarkus-ag-ui-core</artifactId>
         </dependency>
         <dependency>
-            <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-arc</artifactId>
+            <groupId>org.agui</groupId>
+            <artifactId>quarkus-ag-ui-sse</artifactId>
         </dependency>
         <dependency>
-            <groupId>io.smallrye.reactive</groupId>
-            <artifactId>mutiny</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.a2aproject.sdk</groupId>
-            <artifactId>a2a-java-sdk-client</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.a2aproject.sdk</groupId>
-            <artifactId>a2a-java-sdk-client-transport-jsonrpc</artifactId>
+            <groupId>org.agui</groupId>
+            <artifactId>quarkus-ag-ui-websockets</artifactId>
         </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>

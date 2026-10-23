@@ -1,6 +1,37 @@
 {
-  "activeSessionId": 25,
+  "activeSessionId": 30,
   "sessions": {
+    "30": {
+      "active": true,
+      "issueId": 30,
+      "type": "feat",
+      "branch": "feat/bom-multi-extension-clean-arch",
+      "worktree": null,
+      "stage": 4,
+      "stageName": "Implementation & Tests Passing",
+      "remediationCount": 0,
+      "maxRemediations": 3,
+      "manifest": {
+        "specPath": null,
+        "prNumber": null,
+        "coverageReport": null,
+        "mutationScore": null,
+        "uiScreenshotPath": null,
+        "checkpoints": {
+          "stage1": "2026-10-23T05:40:00.000Z",
+          "stage2": "2026-10-23T05:42:00.000Z",
+          "stage3": "2026-10-23T05:43:00.000Z",
+          "stage4": "2026-10-23T05:48:00.000Z",
+          "stage5": null,
+          "stage6": null,
+          "stage7": null,
+          "stage8": null
+        }
+      },
+      "startedAt": "2026-10-23T05:40:00.000Z",
+      "updatedAt": "2026-10-23T05:48:00.000Z",
+      "activeSubagents": []
+    },
     "21": {
       "active": true,
       "issueId": 21,

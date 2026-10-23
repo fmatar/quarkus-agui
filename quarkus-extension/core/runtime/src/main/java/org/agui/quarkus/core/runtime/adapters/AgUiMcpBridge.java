@@ -1,4 +1,4 @@
-package org.agui.quarkus.runtime.adapters;
+package org.agui.quarkus.core.runtime.adapters;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import java.util.LinkedHashMap;
@@ -12,7 +12,7 @@ import org.agui.core.domain.ToolCallPayload;
 import org.agui.core.domain.ToolResultPayload;
 
 /**
- * Quarkus Runtime Bridge enriching MCP (Model Context Protocol) tool calls into AG-UI events.
+ * Core Quarkus Bridge connecting MCP (Model Context Protocol) tool executions to AG-UI events.
  */
 @ApplicationScoped
 public class AgUiMcpBridge {

@@ -1,4 +1,4 @@
-package org.agui.quarkus.runtime.adapters;
+package org.agui.quarkus.core.runtime.adapters;
 
 import io.smallrye.mutiny.Multi;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -13,7 +13,7 @@ import org.agui.core.domain.RunStartedPayload;
 import org.agui.core.domain.TextDeltaPayload;
 
 /**
- * Quarkus Runtime Bridge adapting token streams and AG-UI events into SmallRye Mutiny {@link Multi} streams.
+ * Core Quarkus Runtime Bridge adapting token streams and AG-UI events into SmallRye Mutiny {@link Multi} streams.
  */
 @ApplicationScoped
 public class AgUiBridge {
