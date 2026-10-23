@@ -12,7 +12,7 @@
 	import { renderMarkdownToHtml } from '$lib/markdown.js';
 
 	let { messages = [], isStreaming = false, streamBuffer = '', statusText = '' } = $props();
-	let scrollContainer = $state(null);
+	let scrollContainer;
 
 	// Auto-scroll to bottom on streaming deltas or new messages
 	$effect(() => {

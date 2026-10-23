@@ -80,7 +80,7 @@
 							role="tab"
 							aria-selected={activeFilter === filter}
 							onclick={() => (activeFilter = filter)}
-							class="rounded-lg px-2.5 py-1 font-mono text-[11px] font-semibold transition-all {activeFilter === filter
+							class="rounded-lg px-2.5 py-1.5 font-mono text-[11px] font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 {activeFilter === filter
 								? 'bg-cyan-500/20 text-cyan-300 ring-1 ring-cyan-500/50 shadow-sm'
 								: 'bg-slate-950/60 text-slate-400 hover:bg-slate-900 hover:text-slate-200'}"
 						>
@@ -98,7 +98,8 @@
 				{#if visibleEvents.length === 0}
 					<div class="flex h-40 flex-col items-center justify-center text-center text-slate-500 font-mono text-xs">
 						<Zap class="size-5 text-slate-600 mb-2" />
-						<span>No SSE frames captured</span>
+						<p>No events matching filter: <span class="font-bold text-slate-400">{activeFilter}</span></p>
+						<p class="text-[10px] text-slate-600 mt-1">Trigger an agent run to stream AG-UI, MCP, or A2A events</p>
 					</div>
 				{/if}
 

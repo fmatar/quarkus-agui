@@ -92,17 +92,17 @@
 						<!-- Replicas -->
 						<div class="flex items-center gap-2">
 							<span class="font-mono text-[11px] text-slate-400">Pods:</span>
-							<div class="flex items-center gap-1 rounded-lg bg-slate-900 px-1 py-0.5 ring-1 ring-slate-800">
+							<div class="flex items-center gap-1 rounded-lg bg-slate-900 p-0.5 ring-1 ring-slate-800">
 								<button
 									type="button"
 									disabled={isStreaming || svc.replicas <= 1}
 									aria-label="Decrease replicas for {svc.serviceName}"
 									onclick={() => onAdjustReplicas?.(svc.serviceName, -1)}
-									class="rounded p-1 text-slate-400 transition-colors hover:bg-slate-800 hover:text-white disabled:opacity-30"
+									class="relative flex size-7 sm:size-6 items-center justify-center rounded-md bg-slate-800/80 text-slate-300 transition-all hover:bg-slate-700 hover:text-white disabled:opacity-30 disabled:pointer-events-none active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 after:absolute after:-inset-2 after:content-['']"
 								>
-									<Minus class="size-2.5" />
+									<Minus class="size-3" />
 								</button>
-								<span class="min-w-4 text-center font-mono text-xs font-bold text-cyan-300">
+								<span class="min-w-5 text-center font-mono text-xs font-bold text-cyan-300">
 									{svc.replicas}
 								</span>
 								<button
@@ -110,9 +110,9 @@
 									disabled={isStreaming}
 									aria-label="Increase replicas for {svc.serviceName}"
 									onclick={() => onAdjustReplicas?.(svc.serviceName, 1)}
-									class="rounded p-1 text-slate-400 transition-colors hover:bg-slate-800 hover:text-white disabled:opacity-30"
+									class="relative flex size-7 sm:size-6 items-center justify-center rounded-md bg-slate-800/80 text-slate-300 transition-all hover:bg-slate-700 hover:text-white disabled:opacity-30 disabled:pointer-events-none active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 after:absolute after:-inset-2 after:content-['']"
 								>
-									<Plus class="size-2.5" />
+									<Plus class="size-3" />
 								</button>
 							</div>
 						</div>
@@ -147,7 +147,7 @@
 					type="button"
 					disabled={isStreaming}
 					onclick={() => onTriggerSkill?.('Audit Clean Architecture concentric rings')}
-					class="group flex w-full items-center justify-between rounded-xl bg-slate-950/60 px-3 py-2 text-left font-mono text-xs text-slate-300 ring-1 ring-slate-800/80 transition-all hover:bg-purple-950/30 hover:text-purple-200 hover:ring-purple-500/40 disabled:opacity-40"
+					class="group flex w-full items-center justify-between rounded-xl bg-slate-950/60 px-3 py-2 text-left font-mono text-xs text-slate-300 ring-1 ring-slate-800/80 transition-all hover:bg-purple-950/30 hover:text-purple-200 hover:ring-purple-500/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400 disabled:opacity-40"
 				>
 					<span class="truncate">audit-clean-architecture</span>
 					<ShieldCheck class="size-3.5 text-slate-500 transition-colors group-hover:text-purple-400" />
@@ -157,7 +157,7 @@
 					type="button"
 					disabled={isStreaming}
 					onclick={() => onTriggerSkill?.('Assess runtime security posture and CVEs')}
-					class="group flex w-full items-center justify-between rounded-xl bg-slate-950/60 px-3 py-2 text-left font-mono text-xs text-slate-300 ring-1 ring-slate-800/80 transition-all hover:bg-purple-950/30 hover:text-purple-200 hover:ring-purple-500/40 disabled:opacity-40"
+					class="group flex w-full items-center justify-between rounded-xl bg-slate-950/60 px-3 py-2 text-left font-mono text-xs text-slate-300 ring-1 ring-slate-800/80 transition-all hover:bg-purple-950/30 hover:text-purple-200 hover:ring-purple-500/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400 disabled:opacity-40"
 				>
 					<span class="truncate">assess-security-posture</span>
 					<ShieldCheck class="size-3.5 text-slate-500 transition-colors group-hover:text-purple-400" />
@@ -167,7 +167,7 @@
 					type="button"
 					disabled={isStreaming}
 					onclick={() => onTriggerSkill?.('Plan incident remediation for degraded services')}
-					class="group flex w-full items-center justify-between rounded-xl bg-slate-950/60 px-3 py-2 text-left font-mono text-xs text-slate-300 ring-1 ring-slate-800/80 transition-all hover:bg-purple-950/30 hover:text-purple-200 hover:ring-purple-500/40 disabled:opacity-40"
+					class="group flex w-full items-center justify-between rounded-xl bg-slate-950/60 px-3 py-2 text-left font-mono text-xs text-slate-300 ring-1 ring-slate-800/80 transition-all hover:bg-purple-950/30 hover:text-purple-200 hover:ring-purple-500/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400 disabled:opacity-40"
 				>
 					<span class="truncate">plan-incident-remediation</span>
 					<ShieldCheck class="size-3.5 text-slate-500 transition-colors group-hover:text-purple-400" />
