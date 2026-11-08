@@ -100,13 +100,13 @@
       "type": "feat",
       "branch": "feat/bom-multi-extension-clean-arch",
       "worktree": null,
-      "stage": 5,
-      "stageName": "Documentation & Showcase Sync",
+      "stage": 7,
+      "stageName": "Parallel Review & Quality Gate",
       "remediationCount": 0,
       "maxRemediations": 3,
       "manifest": {
         "specPath": null,
-        "prNumber": null,
+        "prNumber": 31,
         "coverageReport": null,
         "mutationScore": null,
         "uiScreenshotPath": null,
@@ -116,14 +116,17 @@
           "stage3": "2026-10-23T05:43:00.000Z",
           "stage4": "2026-10-23T05:48:00.000Z",
           "stage5": "2026-11-08T05:51:47.078Z",
-          "stage6": null,
-          "stage7": null,
+          "stage6": "2026-11-08T05:54:42.352Z",
+          "stage7": "2026-11-08T05:58:10.916Z",
           "stage8": null
         }
       },
       "startedAt": "2026-10-23T05:40:00.000Z",
-      "updatedAt": "2026-11-08T05:51:47.229Z",
-      "activeSubagents": []
+      "updatedAt": "2026-11-08T05:58:11.164Z",
+      "activeSubagents": [
+        "peer-reviewer",
+        "quality-gatekeeper"
+      ]
     }
   }
 }

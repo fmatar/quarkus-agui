@@ -5,8 +5,6 @@ import io.quarkus.deployment.annotations.BuildStep;
 import io.quarkus.deployment.builditem.FeatureBuildItem;
 import io.quarkus.deployment.builditem.nativeimage.ReflectiveClassBuildItem;
 import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
 import org.agui.core.domain.A2aHandoffPayload;
 import org.agui.core.domain.AgUiEvent;
 import org.agui.core.domain.AgUiEventType;

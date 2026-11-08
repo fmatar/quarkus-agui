@@ -1,7 +1,6 @@
 package org.agui.quarkus.sse.runtime.adapters;
 
 import io.smallrye.mutiny.Multi;
-import io.smallrye.mutiny.infrastructure.Infrastructure;
 import java.util.Objects;
 import java.util.concurrent.Flow;
 import java.util.concurrent.SubmissionPublisher;
@@ -22,7 +21,7 @@ public class AgUiSseTransportSession implements AgUiTransportSession {
 
     public AgUiSseTransportSession(String sessionId) {
         this.sessionId = Objects.requireNonNull(sessionId, "sessionId must not be null");
-        this.publisher = new SubmissionPublisher<>();
+        this.publisher = new SubmissionPublisher<>(Runnable::run, Flow.defaultBufferSize());
         this.formatter = new AgUiSseFormatter();
         this.open = true;
     }

@@ -93,34 +93,109 @@ class AgUiCoreRuntimeBridgesTest {
         org.a2aproject.sdk.spec.Message agentMsg = org.a2aproject.sdk.A2A.toAgentMessage("Zero outward violations");
         assertEquals("Zero outward violations", a2aBridge.extractMessageText(agentMsg));
         assertEquals("", a2aBridge.extractMessageText(null));
+
+        org.a2aproject.sdk.spec.Artifact artifact = org.a2aproject.sdk.spec.Artifact.builder()
+                .artifactId("art-1")
+                .parts(List.of(new org.a2aproject.sdk.spec.TextPart("Artifact summary text")))
+                .build();
+        org.a2aproject.sdk.spec.Task taskWithArtifact = org.a2aproject.sdk.spec.Task.builder()
+                .id("task-art-1")
+                .contextId("ctx-1")
+                .status(new org.a2aproject.sdk.spec.TaskStatus(org.a2aproject.sdk.spec.TaskState.TASK_STATE_COMPLETED))
+                .artifacts(List.of(artifact))
+                .metadata(Map.of("ring", "domain"))
+                .build();
+        List<AgUiEvent<?>> taskEvents = a2aBridge.fromA2aTask("thread-a2a", "Sentinel-A2A-Auditor", "audit-clean-architecture", taskWithArtifact);
+        assertEquals(2, taskEvents.size());
+        assertEquals("Artifact summary text", a2aBridge.extractTaskSummary(taskWithArtifact));
+
+        org.a2aproject.sdk.spec.Task taskWithStatusMsg = org.a2aproject.sdk.spec.Task.builder()
+                .id("task-msg-1")
+                .contextId("ctx-1")
+                .status(new org.a2aproject.sdk.spec.TaskStatus(org.a2aproject.sdk.spec.TaskState.TASK_STATE_WORKING, agentMsg, null))
+                .build();
+        assertEquals("Zero outward violations", a2aBridge.extractTaskSummary(taskWithStatusMsg));
+
+        org.a2aproject.sdk.spec.Task taskStateOnly = org.a2aproject.sdk.spec.Task.builder()
+                .id("task-state-1")
+                .contextId("ctx-1")
+                .status(new org.a2aproject.sdk.spec.TaskStatus(org.a2aproject.sdk.spec.TaskState.TASK_STATE_SUBMITTED))
+                .build();
+        assertEquals("TASK_STATE_SUBMITTED", a2aBridge.extractTaskSummary(taskStateOnly));
+
+        org.a2aproject.sdk.client.MessageEvent msgEvent = new org.a2aproject.sdk.client.MessageEvent(agentMsg);
+        assertEquals("STEP_FINISHED", a2aBridge.fromA2aClientEvent("thread-a2a", "audit", msgEvent, null).type());
+
+        org.a2aproject.sdk.client.TaskEvent taskEvent = new org.a2aproject.sdk.client.TaskEvent(taskWithArtifact);
+        assertEquals("STEP_FINISHED", a2aBridge.fromA2aClientEvent("thread-a2a", "audit", taskEvent, null).type());
     }
 
     @Test
-    @DisplayName("AgUiSessionRegistry registers, retrieves, and unregisters sessions")
+    @DisplayName("AgUiSessionRegistry registers, broadcasts, retrieves, and unregisters sessions")
     void agUiSessionRegistryLifecycle() {
         AgUiSessionRegistry registry = new AgUiSessionRegistry();
         assertEquals(0, registry.activeCount());
+        registry.register(null);
+        registry.unregister(null);
+        assertFalse(registry.find(null).isPresent());
 
-        AgUiTransportSession session = new AgUiTransportSession() {
+        java.util.concurrent.atomic.AtomicInteger wsEmits = new java.util.concurrent.atomic.AtomicInteger();
+        java.util.concurrent.atomic.AtomicInteger sseEmits = new java.util.concurrent.atomic.AtomicInteger();
+
+        AgUiTransportSession wsSession = new AgUiTransportSession() {
             private boolean open = true;
             @Override
-            public String sessionId() { return "sess-1"; }
+            public String sessionId() { return "sess-ws"; }
             @Override
             public AgUiTransportType transportType() { return AgUiTransportType.WEBSOCKET; }
             @Override
             public boolean isOpen() { return open; }
             @Override
-            public void emit(AgUiEvent<?> event) {}
+            public void emit(AgUiEvent<?> event) { wsEmits.incrementAndGet(); }
             @Override
             public void close() { open = false; }
         };
 
-        registry.register(session);
-        assertEquals(1, registry.activeCount());
-        assertTrue(registry.find("sess-1").isPresent());
+        AgUiTransportSession sseSession = new AgUiTransportSession() {
+            private boolean open = true;
+            @Override
+            public String sessionId() { return "sess-sse"; }
+            @Override
+            public AgUiTransportType transportType() { return AgUiTransportType.SSE; }
+            @Override
+            public boolean isOpen() { return open; }
+            @Override
+            public void emit(AgUiEvent<?> event) { sseEmits.incrementAndGet(); }
+            @Override
+            public void close() { open = false; }
+        };
 
-        registry.unregister("sess-1");
+        registry.register(wsSession);
+        registry.register(sseSession);
+        assertEquals(2, registry.activeCount());
+        assertEquals(2, registry.allSessions().size());
+        assertTrue(registry.find("sess-ws").isPresent());
+
+        AgUiEvent<TextDeltaPayload> evt = AgUiEvent.of(AgUiEventType.TEXT_DELTA, "th-1", new TextDeltaPayload("broadcast"));
+        registry.broadcast(null);
+        registry.broadcast(evt);
+        assertEquals(1, wsEmits.get());
+        assertEquals(1, sseEmits.get());
+
+        registry.broadcastToTransport(null, evt);
+        registry.broadcastToTransport(AgUiTransportType.SSE, null);
+        registry.broadcastToTransport(AgUiTransportType.SSE, evt);
+        assertEquals(1, wsEmits.get());
+        assertEquals(2, sseEmits.get());
+
+        wsSession.close();
+        registry.broadcast(evt);
+        assertEquals(1, wsEmits.get());
+        assertEquals(3, sseEmits.get());
+
+        registry.unregister("sess-ws");
+        registry.unregister("sess-sse");
         assertEquals(0, registry.activeCount());
-        assertFalse(registry.find("sess-1").isPresent());
+        assertFalse(registry.find("sess-ws").isPresent());
     }
 }
