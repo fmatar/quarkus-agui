@@ -758,11 +758,20 @@ public class OpsPilotOrchestratorService {
             return "Kyoto";
         }
         for (String candidate : List.of(
-                "Tokyo", "Osaka", "Paris", "Rome", "Milan", "Florence", "Venice", "Barcelona", "Madrid",
-                "London", "Edinburgh", "Berlin", "Munich", "Vienna", "Zurich", "Geneva", "Amsterdam",
-                "Copenhagen", "Stockholm", "Oslo", "Prague", "Athens", "Istanbul", "Marrakech", "Cairo",
-                "Seoul", "Bangkok", "Singapore", "Taipei", "Sydney", "Melbourne", "New York", "Toronto",
-                "Vancouver", "Montreal", "Oaxaca", "Mexico City", "Buenos Aires", "Rio de Janeiro", "Sao Paulo")) {
+                "Beirut", "Amman", "Dubai", "Abu Dhabi", "Doha", "Riyadh", "Muscat", "Kuwait City", "Manama",
+                "Jerusalem", "Tel Aviv", "Tunis", "Algiers", "Casablanca", "Marrakech", "Cairo", "Alexandria",
+                "Nairobi", "Cape Town", "Johannesburg", "Lagos", "Accra", "Addis Ababa", "Dakar",
+                "Tokyo", "Osaka", "Paris", "Rome", "Milan", "Florence", "Venice", "Barcelona", "Madrid", "Seville",
+                "London", "Edinburgh", "Dublin", "Berlin", "Munich", "Vienna", "Zurich", "Geneva", "Amsterdam",
+                "Brussels", "Copenhagen", "Stockholm", "Oslo", "Helsinki", "Prague", "Budapest", "Warsaw",
+                "Dubrovnik", "Split", "Athens", "Santorini", "Istanbul", "Cappadocia", "Tbilisi", "Yerevan", "Baku",
+                "Seoul", "Busan", "Bangkok", "Chiang Mai", "Singapore", "Taipei", "Hong Kong", "Shanghai", "Beijing",
+                "Hanoi", "Ho Chi Minh City", "Kuala Lumpur", "Jakarta", "Bali", "Manila", "Mumbai", "New Delhi",
+                "Jaipur", "Kathmandu", "Colombo", "Sydney", "Melbourne", "Auckland", "Queenstown",
+                "New York", "San Francisco", "Chicago", "Los Angeles", "New Orleans", "Miami", "Seattle", "Boston",
+                "Toronto", "Vancouver", "Montreal", "Oaxaca", "Mexico City", "Havana", "Bogota", "Medellin",
+                "Cartagena", "Lima", "Cusco", "Santiago", "Valparaiso", "Buenos Aires", "Montevideo",
+                "Rio de Janeiro", "Sao Paulo")) {
             if (lower.contains(candidate.toLowerCase(Locale.ROOT))) {
                 return candidate;
             }

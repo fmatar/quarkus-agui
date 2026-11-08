@@ -138,4 +138,26 @@ class SpecialistAuditAgentServiceTest {
         assertEquals("Oaxaca", dynamicCityFx.data().get("city"));
         assertEquals("MXN", dynamicCityFx.data().get("targetCurrency"));
     }
+
+    @Test
+    void beirutAndGlobalCitiesResolveRealCurrencyWithoutJpyFallback() {
+        service.frankfurterBaseUrl = "http://127.0.0.1:1";
+        service.restCountriesBaseUrl = "http://127.0.0.1:1";
+
+        SpecialistAuditAgentService.AuditResult beirutFx = service.performAudit(
+            "convert-and-audit-budget",
+            "[convert-and-audit-budget] Plan a 4-day culinary and architectural trip in Beirut",
+            Map.of()
+        );
+        assertEquals("Beirut", beirutFx.data().get("city"));
+        assertEquals("LBP", beirutFx.data().get("targetCurrency"));
+
+        SpecialistAuditAgentService.AuditResult beirutAdvisory = service.performAudit(
+            "verify-travel-advisory",
+            "[verify-travel-advisory] Plan a 4-day culinary and architectural trip in Beirut",
+            Map.of()
+        );
+        assertEquals("Beirut", beirutAdvisory.data().get("city"));
+        assertEquals("Lebanon", beirutAdvisory.data().get("country"));
+    }
 }

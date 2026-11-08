@@ -138,13 +138,16 @@ public class McpGatewayClient {
                 if (remote != null && !remote.isEmpty()) {
                     weather.putAll(remote);
                 }
+                String resolvedCity = String.valueOf(weather.getOrDefault("city", city));
                 String resolvedCountry = String.valueOf(weather.getOrDefault("country", defaultCountry));
+                A2aGatewayClient.registerCityCountry(city, resolvedCountry);
+                A2aGatewayClient.registerCityCountry(resolvedCity, resolvedCountry);
                 String resolvedCurrency = A2aGatewayClient.resolveCurrencyForCountry(resolvedCountry);
-                nomadTrip.put("activeCity", weather.getOrDefault("city", city));
+                nomadTrip.put("activeCity", resolvedCity);
                 nomadTrip.put("country", resolvedCountry);
                 nomadTrip.put("currency", resolvedCurrency);
                 nomadTrip.put("exchangeRate", A2aGatewayClient.resolveDefaultRateForCurrency(resolvedCurrency));
-                nomadTrip.put("stopTitle", defaultSanctuaryForCity(city));
+                nomadTrip.put("stopTitle", defaultSanctuaryForCity(resolvedCity));
                 nomadTrip.put("temperatureC", weather.getOrDefault("temperatureC", tempC));
                 nomadTrip.put("weatherCondition", weather.getOrDefault("condition", condition));
                 yield Map.of(

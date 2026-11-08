@@ -66,7 +66,10 @@ public class SpecialistAuditAgentService {
 
     private AuditResult performCurrencyAndBudgetAudit(String prompt, Map<String, Object> ctx) {
         String city = String.valueOf(ctx.getOrDefault("city", detectCity(prompt)));
-        String targetCurrency = String.valueOf(ctx.getOrDefault("currency", defaultCurrencyForCity(city)));
+        String country = String.valueOf(ctx.getOrDefault("country", defaultCountryForCity(city)));
+        String targetCurrency = ctx.containsKey("currency")
+                ? String.valueOf(ctx.get("currency"))
+                : resolveDynamicCurrencyForCountry(country, city);
         double budgetUsd = ctx.get("budgetUsd") instanceof Number n ? n.doubleValue() : 3200.0;
         double rate = defaultRateForCurrency(targetCurrency);
         String source = "frankfurter-fallback";
@@ -85,6 +88,7 @@ public class SpecialistAuditAgentService {
         double convertedTotal = Math.round(budgetUsd * rate * 100.0) / 100.0;
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("city", city);
+        data.put("country", country);
         data.put("baseCurrency", "USD");
         data.put("targetCurrency", targetCurrency);
         data.put("exchangeRate", rate);
@@ -94,8 +98,8 @@ public class SpecialistAuditAgentService {
         data.put("source", source);
 
         String summary = String.format(Locale.ROOT,
-                "Frankfurter FX audit complete for %s: $%.0f USD = %,.0f %s (rate %.2f). Sanctuary holds >$1,500 require traveler confirmation.",
-                city, budgetUsd, convertedTotal, targetCurrency, rate);
+                "Frankfurter FX audit complete for %s (%s): $%.0f USD = %,.0f %s (rate %.2f). Sanctuary holds >$1,500 require traveler confirmation.",
+                city, country, budgetUsd, convertedTotal, targetCurrency, rate);
         return new AuditResult(summary, "art-fx-1", "Nomad Multi-Currency & Budget Audit", data);
     }
 
@@ -189,10 +193,17 @@ public class SpecialistAuditAgentService {
         }
         for (String candidate : List.of(
                 "Tokyo", "Osaka", "Paris", "Rome", "Milan", "Florence", "Venice", "Barcelona", "Madrid",
-                "London", "Edinburgh", "Berlin", "Munich", "Vienna", "Zurich", "Geneva", "Amsterdam",
-                "Copenhagen", "Stockholm", "Oslo", "Prague", "Athens", "Istanbul", "Marrakech", "Cairo",
-                "Seoul", "Bangkok", "Singapore", "Taipei", "Sydney", "Melbourne", "New York", "Toronto",
-                "Vancouver", "Montreal", "Oaxaca", "Mexico City", "Buenos Aires", "Rio de Janeiro", "Sao Paulo")) {
+                "London", "Edinburgh", "Dublin", "Berlin", "Munich", "Vienna", "Zurich", "Geneva", "Amsterdam",
+                "Brussels", "Copenhagen", "Stockholm", "Oslo", "Helsinki", "Prague", "Warsaw", "Krakow",
+                "Budapest", "Bucharest", "Dubrovnik", "Zagreb", "Athens", "Istanbul", "Beirut", "Amman",
+                "Dubai", "Abu Dhabi", "Riyadh", "Doha", "Muscat", "Kuwait City", "Manama", "Jerusalem",
+                "Tel Aviv", "Marrakech", "Casablanca", "Tunis", "Cairo", "Nairobi", "Cape Town", "Johannesburg",
+                "Lagos", "Accra", "Mumbai", "New Delhi", "Delhi", "Jaipur", "Kathmandu", "Colombo",
+                "Seoul", "Bangkok", "Chiang Mai", "Hanoi", "Ho Chi Minh City", "Singapore", "Kuala Lumpur",
+                "Jakarta", "Bali", "Manila", "Hong Kong", "Taipei", "Beijing", "Shanghai", "Sydney",
+                "Melbourne", "Auckland", "Queenstown", "New York", "San Francisco", "Toronto", "Vancouver",
+                "Montreal", "Oaxaca", "Mexico City", "Bogota", "Cartagena", "Lima", "Cusco", "Santiago",
+                "Buenos Aires", "Rio de Janeiro", "Sao Paulo", "Havana")) {
             if (lower.contains(candidate.toLowerCase(Locale.ROOT))) {
                 return candidate;
             }
@@ -210,66 +221,164 @@ public class SpecialistAuditAgentService {
         return switch (city.toLowerCase(Locale.ROOT)) {
             case "lisbon", "porto" -> "Portugal";
             case "reykjavik" -> "Iceland";
-            case "tokyo", "kyoto", "osaka" -> "Japan";
-            case "paris", "lyon", "nice" -> "France";
-            case "rome", "milan", "florence", "venice" -> "Italy";
-            case "barcelona", "madrid", "seville" -> "Spain";
-            case "london", "edinburgh" -> "United Kingdom";
-            case "berlin", "munich" -> "Germany";
-            case "vienna" -> "Austria";
-            case "zurich", "geneva" -> "Switzerland";
-            case "amsterdam" -> "Netherlands";
+            case "tokyo", "kyoto", "osaka", "nara", "hiroshima", "sapporo", "fukuoka" -> "Japan";
+            case "paris", "lyon", "nice", "marseille", "bordeaux" -> "France";
+            case "rome", "milan", "florence", "venice", "naples" -> "Italy";
+            case "barcelona", "madrid", "seville", "granada", "valencia" -> "Spain";
+            case "london", "edinburgh", "oxford", "manchester" -> "United Kingdom";
+            case "dublin" -> "Ireland";
+            case "berlin", "munich", "hamburg", "frankfurt" -> "Germany";
+            case "vienna", "salzburg" -> "Austria";
+            case "zurich", "geneva", "basel" -> "Switzerland";
+            case "amsterdam", "rotterdam" -> "Netherlands";
+            case "brussels", "bruges", "antwerp" -> "Belgium";
             case "copenhagen" -> "Denmark";
-            case "stockholm" -> "Sweden";
-            case "oslo" -> "Norway";
+            case "stockholm", "gothenburg" -> "Sweden";
+            case "oslo", "bergen" -> "Norway";
+            case "helsinki" -> "Finland";
             case "prague" -> "Czechia";
-            case "athens" -> "Greece";
-            case "istanbul" -> "Turkey";
-            case "marrakech" -> "Morocco";
-            case "cairo" -> "Egypt";
-            case "seoul" -> "South Korea";
-            case "bangkok" -> "Thailand";
+            case "warsaw", "krakow" -> "Poland";
+            case "budapest" -> "Hungary";
+            case "bucharest" -> "Romania";
+            case "dubrovnik", "zagreb", "split" -> "Croatia";
+            case "athens", "santorini", "thessaloniki" -> "Greece";
+            case "istanbul", "ankara", "cappadocia" -> "Turkey";
+            case "beirut", "byblos", "batroun" -> "Lebanon";
+            case "amman", "petra" -> "Jordan";
+            case "dubai", "abu dhabi" -> "United Arab Emirates";
+            case "riyadh", "jeddah" -> "Saudi Arabia";
+            case "doha" -> "Qatar";
+            case "muscat" -> "Oman";
+            case "kuwait city" -> "Kuwait";
+            case "manama" -> "Bahrain";
+            case "jerusalem", "tel aviv" -> "Israel";
+            case "marrakech", "casablanca", "fez", "rabat", "tangier" -> "Morocco";
+            case "tunis" -> "Tunisia";
+            case "cairo", "alexandria", "luxor" -> "Egypt";
+            case "nairobi" -> "Kenya";
+            case "cape town", "johannesburg" -> "South Africa";
+            case "lagos" -> "Nigeria";
+            case "accra" -> "Ghana";
+            case "mumbai", "delhi", "new delhi", "jaipur", "bangalore", "goa" -> "India";
+            case "kathmandu" -> "Nepal";
+            case "colombo" -> "Sri Lanka";
+            case "seoul", "busan", "jeju" -> "South Korea";
+            case "bangkok", "chiang mai", "phuket" -> "Thailand";
+            case "hanoi", "ho chi minh city", "da nang" -> "Vietnam";
             case "singapore" -> "Singapore";
+            case "kuala lumpur", "penang" -> "Malaysia";
+            case "jakarta", "bali", "ubud" -> "Indonesia";
+            case "manila", "cebu" -> "Philippines";
+            case "hong kong" -> "Hong Kong";
             case "taipei" -> "Taiwan";
-            case "sydney", "melbourne" -> "Australia";
-            case "new york", "san francisco" -> "United States";
+            case "beijing", "shanghai", "chengdu", "hangzhou" -> "China";
+            case "sydney", "melbourne", "brisbane", "perth" -> "Australia";
+            case "auckland", "queenstown", "wellington" -> "New Zealand";
+            case "new york", "san francisco", "chicago", "los angeles", "miami", "new orleans", "austin", "seattle", "boston" -> "United States";
             case "toronto", "vancouver", "montreal" -> "Canada";
-            case "oaxaca", "mexico city" -> "Mexico";
-            case "buenos aires" -> "Argentina";
+            case "oaxaca", "mexico city", "guadalajara" -> "Mexico";
+            case "bogota", "cartagena", "medellin" -> "Colombia";
+            case "lima", "cusco" -> "Peru";
+            case "santiago" -> "Chile";
+            case "buenos aires", "mendoza" -> "Argentina";
             case "rio de janeiro", "sao paulo" -> "Brazil";
-            default -> "Japan";
+            case "havana" -> "Cuba";
+            default -> city;
         };
     }
 
-    private String defaultCurrencyForCity(String city) {
-        return switch (defaultCountryForCity(city)) {
-            case "Portugal", "France", "Italy", "Spain", "Germany", "Austria", "Netherlands", "Greece" -> "EUR";
+    private String resolveDynamicCurrencyForCountry(String country, String city) {
+        String staticCurrency = resolveStaticCurrencyForCountry(country);
+        if (staticCurrency != null) {
+            return staticCurrency;
+        }
+        try {
+            String url = restCountriesBaseUrl + "/v3.1/name/" + URLEncoder.encode(country, StandardCharsets.UTF_8);
+            String body = httpFetcher.apply(url);
+            if (body != null) {
+                JsonNode arr = objectMapper.readTree(body);
+                if (arr.isArray() && !arr.isEmpty()) {
+                    JsonNode currencies = arr.get(0).path("currencies");
+                    if (currencies.isObject() && currencies.fieldNames().hasNext()) {
+                        return currencies.fieldNames().next().toUpperCase(Locale.ROOT);
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return defaultCurrencyForCity(city);
+    }
+
+    private String resolveStaticCurrencyForCountry(String country) {
+        if (country == null || country.isBlank()) {
+            return null;
+        }
+        return switch (country.trim()) {
+            case "Portugal", "France", "Italy", "Spain", "Germany", "Austria", "Netherlands", "Belgium", "Greece", "Ireland", "Finland", "Croatia" -> "EUR";
+            case "Japan" -> "JPY";
             case "Iceland" -> "ISK";
             case "United Kingdom" -> "GBP";
             case "Switzerland" -> "CHF";
             case "Denmark" -> "DKK";
             case "Sweden" -> "SEK";
             case "Norway" -> "NOK";
-            case "Czechia" -> "CZK";
+            case "Czechia", "Czech Republic" -> "CZK";
+            case "Poland" -> "PLN";
+            case "Hungary" -> "HUF";
+            case "Romania" -> "RON";
             case "Turkey" -> "TRY";
+            case "Lebanon" -> "LBP";
+            case "Jordan" -> "JOD";
+            case "United Arab Emirates", "UAE" -> "AED";
+            case "Saudi Arabia" -> "SAR";
+            case "Qatar" -> "QAR";
+            case "Oman" -> "OMR";
+            case "Kuwait" -> "KWD";
+            case "Bahrain" -> "BHD";
+            case "Israel" -> "ILS";
             case "Morocco" -> "MAD";
+            case "Tunisia" -> "TND";
             case "Egypt" -> "EGP";
+            case "Kenya" -> "KES";
+            case "South Africa" -> "ZAR";
+            case "Nigeria" -> "NGN";
+            case "Ghana" -> "GHS";
+            case "India" -> "INR";
+            case "Nepal" -> "NPR";
+            case "Sri Lanka" -> "LKR";
             case "South Korea" -> "KRW";
             case "Thailand" -> "THB";
+            case "Vietnam" -> "VND";
             case "Singapore" -> "SGD";
+            case "Malaysia" -> "MYR";
+            case "Indonesia" -> "IDR";
+            case "Philippines" -> "PHP";
+            case "Hong Kong" -> "HKD";
             case "Taiwan" -> "TWD";
+            case "China" -> "CNY";
             case "Australia" -> "AUD";
-            case "United States" -> "USD";
+            case "New Zealand" -> "NZD";
+            case "United States", "USA" -> "USD";
             case "Canada" -> "CAD";
             case "Mexico" -> "MXN";
+            case "Colombia" -> "COP";
+            case "Peru" -> "PEN";
+            case "Chile" -> "CLP";
             case "Argentina" -> "ARS";
             case "Brazil" -> "BRL";
-            default -> "JPY";
+            case "Cuba" -> "CUP";
+            default -> null;
         };
+    }
+
+    private String defaultCurrencyForCity(String city) {
+        String staticCur = resolveStaticCurrencyForCountry(defaultCountryForCity(city));
+        return staticCur != null ? staticCur : "USD";
     }
 
     private double defaultRateForCurrency(String currency) {
         return switch (currency.toUpperCase(Locale.ROOT)) {
+            case "JPY" -> 151.40;
             case "EUR" -> 0.92;
             case "ISK" -> 137.80;
             case "GBP" -> 0.79;
@@ -278,20 +387,50 @@ public class SpecialistAuditAgentService {
             case "SEK" -> 10.45;
             case "NOK" -> 10.65;
             case "CZK" -> 23.40;
+            case "PLN" -> 4.02;
+            case "HUF" -> 372.0;
+            case "RON" -> 4.58;
             case "TRY" -> 34.20;
+            case "LBP" -> 89500.0;
+            case "JOD" -> 0.71;
+            case "AED" -> 3.67;
+            case "SAR" -> 3.75;
+            case "QAR" -> 3.64;
+            case "OMR" -> 0.38;
+            case "KWD" -> 0.31;
+            case "BHD" -> 0.38;
+            case "ILS" -> 3.74;
+            case "MAD" -> 9.90;
+            case "TND" -> 3.12;
+            case "EGP" -> 49.20;
+            case "KES" -> 129.0;
+            case "ZAR" -> 18.10;
+            case "NGN" -> 1650.0;
+            case "GHS" -> 15.80;
+            case "INR" -> 84.40;
+            case "NPR" -> 134.80;
+            case "LKR" -> 293.0;
             case "KRW" -> 1380.0;
             case "THB" -> 34.50;
+            case "VND" -> 25300.0;
             case "SGD" -> 1.34;
+            case "MYR" -> 4.45;
+            case "IDR" -> 15850.0;
+            case "PHP" -> 58.60;
+            case "HKD" -> 7.78;
             case "TWD" -> 32.40;
+            case "CNY" -> 7.24;
             case "AUD" -> 1.52;
+            case "NZD" -> 1.68;
             case "CAD" -> 1.39;
             case "MXN" -> 19.80;
+            case "COP" -> 4420.0;
+            case "PEN" -> 3.78;
+            case "CLP" -> 975.0;
             case "ARS" -> 1015.0;
             case "BRL" -> 5.80;
-            case "MAD" -> 9.90;
-            case "EGP" -> 49.20;
-            case "USD" -> 1.00;
-            default -> 151.40;
+            case "CUP" -> 24.0;
+            default -> 1.00;
         };
     }
 }
