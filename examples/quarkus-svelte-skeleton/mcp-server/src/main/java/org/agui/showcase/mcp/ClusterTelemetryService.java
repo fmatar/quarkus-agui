@@ -255,26 +255,29 @@ public class ClusterTelemetryService {
             @ToolArg(description = "Music or cultural search query", defaultValue = "traditional") String genre) {
         String resolvedCity = normalizeCity(destination);
         String lowerCity = resolvedCity.toLowerCase(Locale.ROOT);
-        String resolvedGenre = (genre == null || genre.isBlank() || "traditional".equalsIgnoreCase(genre.trim()))
-                ? switch (lowerCity) {
-                    case "lisbon", "porto" -> "Amalia Rodrigues Fado";
-                    case "reykjavik" -> "Olafur Arnalds strings";
-                    case "kyoto" -> "koto shakuhachi";
-                    case "tokyo", "osaka" -> "Ryuichi Sakamoto";
-                    case "paris", "lyon" -> "Erik Satie piano";
-                    case "rome", "florence", "venice", "milan" -> "Ennio Morricone";
-                    case "barcelona", "madrid", "seville" -> "Paco de Lucia guitar";
-                    case "marrakech" -> "gnawa oud";
-                    case "oaxaca", "mexico city" -> "Lila Downs Oaxaca";
-                    case "buenos aires" -> "Astor Piazzolla tango";
-                    case "vienna" -> "Vienna Philharmonic";
-                    case "berlin" -> "Nils Frahm";
-                    case "copenhagen" -> "Danish String Quartet";
-                    case "seoul" -> "Yiruma";
-                    case "istanbul" -> "Mercan Dede";
-                    default -> resolvedCity;
-                }
-                : genre.trim();
+        String cityDefaultQuery = switch (lowerCity) {
+            case "lisbon", "porto" -> "Amalia Rodrigues Fado";
+            case "reykjavik" -> "Olafur Arnalds strings";
+            case "kyoto" -> "koto shakuhachi";
+            case "tokyo", "osaka" -> "Ryuichi Sakamoto";
+            case "paris", "lyon" -> "Erik Satie piano";
+            case "rome", "florence", "venice", "milan" -> "Ennio Morricone";
+            case "barcelona", "madrid", "seville" -> "Paco de Lucia guitar";
+            case "marrakech" -> "gnawa oud";
+            case "oaxaca", "mexico city" -> "Lila Downs Oaxaca";
+            case "buenos aires" -> "Astor Piazzolla tango";
+            case "vienna" -> "Vienna Philharmonic";
+            case "berlin" -> "Nils Frahm";
+            case "copenhagen" -> "Danish String Quartet";
+            case "seoul" -> "Yiruma";
+            case "istanbul" -> "Mercan Dede";
+            default -> resolvedCity;
+        };
+        String trimmedGenre = genre == null ? "" : genre.trim();
+        boolean isGenericGenre = trimmedGenre.isEmpty()
+                || List.of("traditional", "jazz", "ambient", "fado", "acoustic", "classical", "folk")
+                        .contains(trimmedGenre.toLowerCase(Locale.ROOT));
+        String resolvedGenre = isGenericGenre ? cityDefaultQuery : trimmedGenre;
 
         String wikiExtract = switch (lowerCity) {
             case "lisbon" -> "Lisbon's hillside neighborhoods of Alfama and Chiado blend maritime azulejo tilework, historic tramlines, and intimate Fado houses.";

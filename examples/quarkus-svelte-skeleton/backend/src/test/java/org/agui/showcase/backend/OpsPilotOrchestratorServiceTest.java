@@ -187,6 +187,15 @@ class OpsPilotOrchestratorServiceTest {
         List<String> frames = service.streamRun(liveReq).collect().asList().await().indefinitely();
         assertFalse(frames.isEmpty());
         assertTrue(frames.getFirst().contains("\"llmMode\":\"ollama:llama3.2:latest\""));
+        assertTrue(frames.stream().anyMatch(f -> f.contains("\"phase\":\"reasoning\"")));
+        assertTrue(frames.stream().anyMatch(f -> f.contains("\"callType\":\"mcp:prompt\"")));
+        assertTrue(frames.stream().anyMatch(f -> f.contains("\"callType\":\"mcp:resource\"")));
+        assertTrue(frames.stream().anyMatch(f -> f.contains("\"callType\":\"mcp:tool\"")));
+        assertTrue(frames.stream().anyMatch(f -> f.contains("\"callType\":\"tool:function\"")));
+        assertTrue(frames.stream().anyMatch(f -> f.contains("\"callType\":\"tool:ui\"")));
+        assertTrue(frames.stream().anyMatch(f -> f.contains("\"callType\":\"a2a:discovery\"")));
+        assertTrue(frames.stream().anyMatch(f -> f.contains("\"callType\":\"a2a:task\"")));
+        assertTrue(frames.stream().anyMatch(f -> f.contains("\"callType\":\"a2a:artifact\"")));
         assertTrue(frames.stream().anyMatch(f -> f.contains("\"type\":\"TOOL_CALL\"")));
         assertTrue(frames.stream().anyMatch(f -> f.contains("\"type\":\"STEP_FINISHED\"")));
         assertTrue(frames.stream().anyMatch(f -> f.contains("\"type\":\"TEXT_DELTA\"")));
@@ -282,7 +291,7 @@ class OpsPilotOrchestratorServiceTest {
         assertFalse(freeFormChat.a2aHandoffs().get(0).get("taskId").equals(freeFormChat.a2aHandoffs().get(1).get("taskId")));
         assertTrue(freeFormChat.reply().contains("Tokyo"));
 
-        // 5. Natural language city extraction ("in Oaxaca") + weather-focused prompt
+        // 5. Natural language city extraction ("in Oaxaca") + weather-focused prompt + global currency coverage
         AgentChatResponse oaxacaWeather = service.executeChat(new AgentRunRequest(
                 "thread-oaxaca",
                 "What should I pack for the weather in Oaxaca?",
@@ -290,5 +299,14 @@ class OpsPilotOrchestratorServiceTest {
                 "deterministic"));
         assertTrue(oaxacaWeather.reply().contains("Oaxaca"));
         assertTrue(oaxacaWeather.reply().contains("Meteorological"));
+
+        for (String city : List.of(
+                "Lisbon", "Reykjavik", "Tokyo", "Paris", "Rome", "Barcelona", "London", "Berlin",
+                "Vienna", "Zurich", "Amsterdam", "Copenhagen", "Stockholm", "Oslo", "Prague",
+                "Athens", "Istanbul", "Marrakech", "Cairo", "Seoul", "Bangkok", "Singapore",
+                "Taipei", "Sydney", "New York", "Toronto", "Oaxaca", "Buenos Aires", "Rio de Janeiro")) {
+            Map<String, Object> handoff = a2aClient.delegateTask("task-" + city, "convert-and-audit-budget", "Audit budget in " + city);
+            assertNotNull(handoff.get("summary"));
+        }
     }
 }

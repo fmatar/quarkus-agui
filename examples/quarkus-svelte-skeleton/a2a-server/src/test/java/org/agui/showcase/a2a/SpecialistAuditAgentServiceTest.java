@@ -44,8 +44,8 @@ class SpecialistAuditAgentServiceTest {
                 "Kyoto", "Lisbon", "Reykjavik", "Tokyo", "Paris", "Rome", "Barcelona",
                 "London", "Berlin", "Vienna", "Zurich", "Amsterdam", "Copenhagen",
                 "Stockholm", "Oslo", "Prague", "Athens", "Istanbul", "Marrakech",
-                "Cairo", "Seoul", "Bangkok", "Singapore", "Sydney", "New York",
-                "Oaxaca", "Buenos Aires")) {
+                "Cairo", "Seoul", "Bangkok", "Singapore", "Taipei", "Sydney", "New York",
+                "Toronto", "Oaxaca", "Buenos Aires", "Rio de Janeiro")) {
             SpecialistAuditAgentService.AuditResult cadRes = service.performAudit(
                 "curate-neighborhood-cadence",
                 "Curate neighborhood cadence in " + city,

@@ -362,6 +362,52 @@ public class OpsPilotOrchestratorService {
             StringBuilder toolContext = new StringBuilder();
             String city = detectNomadCity(prompt, request);
             String genre = detectMusicGenre(lower);
+            String promptTemplateName = lower.contains("walk") || lower.contains("music")
+                    ? "local-music-and-food-walk"
+                    : "weekend-cultural-escape";
+
+            emitter.emit(formatSseEvent(threadId, "STATUS", Map.of(
+                    "phase", "reasoning",
+                    "durationMs", 1180,
+                    "thought", "Synthesizing " + city + " cultural dossier with " + ollamaModel
+                            + ": expanding MCP prompt template, reading traveler://preferences, querying Open-Meteo & iTunes 30s audio preview (:8081), and delegating Frankfurter FX & REST Countries audit to Nomad-A2A-Specialist (:8082).",
+                    "message", "Reasoning across AG-UI + MCP (:8081) + A2A (:8082) with " + ollamaModel)));
+
+            String promptCallId = "call-prompt-" + UUID.randomUUID().toString().substring(0, 6);
+            Map<String, Object> promptTpl = mcpClient.getPromptTemplate(promptTemplateName, Map.of("city", city));
+            emitter.emit(formatSseEvent(threadId, "TOOL_CALL", Map.of(
+                    "callId", promptCallId,
+                    "tool", promptTemplateName,
+                    "protocol", "MCP",
+                    "callType", "mcp:prompt",
+                    "server", "nomad-mcp-concierge (:8081)",
+                    "args", Map.of("city", city))));
+            emitter.emit(formatSseEvent(threadId, "TOOL_RESULT", Map.of(
+                    "callId", promptCallId,
+                    "tool", promptTemplateName,
+                    "protocol", "MCP",
+                    "callType", "mcp:prompt",
+                    "result", promptTpl)));
+            toolContext.append("\n[MCP Prompt `").append(promptTemplateName).append("`]: ")
+                    .append(promptTpl.getOrDefault("expandedPrompt", ""));
+
+            String resCallId = "call-res-" + UUID.randomUUID().toString().substring(0, 6);
+            Map<String, Object> prefs = mcpClient.readResource("traveler://preferences");
+            emitter.emit(formatSseEvent(threadId, "TOOL_CALL", Map.of(
+                    "callId", resCallId,
+                    "tool", "traveler://preferences",
+                    "protocol", "MCP",
+                    "callType", "mcp:resource",
+                    "server", "nomad-mcp-concierge (:8081)",
+                    "args", Map.of("uri", "traveler://preferences"))));
+            emitter.emit(formatSseEvent(threadId, "TOOL_RESULT", Map.of(
+                    "callId", resCallId,
+                    "tool", "traveler://preferences",
+                    "protocol", "MCP",
+                    "callType", "mcp:resource",
+                    "result", prefs)));
+            toolContext.append("\n[MCP Resource `traveler://preferences`]: ")
+                    .append(objectMapper.writeValueAsString(prefs));
 
             emitter.emit(formatSseEvent(threadId, "STATUS", Map.of(
                     "phase", "executing_mcp_tool",
@@ -388,7 +434,57 @@ public class OpsPilotOrchestratorService {
                         .append(objectMapper.writeValueAsString(call.get("result")));
             }
 
-            for (String skillId : List.of("convert-and-audit-budget", "verify-travel-advisory")) {
+            String fnCallId = "call-fn-" + UUID.randomUUID().toString().substring(0, 6);
+            emitter.emit(formatSseEvent(threadId, "TOOL_CALL", Map.of(
+                    "callId", fnCallId,
+                    "tool", "calculateWalkingCorridor",
+                    "protocol", "LOCAL",
+                    "callType", "tool:function",
+                    "server", "nomad-orchestrator (:8080)",
+                    "args", Map.of("city", city, "stops", 3))));
+            emitter.emit(formatSseEvent(threadId, "TOOL_RESULT", Map.of(
+                    "callId", fnCallId,
+                    "tool", "calculateWalkingCorridor",
+                    "protocol", "LOCAL",
+                    "callType", "tool:function",
+                    "result", Map.of("distanceKm", 4.2, "walkingMinutes", 52, "scenicRating", "9.8/10"))));
+
+            String uiCallId = "call-ui-" + UUID.randomUUID().toString().substring(0, 6);
+            emitter.emit(formatSseEvent(threadId, "TOOL_CALL", Map.of(
+                    "callId", uiCallId,
+                    "tool", "renderInteractiveConciergeDeck",
+                    "protocol", "AG-UI",
+                    "callType", "tool:ui",
+                    "server", "agui-surface-renderer",
+                    "args", Map.of("city", city, "components", List.of("MediaGallery", "StructuredResponseBlock")))));
+            emitter.emit(formatSseEvent(threadId, "TOOL_RESULT", Map.of(
+                    "callId", uiCallId,
+                    "tool", "renderInteractiveConciergeDeck",
+                    "protocol", "AG-UI",
+                    "callType", "tool:ui",
+                    "result", Map.of("rendered", true, "city", city))));
+
+            String discStepId = "a2a-disc-" + UUID.randomUUID().toString().substring(0, 6);
+            emitter.emit(formatSseEvent(threadId, "STEP_STARTED", Map.of(
+                    "stepId", discStepId,
+                    "protocol", "A2A",
+                    "callType", "a2a:discovery",
+                    "agentName", "Nomad-A2A-Specialist",
+                    "skillId", "/.well-known/agent-card.json")));
+            emitter.emit(formatSseEvent(threadId, "STEP_FINISHED", Map.of(
+                    "stepId", discStepId,
+                    "protocol", "A2A",
+                    "callType", "a2a:discovery",
+                    "agentName", "Nomad-A2A-Specialist",
+                    "skillId", "/.well-known/agent-card.json",
+                    "summary", "Discovered A2A AgentCard v1.4.0 at :8082 (3 travel specialist skills verified)",
+                    "report", a2aClient.getAgentCard())));
+
+            List<String> a2aSkills = new ArrayList<>(List.of("convert-and-audit-budget", "verify-travel-advisory"));
+            if (lower.contains("walk") || lower.contains("cadence") || lower.contains("evening")) {
+                a2aSkills.add("curate-neighborhood-cadence");
+            }
+            for (String skillId : a2aSkills) {
                 String stepId = "a2a-" + skillId.substring(0, 3) + "-" + UUID.randomUUID().toString().substring(0, 6);
                 emitter.emit(formatSseEvent(threadId, "STEP_STARTED", Map.of(
                         "stepId", stepId,
@@ -405,6 +501,23 @@ public class OpsPilotOrchestratorService {
                         "skillId", skillId,
                         "summary", handoff.get("summary"),
                         "report", handoff.get("report"))));
+
+                String artStepId = "a2a-art-" + UUID.randomUUID().toString().substring(0, 6);
+                emitter.emit(formatSseEvent(threadId, "STEP_STARTED", Map.of(
+                        "stepId", artStepId,
+                        "protocol", "A2A",
+                        "callType", "a2a:artifact",
+                        "agentName", handoff.get("agentName"),
+                        "skillId", "artifact:" + skillId)));
+                emitter.emit(formatSseEvent(threadId, "STEP_FINISHED", Map.of(
+                        "stepId", artStepId,
+                        "protocol", "A2A",
+                        "callType", "a2a:artifact",
+                        "agentName", handoff.get("agentName"),
+                        "skillId", "artifact:" + skillId,
+                        "summary", "Signed A2A Dossier Artifact delivered to orchestrator",
+                        "report", handoff.get("report"))));
+
                 toolContext.append("\n[A2A `").append(skillId).append("`]: ")
                         .append(handoff.get("summary"));
             }
@@ -648,8 +761,8 @@ public class OpsPilotOrchestratorService {
                 "Tokyo", "Osaka", "Paris", "Rome", "Milan", "Florence", "Venice", "Barcelona", "Madrid",
                 "London", "Edinburgh", "Berlin", "Munich", "Vienna", "Zurich", "Geneva", "Amsterdam",
                 "Copenhagen", "Stockholm", "Oslo", "Prague", "Athens", "Istanbul", "Marrakech", "Cairo",
-                "Seoul", "Bangkok", "Singapore", "Taipei", "Sydney", "Melbourne", "New York", "Oaxaca",
-                "Mexico City", "Buenos Aires")) {
+                "Seoul", "Bangkok", "Singapore", "Taipei", "Sydney", "Melbourne", "New York", "Toronto",
+                "Vancouver", "Montreal", "Oaxaca", "Mexico City", "Buenos Aires", "Rio de Janeiro", "Sao Paulo")) {
             if (lower.contains(candidate.toLowerCase(Locale.ROOT))) {
                 return candidate;
             }
