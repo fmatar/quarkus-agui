@@ -169,13 +169,22 @@
 		const isMulti = targetMsg?.interaction?.mode === 'multi_select';
 		workbench = selectTurnOption(workbench, messageId, opt.id);
 		if (!isMulti) {
-			runScenarioPrompt(`Selected itinerary preference: ${opt.label}`);
+			const city = workbench.clusterState?.nomadTrip?.activeCity ?? 'Kyoto';
+			const detail = opt.description ? ` (${opt.description})` : '';
+			runScenarioPrompt(`Selected itinerary preference: ${opt.label}${detail} in ${city}`);
 		}
 	}
 
 	function handleConfirmMultiSelect(messageId, selectedIds) {
+		const targetMsg = workbench.messages.find((m) => m.id === messageId);
+		const options = targetMsg?.interaction?.options ?? [];
+		const labels = selectedIds.map((id) => {
+			const match = options.find((o) => o.id === id);
+			return match ? match.label : id;
+		});
+		const city = workbench.clusterState?.nomadTrip?.activeCity ?? 'Kyoto';
 		workbench = lockTurnInteraction(workbench, messageId);
-		runScenarioPrompt(`Confirmed multi-select itinerary preferences: ${selectedIds.join(', ')}`);
+		runScenarioPrompt(`Confirmed multi-select itinerary preferences: ${labels.join('; ')} in ${city}`);
 	}
 
 	function clearInspectorEvents() {

@@ -250,6 +250,7 @@ public class OpsPilotOrchestratorService {
                 "callType", "tool:function",
                 "result", Map.of("distanceKm", 4.2, "walkingMinutes", 52, "scenicRating", "9.8/10"))));
 
+        boolean wantsChoices = isChoiceElicitationRequest(prompt);
         String uiCallId = "call-ui-" + UUID.randomUUID().toString().substring(0, 6);
         frames.add(formatSseEvent(threadId, "TOOL_CALL", Map.of(
                 "callId", uiCallId,
@@ -257,7 +258,7 @@ public class OpsPilotOrchestratorService {
                 "protocol", "AG-UI",
                 "callType", "tool:ui",
                 "server", "agui-surface-renderer",
-                "args", Map.of("city", city, "components", List.of("MediaGallery", "StructuredResponseBlock")))));
+                "args", Map.of("city", city, "components", wantsChoices ? List.of("MediaGallery", "StructuredResponseBlock") : List.of("MediaGallery")))));
         frames.add(formatSseEvent(threadId, "TOOL_RESULT", Map.of(
                 "callId", uiCallId,
                 "tool", "renderInteractiveConciergeDeck",
@@ -319,7 +320,9 @@ public class OpsPilotOrchestratorService {
         stateDelta.put("lastTool", chat.mcpCalls().getFirst().get("toolName"));
         stateDelta.put("lastA2aSkill", chat.a2aHandoffs().getFirst().get("skillId"));
         stateDelta.put("media", buildTurnMedia(city));
-        stateDelta.put("interaction", buildTurnInteraction(city, lower));
+        if (wantsChoices) {
+            stateDelta.put("interaction", buildTurnInteraction(city, lower));
+        }
         stateDelta.put("sources", buildTurnSources(city));
         stateDelta.put("followUps", buildTurnFollowUps(city));
 
@@ -449,6 +452,7 @@ public class OpsPilotOrchestratorService {
                     "callType", "tool:function",
                     "result", Map.of("distanceKm", 4.2, "walkingMinutes", 52, "scenicRating", "9.8/10"))));
 
+            boolean wantsChoices = isChoiceElicitationRequest(prompt);
             String uiCallId = "call-ui-" + UUID.randomUUID().toString().substring(0, 6);
             emitter.emit(formatSseEvent(threadId, "TOOL_CALL", Map.of(
                     "callId", uiCallId,
@@ -456,7 +460,7 @@ public class OpsPilotOrchestratorService {
                     "protocol", "AG-UI",
                     "callType", "tool:ui",
                     "server", "agui-surface-renderer",
-                    "args", Map.of("city", city, "components", List.of("MediaGallery", "StructuredResponseBlock")))));
+                    "args", Map.of("city", city, "components", wantsChoices ? List.of("MediaGallery", "StructuredResponseBlock") : List.of("MediaGallery")))));
             emitter.emit(formatSseEvent(threadId, "TOOL_RESULT", Map.of(
                     "callId", uiCallId,
                     "tool", "renderInteractiveConciergeDeck",
@@ -527,7 +531,9 @@ public class OpsPilotOrchestratorService {
             stateDelta.put("lastTool", "discoverLocalCultureAndMedia");
             stateDelta.put("lastA2aSkill", "convert-and-audit-budget");
             stateDelta.put("media", buildTurnMedia(city));
-            stateDelta.put("interaction", buildTurnInteraction(city, lower));
+            if (wantsChoices) {
+                stateDelta.put("interaction", generateOllamaInteractiveChoices(ollamaModel, city, prompt, lower));
+            }
             stateDelta.put("sources", buildTurnSources(city));
             stateDelta.put("followUps", buildTurnFollowUps(city));
             emitter.emit(formatSseEvent(threadId, "STATE_DELTA", stateDelta));
@@ -938,40 +944,197 @@ public class OpsPilotOrchestratorService {
                         "durationSeconds", 30));
     }
 
+    static boolean isChoiceElicitationRequest(String prompt) {
+        if (prompt == null || prompt.isBlank()) {
+            return false;
+        }
+        String trimmed = prompt.trim();
+        if (trimmed.startsWith("Selected itinerary preference:")
+                || trimmed.startsWith("Confirmed multi-select itinerary preferences:")) {
+            return false;
+        }
+        String lower = trimmed.toLowerCase(Locale.ROOT);
+        return lower.startsWith("/choices")
+                || lower.contains("option")
+                || lower.contains("choice")
+                || lower.contains("pick")
+                || lower.contains("choose")
+                || lower.contains("select")
+                || lower.contains("compare")
+                || lower.contains("alternative")
+                || lower.contains("versus")
+                || lower.contains(" vs ");
+    }
+
+    static boolean isMultiSelectRequest(String lower) {
+        if (lower == null) {
+            return false;
+        }
+        return lower.contains("multi")
+                || lower.contains("multiple")
+                || lower.contains("several")
+                || lower.contains("combine")
+                || lower.contains("checkbox")
+                || lower.contains("all that apply")
+                || lower.contains("more than one");
+    }
+
+    static int extractRequestedOptionCount(String lower) {
+        if (lower == null) {
+            return 3;
+        }
+        Matcher digitMatcher = Pattern.compile("\\b([2-6])\\s+(?:[a-zA-Z-]+\\s+){0,3}?(?:options?|choices?|alternatives?|stops?|experiences?|ideas?|spots?|venues?)\\b")
+                .matcher(lower);
+        if (digitMatcher.find()) {
+            return Integer.parseInt(digitMatcher.group(1));
+        }
+        if (lower.contains("two ") || lower.contains("couple of ")) {
+            return 2;
+        }
+        if (lower.contains("four ")) {
+            return 4;
+        }
+        if (lower.contains("five ")) {
+            return 5;
+        }
+        if (lower.contains("six ")) {
+            return 6;
+        }
+        return 3;
+    }
+
+    private Map<String, Object> generateOllamaInteractiveChoices(
+            String model,
+            String city,
+            String userPrompt,
+            String lower) {
+        Map<String, Object> fallback = buildTurnInteraction(city, lower);
+        int count = extractRequestedOptionCount(lower);
+        String requestedMode = isMultiSelectRequest(lower) ? "multi_select" : "single_select";
+        String country = A2aGatewayClient.resolveCountryForCity(city);
+        String currency = A2aGatewayClient.resolveCurrencyForCountry(country);
+
+        try {
+            String systemPrompt = "You are a JSON generator for an interactive AG-UI travel choice component. "
+                    + "Respond ONLY with a valid JSON object matching this exact schema: "
+                    + "{\"prompt\": \"string\", \"mode\": \"" + requestedMode + "\", \"options\": ["
+                    + "{\"id\": \"slug-1\", \"label\": \"Title\", \"description\": \"1-sentence summary\", \"badge\": \"Timing • " + currency + "\"}]}. "
+                    + "Generate exactly " + count + " distinct, authentic local options in " + city + ", " + country + ".";
+
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("model", model);
+            payload.put("stream", false);
+            payload.put("think", false);
+            payload.put("format", "json");
+            payload.put("messages", List.of(
+                    Map.of("role", "system", "content", systemPrompt),
+                    Map.of("role", "user", "content", userPrompt)));
+
+            HttpRequest req = HttpRequest.newBuilder()
+                    .uri(URI.create(ollamaBaseUrl + "/api/chat"))
+                    .timeout(Duration.ofSeconds(12))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(payload)))
+                    .build();
+
+            HttpResponse<String> resp = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
+            if (resp.statusCode() == 200 && resp.body() != null) {
+                JsonNode root = objectMapper.readTree(resp.body());
+                String content = root.path("message").path("content").asText("");
+                if (!content.isBlank()) {
+                    JsonNode json = objectMapper.readTree(content);
+                    JsonNode optsNode = json.path("options");
+                    if (optsNode.isArray() && !optsNode.isEmpty()) {
+                        List<Map<String, Object>> parsedOptions = new ArrayList<>();
+                        int idx = 1;
+                        for (JsonNode item : optsNode) {
+                            String label = item.path("label").asText("").trim();
+                            if (label.isEmpty()) {
+                                continue;
+                            }
+                            String id = item.path("id").asText("opt-" + idx).trim();
+                            String desc = item.path("description").asText("Curated local experience in " + city).trim();
+                            String badge = item.path("badge").asText("Curated • " + currency).trim();
+                            parsedOptions.add(Map.of(
+                                    "id", id.isEmpty() ? "opt-" + idx : id,
+                                    "label", label,
+                                    "description", desc,
+                                    "badge", badge));
+                            idx++;
+                            if (parsedOptions.size() >= count) {
+                                break;
+                            }
+                        }
+                        if (!parsedOptions.isEmpty()) {
+                            String promptHeading = json.path("prompt").asText(
+                                    requestedMode.equals("multi_select")
+                                            ? "Select multiple " + city + " experiences to combine:"
+                                            : "Choose your preferred " + city + " option:").trim();
+                            return Map.of(
+                                    "id", "choice-" + city.toLowerCase(Locale.ROOT) + "-" + UUID.randomUUID().toString().substring(0, 4),
+                                    "mode", requestedMode,
+                                    "prompt", promptHeading,
+                                    "options", parsedOptions);
+                        }
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return fallback;
+    }
+
     private Map<String, Object> buildTurnInteraction(String city, String lower) {
-        String mode = lower.contains("multi") ? "multi_select" : "single_select";
+        String mode = isMultiSelectRequest(lower) ? "multi_select" : "single_select";
+        int count = extractRequestedOptionCount(lower);
         String currency = A2aGatewayClient.resolveCurrencyForCountry(A2aGatewayClient.resolveCountryForCity(city));
-        List<Map<String, Object>> options = switch (city.toLowerCase(Locale.ROOT)) {
+        String slug = city.toLowerCase(Locale.ROOT).replace(" ", "-");
+        List<Map<String, Object>> allOptions = switch (city.toLowerCase(Locale.ROOT)) {
             case "lisbon" -> List.of(
                     Map.of("id", "alfama-fado", "label", "Alfama Historic Fado & Miradouro Walk", "description", "Intimate acoustic Fado tavern + Santa Luzia tile terrace", "badge", "Evening • €140"),
                     Map.of("id", "chiado-atelier", "label", "Chiado Architectural & Azulejo Atelier", "description", "Private ceramic conservation studio + Belém riverside", "badge", "Morning • €190"),
-                    Map.of("id", "sintra-coastal", "label", "Cabo da Roca & Sintra Pine Sanctuary", "description", "Coastal cliff walk + modernist vineyard tasting", "badge", "Full Day • €260"));
+                    Map.of("id", "sintra-coastal", "label", "Cabo da Roca & Sintra Pine Sanctuary", "description", "Coastal cliff walk + modernist vineyard tasting", "badge", "Full Day • €260"),
+                    Map.of("id", "principe-real-vinyl", "label", "Príncipe Real Vinyl & Petiscos Tasting", "description", "Hi-fi listening bar + natural Portuguese wine cellar", "badge", "Night • €125"),
+                    Map.of("id", "maat-tejo", "label", "MAAT Riverfront Pavilion & Pastéis Masterclass", "description", "Contemporary riverside architecture + traditional bakery kitchen", "badge", "Afternoon • €155"),
+                    Map.of("id", "mouraria-guitarra", "label", "Mouraria Portuguese Guitar Luthier Workshop", "description", "Meet master 12-string guitarra makers + courtyard recital", "badge", "Twilight • €175"));
             case "reykjavik" -> List.of(
-                    Map.of("id", "harpa-acoustics", "label", "Harpa Basalt Hall & Nordic Strings Rehearsal", "description", "Private acoustic walk-through + harbor listening lounge", "badge", "Evening • $210"),
-                    Map.of("id", "sky-lagoon", "label", "Geothermal Cliffside Ritual & Turf Architecture", "description", "Seven-step oceanfront thermal soak + slow dining", "badge", "Afternoon • $280"),
-                    Map.of("id", "snaefellsnes", "label", "Snæfellsnes Volcanic Fjord Expedition", "description", "Black church at Búðir + glacier ridge photography", "badge", "Full Day • $390"));
+                    Map.of("id", "harpa-acoustics", "label", "Harpa Basalt Hall & Nordic Strings Rehearsal", "description", "Private acoustic walk-through + harbor listening lounge", "badge", "Evening • ISK"),
+                    Map.of("id", "sky-lagoon", "label", "Geothermal Cliffside Ritual & Turf Architecture", "description", "Seven-step oceanfront thermal soak + slow dining", "badge", "Afternoon • ISK"),
+                    Map.of("id", "snaefellsnes", "label", "Snæfellsnes Volcanic Fjord Expedition", "description", "Black church at Búðir + glacier ridge photography", "badge", "Full Day • ISK"),
+                    Map.of("id", "hallgrimskirkja-organ", "label", "Hallgrímskirkja Basalt Vault & Pipe Organ Study", "description", "Expressionist concrete tower + acoustic organ session", "badge", "Morning • ISK"),
+                    Map.of("id", "marshall-house", "label", "Grandi Harbor Contemporary Art & Slow Nordic Table", "description", "Converted herring factory galleries + Arctic char tasting", "badge", "Evening • ISK"),
+                    Map.of("id", "thingvellir-rift", "label", "Þingvellir Tectonic Rift & Moss Canyon Walk", "description", "Sub-Arctic canyon acoustics + geothermal bakery tasting", "badge", "Day • ISK"));
             case "kyoto" -> List.of(
                     Map.of("id", "arashiyama-dawn", "label", "Arashiyama Bamboo & Katsura Imperial Villa", "description", "Early-morning moss garden architectural walk + matcha pavilion", "badge", "Dawn • ¥24,000"),
                     Map.of("id", "gion-koto", "label", "Gion Machiya Private Koto & Kaiseki Evening", "description", "11-course seasonal Kaiseki with live Koto performance", "badge", "Evening • ¥38,000"),
-                    Map.of("id", "higashiyama-ceramics", "label", "Higashiyama Raku Kiln & Vinyl Listening Bar", "description", "Private ceramic studio visit + analog jazz kissaten", "badge", "Late Night • ¥19,000"));
+                    Map.of("id", "higashiyama-ceramics", "label", "Higashiyama Raku Kiln & Vinyl Listening Bar", "description", "Private ceramic studio visit + analog jazz kissaten", "badge", "Late Night • ¥19,000"),
+                    Map.of("id", "nanzenji-aqueduct", "label", "Nanzen-ji Zen Garden & Meiji Brick Aqueduct", "description", "Sub-temple dry landscape study + Tofu sanctuary lunch", "badge", "Morning • ¥16,000"),
+                    Map.of("id", "fushimi-sake", "label", "Fushimi Timber Brewery & Shakuhachi Recital", "description", "Spring-water sake cellar tasting + bamboo flute acoustics", "badge", "Afternoon • ¥21,000"),
+                    Map.of("id", "pontocho-vinyl", "label", "Kamo Riverbank & Analog Kissaten Sanctuary", "description", "Rare Japanese jazz pressings + hand-pouredネルドリップ coffee", "badge", "Night • ¥14,000"));
             case "tokyo" -> List.of(
                     Map.of("id", "aoyama-architecture", "label", "Omotesando & Aoyama Modernist Architecture Walk", "description", "Nezu Museum bamboo courtyard + Tadao Ando concrete galleries", "badge", "Morning • ¥18,000"),
                     Map.of("id", "shibuya-kissaten", "label", "Shibuya & Daikanyama Vinyl Kissaten Circuit", "description", "Hi-fi tube-amplifier jazz listening bars + artisanal coffee", "badge", "Evening • ¥22,000"),
-                    Map.of("id", "ginza-omakase", "label", "Ginza Counter Omakase & Tsukiji Craft Study", "description", "Intimate 10-seat seasonal Edomae tasting + sake pairing", "badge", "Night • ¥42,000"));
+                    Map.of("id", "ginza-omakase", "label", "Ginza Counter Omakase & Tsukiji Craft Study", "description", "Intimate 10-seat seasonal Edomae tasting + sake pairing", "badge", "Night • ¥42,000"),
+                    Map.of("id", "yanaka-timber", "label", "Yanaka Pre-War Timber Alleys & Atelier Walk", "description", "Historic craft workshops + quiet temple courtyard tea", "badge", "Afternoon • ¥15,000"),
+                    Map.of("id", "shimokitazawa-indie", "label", "Shimokitazawa Independent Record & Izakaya Walk", "description", "Crate-digging vinyl boutiques + charcoal robata dining", "badge", "Late Night • ¥19,000"),
+                    Map.of("id", "kiyosumi-gardens", "label", "Kiyosumi Landscape Stones & Roastery Study", "description", "Strolling pond garden + single-origin coffee lab", "badge", "Morning • ¥12,000"));
             default -> List.of(
-                    Map.of("id", city.toLowerCase(Locale.ROOT) + "-arch", "label", city + " Architectural Landmarks & Courtyards", "description", "Private curator-led walk through historic and modernist districts in " + city, "badge", "Morning • " + currency),
-                    Map.of("id", city.toLowerCase(Locale.ROOT) + "-music", "label", city + " Evening Acoustic & Vinyl Listening Session", "description", "Intimate neighborhood performance and local culinary tasting in " + city, "badge", "Evening • " + currency),
-                    Map.of("id", city.toLowerCase(Locale.ROOT) + "-atelier", "label", city + " Artisan Craft & Slow Dining Sanctuary", "description", "Studio visit with local makers followed by seasonal chef's table", "badge", "Full Day • " + currency));
+                    Map.of("id", slug + "-arch", "label", city + " Architectural Landmarks & Courtyards", "description", "Private curator-led walk through historic and modernist districts in " + city, "badge", "Morning • " + currency),
+                    Map.of("id", slug + "-music", "label", city + " Evening Acoustic & Vinyl Listening Session", "description", "Intimate neighborhood performance and local culinary tasting in " + city, "badge", "Evening • " + currency),
+                    Map.of("id", slug + "-atelier", "label", city + " Artisan Craft & Slow Dining Sanctuary", "description", "Studio visit with local makers followed by seasonal chef's table", "badge", "Full Day • " + currency),
+                    Map.of("id", slug + "-culinary", "label", city + " Heritage Market & Regional Tasting Walk", "description", "Guided culinary tasting across traditional spice and artisan stalls in " + city, "badge", "Afternoon • " + currency),
+                    Map.of("id", slug + "-rooftop", "label", city + " Twilight Rooftop & Live Ensemble", "description", "Sunset architectural panorama paired with regional acoustic music in " + city, "badge", "Twilight • " + currency),
+                    Map.of("id", slug + "-galleries", "label", city + " Contemporary Galleries & Courtyard Café", "description", "Curated design museums and historic coffee house conversation in " + city, "badge", "Midday • " + currency));
         };
-        List<Map<String, Object>> actions = List.of(
-                Map.of("id", "act-hitl-book", "label", "Hold " + city + " Sanctuary Suite ($1,840)", "prompt", "Reserve " + city + " Sanctuary Suite for 4 nights ($1840)", "variant", "primary"),
-                Map.of("id", "act-fx-audit", "label", "Audit " + currency + " Exchange Rate & Budget", "prompt", "Convert and audit " + city + " trip budget in " + currency, "variant", "secondary"));
+        List<Map<String, Object>> options = allOptions.subList(0, Math.min(count, allOptions.size()));
+        String promptHeading = mode.equals("multi_select")
+                ? "Select multiple " + city + " experiences to combine:"
+                : "Choose your preferred " + city + " option:";
         return Map.of(
-                "id", "choice-" + city.toLowerCase(Locale.ROOT),
+                "id", "choice-" + slug,
                 "mode", mode,
-                "prompt", "Curate your preferred " + city + " cultural sequence:",
-                "options", options,
-                "actions", actions);
+                "prompt", promptHeading,
+                "options", options);
     }
 
     private List<Map<String, Object>> buildTurnSources(String city) {
@@ -985,11 +1148,10 @@ public class OpsPilotOrchestratorService {
 
     private List<String> buildTurnFollowUps(String city) {
         return List.of(
-                "Recommend intimate evening music venues and listening bars in " + city,
+                "Give me 2 random evening options in " + city + " to pick from",
+                "Create 4 culinary and music experiences in " + city + " so I can select multiple",
                 "What should I pack for the current weather in " + city + "?",
-                "Reserve " + city + " Sanctuary Suite for 4 nights",
-                "Plan a 4-night architectural & Fado escape in Lisbon",
-                "Design an aurora, basalt architecture & geothermal itinerary in Reykjavik");
+                "Reserve " + city + " Sanctuary Suite for 4 nights");
     }
 
     private void appendTextDeltaFrames(List<String> frames, String threadId, String text) {

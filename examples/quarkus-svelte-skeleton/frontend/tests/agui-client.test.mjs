@@ -239,6 +239,7 @@ test('Nomad AG-UI Component Kit reducer populates timeline callTypes, reasoning,
 	assert.equal(resolveProtocolCallMeta(null, 'LOCAL').callType, 'tool:function');
 
 	let state = createInitialWorkbenchState('thread-nomad');
+	assert.equal(state.messages[0].interaction, null);
 	state = reduceAgUiEvent(state, {
 		id: 'n1',
 		type: 'RUN_STARTED',

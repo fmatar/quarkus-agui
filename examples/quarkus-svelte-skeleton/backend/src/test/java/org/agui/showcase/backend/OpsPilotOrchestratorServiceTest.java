@@ -33,10 +33,16 @@ class OpsPilotOrchestratorServiceTest {
 
         mockOllamaServer = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         mockOllamaServer.createContext("/api/chat", exchange -> {
-            byte[] body = ("{\"message\":{\"content\":\"Hello \"}}\n"
-                    + "\n"
-                    + "{\"message\":{\"content\":\"from Nomad Ollama!\"}}\n"
-                    + "{\"done\":true}\n").getBytes(StandardCharsets.UTF_8);
+            String reqBody = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+            byte[] body;
+            if (reqBody.contains("\"format\":\"json\"")) {
+                body = ("{\"message\":{\"content\":\"{\\\"prompt\\\":\\\"Pick a Beirut evening:\\\",\\\"mode\\\":\\\"single_select\\\",\\\"options\\\":[{\\\"id\\\":\\\"gemmayzeh\\\",\\\"label\\\":\\\"Gemmayzeh Jazz Walk\\\",\\\"description\\\":\\\"Live trumpet & vinyl bar\\\",\\\"badge\\\":\\\"Evening • LBP\\\"},{\\\"id\\\":\\\"mar-mikhael\\\",\\\"label\\\":\\\"Mar Mikhael Rooftop Mezze\\\",\\\"description\\\":\\\"Sunset terrace & oud session\\\",\\\"badge\\\":\\\"Twilight • LBP\\\"}]}\"}}").getBytes(StandardCharsets.UTF_8);
+            } else {
+                body = ("{\"message\":{\"content\":\"Hello \"}}\n"
+                        + "\n"
+                        + "{\"message\":{\"content\":\"from Nomad Ollama!\"}}\n"
+                        + "{\"done\":true}\n").getBytes(StandardCharsets.UTF_8);
+            }
             exchange.sendResponseHeaders(statusToReturn, body.length);
             try (OutputStream os = exchange.getResponseBody()) {
                 os.write(body);
@@ -243,14 +249,15 @@ class OpsPilotOrchestratorServiceTest {
         assertTrue(kyotoFrames.stream().anyMatch(f -> f.contains("\"callType\":\"a2a:task\"")));
         assertTrue(kyotoFrames.stream().anyMatch(f -> f.contains("\"callType\":\"a2a:artifact\"")));
         assertTrue(kyotoFrames.stream().anyMatch(f -> f.contains("\"media\":")));
-        assertTrue(kyotoFrames.stream().anyMatch(f -> f.contains("\"interaction\":")));
+        assertFalse(kyotoFrames.stream().anyMatch(f -> f.contains("\"interaction\":")));
         assertTrue(kyotoFrames.stream().anyMatch(f -> f.contains("\"sources\":")));
         assertTrue(kyotoFrames.stream().anyMatch(f -> f.contains("\"followUps\":")));
 
-        // 2. /lisbon and /reykjavik and /choices slash commands
+        // 2. /lisbon and /reykjavik (normal turns -> no interaction) and /choices (explicit choice turn -> interaction)
         List<String> lisbonFrames = service.streamRun(new AgentRunRequest(
                 "thread-lisbon", "/lisbon Fado & coastal walk", Map.of(), "deterministic")).collect().asList().await().indefinitely();
         assertTrue(lisbonFrames.stream().anyMatch(f -> f.contains("Lisbon")));
+        assertFalse(lisbonFrames.stream().anyMatch(f -> f.contains("\"interaction\":")));
 
         List<String> reykjavikFrames = service.streamRun(new AgentRunRequest(
                 "thread-reykjavik", "/reykjavik Aurora & geothermal", Map.of(), "deterministic")).collect().asList().await().indefinitely();
@@ -258,7 +265,36 @@ class OpsPilotOrchestratorServiceTest {
 
         List<String> choicesFrames = service.streamRun(new AgentRunRequest(
                 "thread-choices", "/choices multi_select neighborhoods", Map.of(), "deterministic")).collect().asList().await().indefinitely();
+        assertTrue(choicesFrames.stream().anyMatch(f -> f.contains("\"interaction\":")));
         assertTrue(choicesFrames.stream().anyMatch(f -> f.contains("multi_select")));
+
+        // 2b. On-demand single-select (2 random options) and multi-select (4 options) in Beirut, plus post-selection suppression
+        List<String> beirutTwoOptions = service.streamRun(new AgentRunRequest(
+                "thread-beirut-2opt",
+                "Give me two random evening options in Beirut to pick from",
+                Map.of(),
+                "ollama:llama3.2:latest")).collect().asList().await().indefinitely();
+        assertTrue(beirutTwoOptions.stream().anyMatch(f -> f.contains("\"interaction\":")
+                && f.contains("\"single_select\"")
+                && f.contains("Gemmayzeh Jazz Walk")));
+
+        List<String> beirutFourMulti = service.streamRun(new AgentRunRequest(
+                "thread-beirut-4multi",
+                "Create 4 culinary and music experiences in Beirut so I can select multiple",
+                Map.of(),
+                "deterministic")).collect().asList().await().indefinitely();
+        assertTrue(beirutFourMulti.stream().anyMatch(f -> f.contains("\"interaction\":") && f.contains("\"multi_select\"")));
+        assertEquals(2, OpsPilotOrchestratorService.extractRequestedOptionCount("two options"));
+        assertEquals(4, OpsPilotOrchestratorService.extractRequestedOptionCount("four options"));
+        assertEquals(5, OpsPilotOrchestratorService.extractRequestedOptionCount("five options"));
+        assertEquals(6, OpsPilotOrchestratorService.extractRequestedOptionCount("six options"));
+
+        List<String> postSelectionFrames = service.streamRun(new AgentRunRequest(
+                "thread-beirut-selected",
+                "Selected itinerary preference: Beirut Evening Acoustic & Vinyl Listening Session",
+                Map.of(),
+                "deterministic")).collect().asList().await().indefinitely();
+        assertFalse(postSelectionFrames.stream().anyMatch(f -> f.contains("\"interaction\":")));
 
         // 3. Nomad HITL luxury sanctuary booking gate (/hitl or reserve > $1,500) + approval with modifiedArgs
         AgentRunRequest hitlBookingReq = new AgentRunRequest(
