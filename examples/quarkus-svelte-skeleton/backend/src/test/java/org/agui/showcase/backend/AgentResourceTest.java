@@ -20,7 +20,7 @@ class AgentResourceTest {
                 .then()
                 .statusCode(200)
                 .body("llmMode", equalTo("deterministic"))
-                .body("mcpTools.size()", equalTo(3))
+                .body("mcpTools.size()", equalTo(6))
                 .body("a2aAgent.name", equalTo("Sentinel-A2A-Auditor"));
     }
 

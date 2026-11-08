@@ -13,6 +13,7 @@
 
 | 📥 Backlog | 📋 Ready | ⚡ In Progress | 🔍 In Review | ✅ Done |
 | :--- | :--- | :--- | :--- | :--- |
+| | #7693: [FEAT] feat(showcase): Nomad AI Travel & Culture Concierge with modular Svelte 5 AG-UI Component Kit and commercial minimalist UI | | | |
 | | #7866: [FEAT] feat(ui): redesign SRE workbench with cyber-industrial aesthetic, markdown parser, and stable viewport | | | |
 | | #2463: [FEAT] feat(ui): redesign SRE workbench with cyber-industrial aesthetic, markdown parser, and stable viewport | | | |
 | | #6464: [FEAT] feat: refactor(a2a): clean up legacy Wave 1 A2A artifacts in favor of official a2a-java 1.4.0.Final server | | | |

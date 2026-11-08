@@ -36,7 +36,9 @@ public class A2aGatewayClient {
                 "skills", List.of(
                         Map.of("id", "audit-clean-architecture", "name", "Clean Architecture Concentric Ring Audit"),
                         Map.of("id", "assess-security-posture", "name", "DevSecOps & Runtime Security Posture Assessment"),
-                        Map.of("id", "plan-incident-remediation", "name", "SRE Incident Remediation Planner")));
+                        Map.of("id", "plan-incident-remediation", "name", "SRE Incident Remediation Planner"),
+                        Map.of("id", "convert-and-audit-budget", "name", "Frankfurter Multi-Currency & Budget Audit"),
+                        Map.of("id", "verify-travel-advisory", "name", "REST Countries Destination & Cultural Advisory")));
     }
 
     public Map<String, Object> delegateTask(String taskId, String skillId, String prompt) {
@@ -67,6 +69,10 @@ public class A2aGatewayClient {
 
         final String finalTargetService = targetService;
         final int finalTargetReplicas = targetReplicas;
+        final String city = lowerPrompt.contains("lisbon") ? "Lisbon"
+                : (lowerPrompt.contains("reykjavik") ? "Reykjavik" : "Kyoto");
+        final String currency = "Lisbon".equals(city) ? "EUR" : ("Reykjavik".equals(city) ? "ISK" : "JPY");
+        final double fxRate = "Lisbon".equals(city) ? 0.92 : ("Reykjavik".equals(city) ? 137.80 : 151.40);
 
         Map<String, Object> report = switch (resolvedSkill) {
             case "audit-clean-architecture" -> Map.of(
@@ -88,6 +94,25 @@ public class A2aGatewayClient {
                             finalTargetService,
                             finalTargetReplicas,
                             finalTargetReplicas <= 5 ? "auto-approved" : "requires HITL approval"));
+            case "convert-and-audit-budget" -> Map.of(
+                    "city", city,
+                    "baseCurrency", "USD",
+                    "targetCurrency", currency,
+                    "exchangeRate", fxRate,
+                    "budgetUsd", 3200.0,
+                    "convertedTotal", Math.round(3200.0 * fxRate),
+                    "hitlThresholdUsd", 1500.0,
+                    "verdict", String.format(
+                            java.util.Locale.ROOT,
+                            "Frankfurter FX verified for %s: $3,200 USD = %,.0f %s (1 USD = %.2f %s). Sanctuary holds >$1,500 require HITL confirmation.",
+                            city, 3200.0 * fxRate, currency, fxRate, currency));
+            case "verify-travel-advisory" -> Map.of(
+                    "city", city,
+                    "country", "Lisbon".equals(city) ? "Portugal" : ("Reykjavik".equals(city) ? "Iceland" : "Japan"),
+                    "advisoryStatus", "CLEAR — All Cultural & Transit Corridors Open",
+                    "verdict", String.format(
+                            "REST Countries & Advisory verified for %s: visa-free entry active, local cultural venues open.",
+                            city));
             default -> throw new IllegalArgumentException("Unsupported A2A skill: " + resolvedSkill);
         };
 

@@ -1,11 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+	NOMAD_DESTINATIONS,
+	PROTOCOL_CALL_TAXONOMY,
 	SCENARIO_PRESETS,
+	SLASH_COMMANDS,
 	createInitialWorkbenchState,
 	filterInspectorEvents,
+	lockTurnInteraction,
 	parseSseChunk,
 	reduceAgUiEvent,
+	resolveProtocolCallMeta,
+	selectTurnOption,
 	updateServiceReplicasInState
 } from '../src/lib/agui-client.js';
 
@@ -209,4 +215,140 @@ test('parseSseChunk and reduceAgUiEvent handle empty, malformed, STATUS, STEP_ST
 		payload: {}
 	});
 	assert.equal(state.isStreaming, false);
+});
+
+test('Nomad AG-UI Component Kit reducer populates timeline callTypes, reasoning, media, interaction, sources, followUps, and choice selection', () => {
+	assert.ok(NOMAD_DESTINATIONS.length >= 3);
+	assert.ok(SLASH_COMMANDS.length >= 8);
+	assert.ok(PROTOCOL_CALL_TAXONOMY['mcp:tool']);
+	assert.equal(resolveProtocolCallMeta('mcp:prompt').family, 'MCP');
+	assert.equal(resolveProtocolCallMeta('a2a:artifact').family, 'A2A');
+	assert.equal(resolveProtocolCallMeta(null, 'MCP').callType, 'mcp:tool');
+	assert.equal(resolveProtocolCallMeta(null, 'A2A').callType, 'a2a:task');
+	assert.equal(resolveProtocolCallMeta(null, 'LOCAL').callType, 'tool:function');
+
+	let state = createInitialWorkbenchState('thread-nomad');
+	state = reduceAgUiEvent(state, {
+		id: 'n1',
+		type: 'RUN_STARTED',
+		payload: { status: 'started', llmMode: 'deterministic' }
+	});
+	state = reduceAgUiEvent(state, {
+		id: 'n2',
+		type: 'STATUS',
+		payload: {
+			phase: 'reasoning',
+			durationMs: 1240,
+			thought: 'Synthesizing Kyoto itinerary across MCP and A2A',
+			message: 'Reasoning...'
+		}
+	});
+	assert.equal(state.activeTurn.reasoning.durationMs, 1240);
+
+	state = reduceAgUiEvent(state, {
+		id: 'n3',
+		type: 'TOOL_CALL',
+		payload: {
+			callId: 'cp1',
+			tool: 'weekend-cultural-escape',
+			protocol: 'MCP',
+			callType: 'mcp:prompt',
+			server: 'nomad-mcp-concierge (:8081)',
+			args: { city: 'Kyoto' }
+		}
+	});
+	state = reduceAgUiEvent(state, {
+		id: 'n4',
+		type: 'TOOL_RESULT',
+		payload: {
+			callId: 'cp1',
+			tool: 'weekend-cultural-escape',
+			callType: 'mcp:prompt',
+			result: { expandedPrompt: 'Kyoto 3-day plan' }
+		}
+	});
+	state = reduceAgUiEvent(state, {
+		id: 'n5',
+		type: 'STEP_STARTED',
+		payload: {
+			stepId: 'a2a-1',
+			protocol: 'A2A',
+			callType: 'a2a:task',
+			agentName: 'Sentinel-A2A-Auditor',
+			skillId: 'convert-and-audit-budget'
+		}
+	});
+	state = reduceAgUiEvent(state, {
+		id: 'n6',
+		type: 'STEP_FINISHED',
+		payload: {
+			stepId: 'a2a-1',
+			protocol: 'A2A',
+			callType: 'a2a:task',
+			agentName: 'Sentinel-A2A-Auditor',
+			skillId: 'convert-and-audit-budget',
+			summary: '$3,200 = ¥484,480 JPY'
+		}
+	});
+	state = reduceAgUiEvent(state, {
+		id: 'n7',
+		type: 'STATE_DELTA',
+		payload: {
+			media: [{ type: 'audio', title: 'Haru no Umi', url: 'https://example.com/koto.m4a' }],
+			interaction: {
+				id: 'choice-kyoto',
+				mode: 'single_select',
+				prompt: 'Choose a Kyoto experience:',
+				options: [
+					{ id: 'arashiyama', label: 'Arashiyama Dawn Walk' },
+					{ id: 'gion', label: 'Gion Koto Evening' }
+				],
+				actions: [{ id: 'act-1', label: 'Hold Suite', prompt: '/hitl Reserve Kyoto' }]
+			},
+			sources: [{ title: 'Open-Meteo', url: 'https://api.open-meteo.com', protocol: 'mcp:tool' }],
+			followUps: ['/lisbon Plan Lisbon']
+		}
+	});
+	state = reduceAgUiEvent(state, {
+		id: 'n8',
+		type: 'TEXT_DELTA',
+		payload: { content: '### Kyoto Dossier Ready' }
+	});
+	state = reduceAgUiEvent(state, {
+		id: 'n9',
+		type: 'RUN_FINISHED',
+		payload: { status: 'completed' }
+	});
+
+	const lastMsg = state.messages.at(-1);
+	assert.equal(lastMsg.media.length, 1);
+	assert.equal(lastMsg.sources.length, 1);
+	assert.equal(lastMsg.followUps.length, 1);
+	assert.equal(lastMsg.timeline.length, 2);
+	assert.equal(lastMsg.timeline[0].callType, 'mcp:prompt');
+	assert.equal(lastMsg.timeline[1].callType, 'a2a:task');
+
+	// Single-select choice locks interaction
+	state = selectTurnOption(state, lastMsg.id, 'arashiyama');
+	const updatedMsg = state.messages.at(-1);
+	assert.deepEqual(updatedMsg.interaction.selectedValues, ['arashiyama']);
+	assert.equal(updatedMsg.interaction.submitted, true);
+
+	// Multi-select choice toggles and locks via lockTurnInteraction
+	state.messages[state.messages.length - 1] = {
+		...updatedMsg,
+		interaction: {
+			...updatedMsg.interaction,
+			mode: 'multi_select',
+			selectedValues: [],
+			submitted: false
+		}
+	};
+	state = selectTurnOption(state, lastMsg.id, 'arashiyama');
+	state = selectTurnOption(state, lastMsg.id, 'gion');
+	assert.deepEqual(state.messages.at(-1).interaction.selectedValues, ['arashiyama', 'gion']);
+	state = selectTurnOption(state, lastMsg.id, 'arashiyama');
+	assert.deepEqual(state.messages.at(-1).interaction.selectedValues, ['gion']);
+	state = lockTurnInteraction(state, lastMsg.id);
+	assert.equal(state.messages.at(-1).interaction.submitted, true);
 });

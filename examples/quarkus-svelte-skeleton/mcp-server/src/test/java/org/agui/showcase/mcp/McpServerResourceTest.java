@@ -15,13 +15,13 @@ import static org.hamcrest.Matchers.notNullValue;
 class McpServerResourceTest {
 
     @Test
-    void listToolsReturnsThreeRegisteredMcpTools() {
+    void listToolsReturnsSixRegisteredMcpTools() {
         given()
             .when().get("/api/mcp/tools")
             .then()
             .statusCode(200)
             .body("serverName", equalTo("cluster-telemetry-mcp"))
-            .body("tools.size()", equalTo(3));
+            .body("tools.size()", equalTo(6));
     }
 
     @Test
@@ -47,7 +47,7 @@ class McpServerResourceTest {
     }
 
     @Test
-    void topologyResourceReturnsClusterSnapshot() {
+    void topologyAndNomadResourcesAndPromptsReturnSnapshots() {
         given()
             .when().get("/api/mcp/resources/topology")
             .then()
@@ -55,5 +55,24 @@ class McpServerResourceTest {
             .body("uri", equalTo("cluster://topology"))
             .body("services.size()", greaterThanOrEqualTo(3))
             .body("updatedAt", notNullValue());
+
+        given()
+            .when().get("/api/mcp/resources/itinerary")
+            .then()
+            .statusCode(200)
+            .body("uri", equalTo("itinerary://active-trip"))
+            .body("activeCity", notNullValue());
+
+        given()
+            .when().get("/api/mcp/resources/preferences")
+            .then()
+            .statusCode(200)
+            .body("uri", equalTo("traveler://preferences"));
+
+        given()
+            .when().get("/api/mcp/prompts")
+            .then()
+            .statusCode(200)
+            .body("prompts.size()", equalTo(2));
     }
 }

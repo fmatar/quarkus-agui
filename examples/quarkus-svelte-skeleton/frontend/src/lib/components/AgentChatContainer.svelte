@@ -1,25 +1,17 @@
 <script>
 	import {
-		Activity,
-		Cpu,
-		Layers,
-		Radio,
-		Server,
-		ShieldAlert,
-		Sparkles,
-		Terminal,
-		CheckCircle2,
-		XCircle,
 		ChevronRight,
-		SlidersHorizontal,
-		PanelRightClose,
-		PanelRightOpen
+		Compass,
+		Cpu,
+		Terminal
 	} from '@lucide/svelte';
 	import {
 		SCENARIO_PRESETS,
 		createInitialWorkbenchState,
+		lockTurnInteraction,
 		parseSseChunk,
 		reduceAgUiEvent,
+		selectTurnOption,
 		updateServiceReplicasInState
 	} from '$lib/agui-client.js';
 	import ClusterStatePanel from './ClusterStatePanel.svelte';
@@ -28,14 +20,14 @@
 	import ProtocolInspector from './ProtocolInspector.svelte';
 
 	const LLM_MODES = [
+		{ value: 'deterministic', label: 'Deterministic Concierge Engine (Instant)' },
 		{ value: 'ollama:llama3.2:latest', label: 'Llama 3.2 • Live Local Ollama' },
 		{ value: 'ollama:qwen3.5:4b', label: 'Qwen 3.5 4B • Live Local Ollama' },
-		{ value: 'ollama:ministral-3:8b', label: 'Ministral 8B • Live Local Ollama' },
-		{ value: 'deterministic', label: 'Deterministic CI Engine (Fast Mock)' }
+		{ value: 'ollama:ministral-3:8b', label: 'Ministral 8B • Live Local Ollama' }
 	];
 
-	let workbench = $state(createInitialWorkbenchState('thread-opspilot-1'));
-	let selectedMode = $state('ollama:llama3.2:latest');
+	let workbench = $state(createInitialWorkbenchState('thread-nomad-1'));
+	let selectedMode = $state('deterministic');
 	let abortController = $state(null);
 	let isInspectorOpen = $state(true);
 
@@ -104,13 +96,13 @@
 				isStreaming: false,
 				statusText:
 					err?.name === 'AbortError'
-						? 'Stream interrupted by operator'
+						? 'Stream paused by traveler'
 						: `Bridge error (${err?.message ?? 'connect failed to :8080'})`
 			};
 		}
 	}
 
-	async function submitHitlDecision(approved) {
+	async function submitHitlDecision(approved, modifiedArgs = null) {
 		abortController = new AbortController();
 		try {
 			const response = await fetch('/api/agent/approve', {
@@ -120,8 +112,9 @@
 					threadId: workbench.threadId,
 					approved,
 					reason: approved
-						? 'Operator authorized replica scale above threshold (>5)'
-						: 'Operator rejected replica mutation'
+						? 'Traveler authorized sanctuary hold'
+						: 'Traveler declined reservation hold',
+					modifiedArgs
 				}),
 				signal: abortController.signal
 			});
@@ -133,6 +126,20 @@
 				statusText: `Approval error (${err?.message ?? 'failed'})`
 			};
 		}
+	}
+
+	function handleSelectOption(messageId, opt) {
+		const targetMsg = workbench.messages.find((m) => m.id === messageId);
+		const isMulti = targetMsg?.interaction?.mode === 'multi_select';
+		workbench = selectTurnOption(workbench, messageId, opt.id);
+		if (!isMulti) {
+			runScenarioPrompt(`Selected itinerary preference: ${opt.label}`);
+		}
+	}
+
+	function handleConfirmMultiSelect(messageId, selectedIds) {
+		workbench = lockTurnInteraction(workbench, messageId);
+		runScenarioPrompt(`Confirmed multi-select itinerary preferences: ${selectedIds.join(', ')}`);
 	}
 
 	function handleAdjustReplicas(serviceName, delta) {
@@ -154,80 +161,79 @@
 </script>
 
 <main class="workbench-grid {isInspectorOpen ? '' : 'inspector-collapsed'}">
-	<!-- High-Tech Command Header -->
+	<!-- Editorial Precision Header -->
 	<header
-		class="workbench-header cyber-card flex flex-wrap items-center justify-between gap-4 rounded-2xl px-5 py-3"
+		class="workbench-header nomad-panel flex flex-wrap items-center justify-between gap-4 rounded-2xl px-4 py-3 sm:px-5"
 	>
-		<div class="flex items-center gap-3.5">
-			<div class="relative flex items-center justify-center rounded-xl bg-cyan-950/60 p-2.5 ring-1 ring-cyan-500/30">
-				<Radio class="size-5 text-cyan-400" />
-				<span class="absolute -top-1 -right-1 flex size-2.5">
-					<span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-cyan-400 opacity-75"></span>
-					<span class="relative inline-flex size-2.5 rounded-full bg-cyan-500"></span>
-				</span>
+		<div class="flex items-center gap-3">
+			<div class="flex size-9 items-center justify-center rounded-xl bg-[#141413] text-white">
+				<Compass class="size-5" />
 			</div>
 			<div>
-				<div class="flex items-center gap-2">
-					<span class="font-mono text-[10px] font-bold tracking-widest text-cyan-400 uppercase">
-						Autonomous SRE Command
-					</span>
-					<span class="rounded bg-slate-800/80 px-1.5 py-0.5 font-mono text-[10px] text-slate-400">
-						Tri-Protocol
-					</span>
-				</div>
-				<h1 class="text-sm font-bold tracking-tight text-white sm:text-base">
-					Quarkus AG-UI Workbench
+				<h1 class="text-sm font-bold tracking-tight text-[#141413] sm:text-base">
+					Nomad — Cultural Concierge & AG-UI Studio
 				</h1>
+				<div class="flex items-center gap-2 text-[11px] text-[#575551]">
+					<span>Quarkus AG-UI (:8080)</span>
+					<span>•</span>
+					<span>MCP (:8081)</span>
+					<span>•</span>
+					<span>A2A (:8082)</span>
+				</div>
 			</div>
 		</div>
 
-		<!-- Protocol Status & Scenario Strip -->
-		<div class="flex flex-wrap items-center gap-2.5">
-			<!-- LLM Model Selector -->
-			<div class="flex items-center gap-2 rounded-xl bg-slate-950/80 px-3 py-1.5 ring-1 ring-slate-800">
-				<Cpu class="size-3.5 text-emerald-400" />
+		<div class="flex flex-wrap items-center gap-2">
+			<!-- Engine Mode Selector -->
+			<div class="flex items-center gap-1.5 rounded-xl border border-[#E4E0D8] bg-[#F6F5F2] px-3 py-1.5">
+				<Cpu class="size-3.5 text-[#1F6E50]" />
+				<label for="agui-llm-mode" class="sr-only">Engine Mode</label>
 				<select
 					id="agui-llm-mode"
 					bind:value={selectedMode}
 					disabled={workbench.isStreaming}
-					class="bg-transparent font-mono text-xs font-medium text-emerald-300 focus:outline-none cursor-pointer"
+					class="cursor-pointer bg-transparent font-mono text-xs font-medium text-[#141413] focus:outline-none"
 				>
 					{#each LLM_MODES as m (m.value)}
-						<option value={m.value} class="bg-slate-900 text-slate-100">{m.label}</option>
+						<option value={m.value} class="bg-white text-[#141413]">{m.label}</option>
 					{/each}
 				</select>
 			</div>
 
-			<!-- Quick Scenarios -->
+			<!-- Quick Destination & Protocol Scenarios -->
 			<div class="flex flex-wrap items-center gap-1.5" role="group" aria-label="Preset Scenarios">
 				{#each SCENARIO_PRESETS as preset (preset.id)}
 					<button
 						type="button"
 						disabled={workbench.isStreaming}
 						onclick={() => runScenarioPrompt(preset.prompt)}
-						class="group flex items-center gap-1.5 rounded-xl bg-slate-900/90 px-3 py-1.5 text-xs font-medium text-slate-300 ring-1 ring-slate-700/60 transition-all hover:bg-slate-800 hover:text-white hover:ring-cyan-500/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 disabled:opacity-40"
+						class="group inline-flex items-center gap-1 rounded-xl border border-[#E4E0D8] bg-white px-3 py-1.5 text-xs font-semibold text-[#141413] transition-colors hover:border-[#C84B31] hover:bg-[#FBEEE9]/40 disabled:opacity-40"
 					>
 						<span>{preset.label}</span>
-						<ChevronRight class="size-3 text-slate-500 transition-transform group-hover:translate-x-0.5 group-hover:text-cyan-400" />
+						<ChevronRight class="size-3 text-[#78756F] transition-transform group-hover:translate-x-0.5 group-hover:text-[#C84B31]" />
 					</button>
 				{/each}
 			</div>
 
-			<!-- Wire Inspector Toggle Button -->
+			<!-- Wire Telemetry Toggle -->
 			<button
 				type="button"
-				onclick={() => isInspectorOpen = !isInspectorOpen}
-				class="flex items-center gap-1.5 rounded-xl px-3 py-1.5 font-mono text-xs font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 {isInspectorOpen ? 'bg-cyan-500/20 text-cyan-300 ring-1 ring-cyan-500/40' : 'bg-slate-900 text-slate-400 ring-1 ring-slate-800 hover:text-slate-200'}"
-				title={isInspectorOpen ? 'Collapse Wire Inspector' : 'Expand Wire Inspector'}
+				onclick={() => (isInspectorOpen = !isInspectorOpen)}
+				class="inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 font-mono text-xs font-semibold transition-colors {isInspectorOpen
+					? 'border-[#141413] bg-[#141413] text-white'
+					: 'border-[#E4E0D8] bg-white text-[#141413] hover:bg-[#EFECE6]'}"
+				title={isInspectorOpen ? 'Collapse Wire Telemetry' : 'Expand Wire Telemetry'}
 			>
 				<Terminal class="size-3.5" />
 				<span class="hidden sm:inline">Wire</span>
-				<span class="rounded bg-slate-950 px-1.5 py-0.2 text-[10px]">{workbench.events.length}</span>
+				<span class="rounded bg-white/15 px-1.5 py-0.2 text-[10px] tabular-nums">
+					{workbench.events.length}
+				</span>
 			</button>
 		</div>
 	</header>
 
-	<!-- Pane 1: Live Cluster Topology Rail (MCP :8081 & A2A :8082) -->
+	<!-- Pane 1: Left Trip Dossier & Protocol Rail -->
 	<ClusterStatePanel
 		clusterState={workbench.clusterState}
 		isStreaming={workbench.isStreaming}
@@ -235,78 +241,36 @@
 		onTriggerSkill={runScenarioPrompt}
 	/>
 
-	<!-- Pane 2: Center AG-UI Conversational Feed (Strict Height Bounded) -->
+	<!-- Pane 2: Center Concierge Conversation & Modular AG-UI Component Kit -->
 	<section
-		class="workbench-chat cyber-card flex flex-col justify-between overflow-hidden rounded-2xl h-full min-h-0"
+		class="workbench-chat nomad-panel flex h-full min-h-0 flex-col justify-between overflow-hidden rounded-2xl"
 	>
-		<!-- Feed Header Sub-bar -->
-		<div class="flex items-center justify-between border-b border-slate-800/80 bg-slate-950/40 px-5 py-2.5 shrink-0">
-			<div class="flex items-center gap-2">
-				<Terminal class="size-3.5 text-cyan-400" />
-				<span class="font-mono text-xs font-semibold text-slate-300">OpsPilot Stream Feed</span>
+		<div class="flex shrink-0 items-center justify-between border-b border-[#E4E0D8] bg-[#FAF9F6] px-5 py-2.5 text-xs">
+			<div class="flex items-center gap-2 font-semibold text-[#141413]">
+				<span>Active Concierge Stream</span>
+				<span class="rounded bg-[#EFECE6] px-2 py-0.5 font-mono text-[10px] font-normal text-[#575551]">
+					{workbench.statusText}
+				</span>
 			</div>
-			<div class="flex items-center gap-2 font-mono text-[11px] text-slate-400">
-				<span>Thread:</span>
-				<span class="text-cyan-300">{workbench.threadId}</span>
+			<div class="font-mono text-[11px] text-[#575551]">
+				Session: <span class="font-semibold text-[#141413]">{workbench.threadId}</span>
 			</div>
 		</div>
 
-		<!-- Chat Message Timeline with Auto-Scroll & In-Flight Stream Bubble -->
 		<MessageHistory
 			messages={workbench.messages}
 			isStreaming={workbench.isStreaming}
 			streamBuffer={workbench.streamBuffer}
 			statusText={workbench.statusText}
+			activeTurn={workbench.activeTurn}
+			pendingApproval={workbench.pendingApproval}
+			onSelectOption={handleSelectOption}
+			onConfirmMultiSelect={handleConfirmMultiSelect}
+			onTriggerPrompt={runScenarioPrompt}
+			onApproveHitl={(mods) => submitHitlDecision(true, mods)}
+			onRejectHitl={() => submitHitlDecision(false)}
 		/>
 
-		<!-- HITL Approval Barrier Notification (Pinned Floating Alert) -->
-		{#if workbench.pendingApproval}
-			<div
-				class="mx-5 mb-3 rounded-xl border border-amber-500/40 bg-gradient-to-r from-amber-950/80 via-amber-900/60 to-slate-950/90 p-4 text-xs shadow-2xl backdrop-blur-md shrink-0"
-				role="alert"
-			>
-				<div class="flex items-center gap-2.5 font-bold text-amber-300">
-					<div class="rounded-lg bg-amber-500/20 p-1.5 ring-1 ring-amber-500/40">
-						<ShieldAlert class="size-4 text-amber-400" />
-					</div>
-					<div>
-						<div class="text-sm font-semibold tracking-wide">Human-in-the-Loop Interruption</div>
-						<div class="font-mono text-[10px] font-normal text-amber-200/70">
-							AG-UI Protocol • RUN_FINISHED (interrupted: true)
-						</div>
-					</div>
-				</div>
-
-				<p class="mt-2.5 text-xs sm:text-sm text-slate-200">
-					Autonomous agent requested scaling
-					<span class="font-mono font-semibold text-cyan-300">{workbench.pendingApproval.serviceName}</span>
-					to
-					<span class="font-mono font-semibold text-amber-300">{workbench.pendingApproval.replicas} replicas</span>.
-					Safety guard threshold is &le;5 replicas.
-				</p>
-
-				<div class="mt-3 flex items-center gap-3">
-					<button
-						type="button"
-						onclick={() => submitHitlDecision(true)}
-						class="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 font-semibold text-white shadow-lg shadow-emerald-950/50 transition-all hover:bg-emerald-500 active:scale-95 text-xs"
-					>
-						<CheckCircle2 class="size-3.5" />
-						<span>Authorize Scale ({workbench.pendingApproval.replicas} Replicas)</span>
-					</button>
-					<button
-						type="button"
-						onclick={() => submitHitlDecision(false)}
-						class="inline-flex items-center gap-1.5 rounded-xl bg-slate-800 px-4 py-2 font-semibold text-slate-300 ring-1 ring-slate-700 transition-all hover:bg-rose-950/50 hover:text-rose-200 hover:ring-rose-500/50 active:scale-95 text-xs"
-					>
-						<XCircle class="size-3.5" />
-						<span>Abort Mutation</span>
-					</button>
-				</div>
-			</div>
-		{/if}
-
-		<!-- Fixed Sticky Input Controller -->
 		<InputBar
 			isStreaming={workbench.isStreaming}
 			onSubmit={runScenarioPrompt}
@@ -314,12 +278,12 @@
 		/>
 	</section>
 
-	<!-- Pane 3: SSE Protocol & Wire Inspector Drawer -->
+	<!-- Pane 3: Collapsible AG-UI Wire Telemetry Inspector -->
 	{#if isInspectorOpen}
 		<ProtocolInspector
 			events={workbench.events}
 			isOpen={isInspectorOpen}
-			onClose={() => isInspectorOpen = false}
+			onClose={() => (isInspectorOpen = false)}
 			onClear={clearInspectorEvents}
 		/>
 	{/if}

@@ -97,4 +97,59 @@ class ClusterTelemetryServiceTest {
         assertEquals("cluster://topology", resourceContents.uri());
         assertTrue(resourceContents.text().contains("payment-service"));
     }
+
+    @Test
+    void nomadWeatherCultureAndItineraryToolsAndResourcesWorkDeterministicallyAndViaLiveHttp() {
+        // 1. Default httpFetcher fallback path when upstream is unreachable
+        service.openMeteoBaseUrl = "http://127.0.0.1:1";
+        service.wikipediaBaseUrl = "http://127.0.0.1:1";
+        service.itunesBaseUrl = "http://127.0.0.1:1";
+
+        Map<String, Object> lisbonWeather = service.fetchCityWeather("Lisbon");
+        assertEquals("Lisbon", lisbonWeather.get("city"));
+        assertNotNull(lisbonWeather.get("condition"));
+
+        Map<String, Object> reykjavikCulture = service.discoverLocalCultureAndMedia("Reykjavik", "ambient");
+        assertEquals("Reykjavik", reykjavikCulture.get("destination"));
+        assertNotNull(reykjavikCulture.get("audioTrack"));
+
+        // 2. Live JSON response parsing path via httpFetcher
+        service.httpFetcher = url -> {
+            if (url.contains("/v1/forecast")) {
+                return "{\"current\":{\"temperature_2m\":19.6,\"wind_speed_10m\":11.2,\"weather_code\":1}}";
+            }
+            if (url.contains("/api/rest_v1/page/summary/")) {
+                return "{\"title\":\"Kyoto\",\"extract\":\"Kyoto is the cultural heart of Japan.\",\"thumbnail\":{\"source\":\"https://upload.wikimedia.org/kyoto.jpg\"}}";
+            }
+            if (url.contains("/search")) {
+                return "{\"resultCount\":1,\"results\":[{\"trackName\":\"Sakura Koto\",\"artistName\":\"Kyoto Ensemble\",\"previewUrl\":\"https://audio-ssl.itunes.apple.com/sakura.m4a\",\"artworkUrl100\":\"https://is1-ssl.mzstatic.com/art.jpg\"}]}";
+            }
+            return null;
+        };
+
+        Map<String, Object> liveWeather = service.fetchCityWeather("Kyoto");
+        assertEquals("Kyoto", liveWeather.get("city"));
+        assertEquals(19.6, liveWeather.get("temperatureC"));
+        assertEquals("api.open-meteo.com", liveWeather.get("source"));
+
+        Map<String, Object> liveCulture = service.discoverLocalCultureAndMedia("Kyoto", "koto");
+        assertEquals("Kyoto", liveCulture.get("destination"));
+        assertEquals("Sakura Koto", ((Map<?, ?>) liveCulture.get("audioTrack")).get("trackName"));
+
+        Map<String, Object> updatedTrip = service.updateTripItinerary("Kyoto", "Hoshinoya Arashiyama Ryokan", 4, 1840.0);
+        assertEquals("Kyoto", updatedTrip.get("activeCity"));
+        assertEquals(4, updatedTrip.get("nights"));
+
+        assertFalse(service.dispatchTool(new McpToolInvocationRequest("fetchCityWeather", Map.of("city", "Kyoto"))).isError());
+        assertFalse(service.dispatchTool(new McpToolInvocationRequest("discoverLocalCultureAndMedia", Map.of("destination", "Lisbon", "genre", "fado"))).isError());
+        assertFalse(service.dispatchTool(new McpToolInvocationRequest("updateTripItinerary", Map.of("city", "Reykjavik", "stopTitle", "Harpa Concert Hall", "nights", 3, "costUsd", 1100))).isError());
+
+        assertEquals("itinerary://active-trip", service.activeTripResource().uri());
+        assertEquals("traveler://preferences", service.travelerPreferencesResource().uri());
+        assertEquals(2, service.listPrompts().size());
+        assertNotNull(service.weekendCulturalEscapePrompt("Kyoto"));
+        assertNotNull(service.localMusicAndFoodWalkPrompt("Lisbon"));
+        assertTrue(service.renderPrompt("weekend-cultural-escape", "Kyoto").get("prompt").toString().contains("Kyoto"));
+        assertTrue(service.renderPrompt("local-music-and-food-walk", "Lisbon").get("prompt").toString().contains("Lisbon"));
+    }
 }
