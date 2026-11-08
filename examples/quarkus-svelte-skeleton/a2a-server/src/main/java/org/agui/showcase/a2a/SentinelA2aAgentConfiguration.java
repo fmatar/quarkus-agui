@@ -25,10 +25,13 @@ public class SentinelA2aAgentConfiguration {
     @ConfigProperty(name = "quarkus.http.port", defaultValue = "8082")
     int httpPort = 8082;
 
+    @ConfigProperty(name = "agui.a2a.public-url")
+    java.util.Optional<String> publicUrl = java.util.Optional.empty();
+
     @Produces
     @PublicAgentCard
     public org.a2aproject.sdk.spec.AgentCard publicAgentCard() {
-        String endpointUrl = "http://localhost:" + httpPort;
+        String endpointUrl = publicUrl.filter(s -> !s.isBlank()).orElse("http://localhost:" + httpPort);
         return org.a2aproject.sdk.spec.AgentCard.builder()
                 .name(SpecialistAuditAgentService.AGENT_NAME)
                 .description("Specialist A2A Agent for Clean Architecture Concentric Ring Governance, Security Posture, and Incident Remediation")

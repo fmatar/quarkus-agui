@@ -259,9 +259,10 @@ export function createInitialWorkbenchState(threadId = 'thread-opspilot-1') {
 				budgetUsd: 3200,
 				allocatedUsd: 1680,
 				soundtrack: {
-					trackName: 'Haru no Umi (Spring Sea — Koto & Shakuhachi)',
-					artistName: 'Kyoto Koto Consort',
-					previewUrl: 'https://www.w3schools.com/html/horse.mp3'
+					trackName: 'Four Seasons in Kyoto (Koto & Shakuhachi)',
+					artistName: 'Chikatoyo Tsujimoto',
+					previewUrl:
+						'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/9b/27/76/9b2776c5-65cd-87f1-3f33-ccbccc642285/mzaf_16549365214060917501.plus.aac.p.m4a'
 				}
 			},
 			services: [
@@ -340,9 +341,9 @@ export function createInitialWorkbenchState(threadId = 'thread-opspilot-1') {
 					},
 					{
 						type: 'audio',
-						title: 'Haru no Umi (Spring Sea — Koto & Shakuhachi)',
-						subtitle: 'Kyoto Koto Consort • Apple iTunes 30s Preview',
-						url: 'https://www.w3schools.com/html/horse.mp3',
+						title: 'Four Seasons in Kyoto (Koto & Shakuhachi)',
+						subtitle: 'Chikatoyo Tsujimoto • Apple iTunes 30s Preview',
+						url: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/9b/27/76/9b2776c5-65cd-87f1-3f33-ccbccc642285/mzaf_16549365214060917501.plus.aac.p.m4a',
 						durationSeconds: 30
 					}
 				],
@@ -528,8 +529,12 @@ export function reduceAgUiEvent(state, event) {
 					}
 				: state.pendingApproval;
 
+			const rawCallId = payload.callId ?? `tl-${nextEvents.length}`;
+			const uniqueCallId = currentTurn.timeline.some((item) => item.id === rawCallId)
+				? `${rawCallId}-${nextEvents.length}`
+				: rawCallId;
 			const timelineEntry = {
-				id: payload.callId ?? `tl-${nextEvents.length}`,
+				id: uniqueCallId,
 				callType: resolvedCallType,
 				title: payload.tool,
 				subtitle: payload.server ?? 'nomad-mcp-concierge (:8081)',
@@ -590,8 +595,12 @@ export function reduceAgUiEvent(state, event) {
 
 		case 'STEP_STARTED': {
 			const resolvedCallType = payload.callType ?? 'a2a:task';
+			const rawStepId = payload.stepId ?? `a2a-${nextEvents.length}`;
+			const uniqueStepId = currentTurn.timeline.some((item) => item.id === rawStepId)
+				? `${rawStepId}-${nextEvents.length}`
+				: rawStepId;
 			const stepEntry = {
-				id: payload.stepId ?? `a2a-${nextEvents.length}`,
+				id: uniqueStepId,
 				callType: resolvedCallType,
 				title: payload.skillId ?? 'a2a-skill',
 				subtitle: `${payload.agentName ?? 'Sentinel-A2A-Auditor'} (:8082)`,
@@ -611,10 +620,15 @@ export function reduceAgUiEvent(state, event) {
 
 		case 'STEP_FINISHED': {
 			const resolvedCallType = payload.callType ?? 'a2a:task';
-			const hasExisting = currentTurn.timeline.some((item) => item.id === payload.stepId);
+			const hasExisting = currentTurn.timeline.some(
+				(item) =>
+					item.id === payload.stepId ||
+					(item.title === payload.skillId && item.status === 'running')
+			);
 			const updatedTimeline = hasExisting
 				? currentTurn.timeline.map((item) =>
-						item.id === payload.stepId
+						item.id === payload.stepId ||
+						(item.title === payload.skillId && item.status === 'running')
 							? {
 									...item,
 									callType: resolvedCallType,
@@ -627,7 +641,9 @@ export function reduceAgUiEvent(state, event) {
 				: [
 						...currentTurn.timeline,
 						{
-							id: payload.stepId ?? `a2a-${nextEvents.length}`,
+							id: currentTurn.timeline.some((item) => item.id === payload.stepId)
+								? `${payload.stepId}-${nextEvents.length}`
+								: (payload.stepId ?? `a2a-${nextEvents.length}`),
 							callType: resolvedCallType,
 							title: payload.skillId ?? 'a2a-skill',
 							subtitle: `${payload.agentName ?? 'Sentinel-A2A-Auditor'} (:8082)`,

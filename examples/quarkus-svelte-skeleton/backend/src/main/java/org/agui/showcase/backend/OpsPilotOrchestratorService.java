@@ -118,7 +118,7 @@ public class OpsPilotOrchestratorService {
             }
             mcpCalls.add(mcpClient.callTool("scaleDeployment", Map.of("serviceName", svc, "replicas", replicas)));
         } else if (isNomadPrompt(lower)) {
-            String city = detectNomadCity(lower);
+            String city = detectNomadCity(prompt, request);
             mcpCalls.add(mcpClient.callTool("fetchCityWeather", Map.of("city", city)));
             mcpCalls.add(mcpClient.callTool("discoverLocalCultureAndMedia", Map.of("destination", city, "genre", "traditional")));
         } else {
@@ -130,8 +130,8 @@ public class OpsPilotOrchestratorService {
         } else if (containsAny(lower, List.of("remediat", "incident", "scale"))) {
             a2aHandoffs.add(a2aClient.delegateTask("a2a-" + threadId, "plan-incident-remediation", prompt));
         } else if (isNomadPrompt(lower)) {
-            a2aHandoffs.add(a2aClient.delegateTask("a2a-" + threadId, "convert-and-audit-budget", prompt));
-            a2aHandoffs.add(a2aClient.delegateTask("a2a-" + threadId, "verify-travel-advisory", prompt));
+            a2aHandoffs.add(a2aClient.delegateTask("a2a-fx-" + threadId, "convert-and-audit-budget", prompt));
+            a2aHandoffs.add(a2aClient.delegateTask("a2a-adv-" + threadId, "verify-travel-advisory", prompt));
         } else {
             a2aHandoffs.add(a2aClient.delegateTask("a2a-" + threadId, "audit-clean-architecture", prompt));
         }
@@ -139,7 +139,7 @@ public class OpsPilotOrchestratorService {
         Map<String, Object> toolCall = mcpCalls.getFirst();
         Map<String, Object> handoff = a2aHandoffs.getFirst();
         String reply = isNomadPrompt(lower)
-                ? buildNomadConciergeMarkdownReply(detectNomadCity(lower), handoff)
+                ? buildNomadConciergeMarkdownReply(detectNomadCity(prompt, request), prompt, handoff)
                 : String.format(
                         "OpsPilot executed MCP tool `%s` on quarkus-mcp-cluster-ops (:8081) and delegated `%s` to %s (:8082). Verdict: %s",
                         toolCall.get("toolName"),
@@ -185,7 +185,7 @@ public class OpsPilotOrchestratorService {
             return frames;
         }
 
-        String city = detectNomadCity(lower);
+        String city = detectNomadCity(prompt, request);
         boolean nomadFlow = isNomadPrompt(lower);
 
         frames.add(formatSseEvent(threadId, "STATUS", Map.of(
@@ -768,51 +768,106 @@ public class OpsPilotOrchestratorService {
         return Multi.createFrom().iterable(frames);
     }
 
-    private boolean isNomadPrompt(String lower) {
+    private boolean isSreClusterPrompt(String lower) {
         return containsAny(lower, List.of(
-                "/kyoto", "/lisbon", "/reykjavik", "/media", "/choices", "/mcp", "/a2a", "/hitl",
-                "kyoto", "lisbon", "reykjavik", "travel", "trip", "itinerary", "weather", "music", "culture", "concierge", "currency", "fado", "aurora"));
+                "cluster", "replica", "scale", "payment-gateway", "order-processor",
+                "identity-provider", "payment-service", "log", "cve", "posture",
+                "security", "remediat", "incident", "inspect system", "clean architecture", "ring"));
+    }
+
+    private boolean isNomadPrompt(String lower) {
+        return !isSreClusterPrompt(lower);
     }
 
     private String detectNomadCity(String lower) {
-        if (lower.contains("lisbon") || lower.contains("portugal") || lower.contains("fado")) {
+        return detectNomadCity(lower, null);
+    }
+
+    private String detectNomadCity(String prompt, AgentRunRequest request) {
+        String lower = prompt == null ? "" : prompt.toLowerCase(Locale.ROOT);
+        if (lower.contains("lisbon") || lower.contains("portugal") || lower.contains("fado") || lower.contains("alfama")) {
             return "Lisbon";
         }
-        if (lower.contains("reykjavik") || lower.contains("iceland") || lower.contains("aurora")) {
+        if (lower.contains("reykjavik") || lower.contains("iceland") || lower.contains("aurora") || lower.contains("harpa")) {
             return "Reykjavik";
+        }
+        if (lower.contains("kyoto") || lower.contains("koto") || lower.contains("arashiyama") || lower.contains("gion")) {
+            return "Kyoto";
+        }
+        for (String candidate : List.of("Tokyo", "Paris", "Rome", "Barcelona", "London", "Seoul", "New York", "Marrakech", "Istanbul", "Vienna")) {
+            if (lower.contains(candidate.toLowerCase(Locale.ROOT))) {
+                return candidate;
+            }
+        }
+        if (request != null && request.state() != null) {
+            if (request.state().get("city") instanceof String explicitCity && !explicitCity.isBlank()) {
+                return explicitCity.trim();
+            }
+            if (request.state().get("nomadTrip") instanceof Map<?, ?> trip
+                    && trip.get("activeCity") instanceof String activeCity
+                    && !activeCity.isBlank()) {
+                return activeCity.trim();
+            }
         }
         return "Kyoto";
     }
 
-    private String buildNomadConciergeMarkdownReply(String city, Map<String, Object> handoff) {
-        return switch (city.toLowerCase(Locale.ROOT)) {
-            case "lisbon" -> "### Lisbon — Atlantic Light, Azulejos & Evening Fado\n\n"
-                    + "I have synchronized your **Lisbon Cultural Dossier** via `nomad-mcp-concierge (:8081)` and verified EUR currency bounds with `Sentinel-A2A-Auditor (:8082)`.\n\n"
-                    + "- **Live Open-Meteo Forecast:** `22.1°C` — Atlantic Breeze & Golden Sun\n"
-                    + "- **Soundtrack Preview (iTunes 30s):** *Canção do Mar (Acoustic Fado Session)* — Alfama Guitarra Ensemble\n"
-                    + "- **A2A FX & Budget Verdict:** " + handoff.get("summary") + "\n\n"
-                    + "Select your preferred neighborhood cadence below or preview the 30-second acoustic Fado recording inline.";
-            case "reykjavik" -> "### Reykjavik — Basalt Geometry, Geothermal Steam & Nordic Strings\n\n"
-                    + "I have assembled your **Reykjavik Sub-Arctic Dossier** via `nomad-mcp-concierge (:8081)` and audited ISK exchange rates with `Sentinel-A2A-Auditor (:8082)`.\n\n"
-                    + "- **Live Open-Meteo Forecast:** `6.2°C` — Crisp Sub-Arctic Aurora Sky\n"
-                    + "- **Soundtrack Preview (iTunes 30s):** *Hoppípolla — Nordic Strings* — Reykjavik Chamber Collective\n"
-                    + "- **A2A FX & Budget Verdict:** " + handoff.get("summary") + "\n\n"
-                    + "Listen to the 30-second chamber strings preview below and choose your evening geothermal and architectural sequence.";
-            default -> "### Kyoto — Cedar Machiya, Moss Gardens & Koto Acoustics\n\n"
-                    + "I have curated your **Kyoto Architectural & Cultural Dossier** via `nomad-mcp-concierge (:8081)` and audited JPY conversion with `Sentinel-A2A-Auditor (:8082)`.\n\n"
-                    + "- **Live Open-Meteo Forecast:** `18.4°C` — Clear Cedar & Autumn Mist\n"
-                    + "- **Soundtrack Preview (iTunes 30s):** *Haru no Umi (Spring Sea — Koto & Shakuhachi)* — Kyoto Koto Consort\n"
-                    + "- **A2A FX & Budget Verdict:** " + handoff.get("summary") + "\n\n"
-                    + "Use the inline player below to sample the 30-second Koto recording or tailor your neighborhood focus.";
-        };
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> activeNomadTripState() {
+        Map<String, Object> state = mcpClient.readClusterState();
+        if (state != null && state.get("nomadTrip") instanceof Map<?, ?> trip) {
+            return (Map<String, Object>) trip;
+        }
+        return Map.of();
     }
 
+    @SuppressWarnings("unchecked")
+    private String buildNomadConciergeMarkdownReply(String city, String userPrompt, Map<String, Object> handoff) {
+        Map<String, Object> trip = activeNomadTripState();
+        Object tempObj = trip.getOrDefault("temperatureC", 18.4);
+        String condition = String.valueOf(trip.getOrDefault("weatherCondition", "Clear Cedar & Autumn Mist"));
+        String summaryExtract = trip.get("culturalSummary") instanceof String s && !s.isBlank() ? s : null;
+        String trackTitle = "Haru no Umi (Spring Sea — Koto & Shakuhachi)";
+        String artistName = "Kyoto Koto Consort";
+        if (trip.get("soundtrack") instanceof Map<?, ?> st) {
+            trackTitle = String.valueOf(((Map<String, Object>) st).getOrDefault("trackName", trackTitle));
+            artistName = String.valueOf(((Map<String, Object>) st).getOrDefault("artistName", artistName));
+        }
+
+        String cleanedPrompt = userPrompt == null ? "" : userPrompt.replaceFirst("^/[a-z]+\\s*", "").trim();
+        String promptNote = (!cleanedPrompt.isBlank() && !cleanedPrompt.equalsIgnoreCase(city))
+                ? " tailored to *\"" + cleanedPrompt + "\"*"
+                : "";
+
+        String header = switch (city.toLowerCase(Locale.ROOT)) {
+            case "lisbon" -> "### Lisbon — Atlantic Light, Azulejos & Evening Fado";
+            case "reykjavik" -> "### Reykjavik — Basalt Geometry, Geothermal Steam & Nordic Strings";
+            case "kyoto" -> "### Kyoto — Cedar Machiya, Moss Gardens & Koto Acoustics";
+            default -> "### " + city + " — Architectural, Cultural & Acoustic Dossier";
+        };
+
+        StringBuilder md = new StringBuilder(header).append("\n\n");
+        md.append("I have synchronized your **").append(city).append(" Cultural Dossier**").append(promptNote)
+                .append(" via `nomad-mcp-concierge (:8081)` and verified currency & entry advisories with `Sentinel-A2A-Auditor (:8082)`.\n\n");
+        if (summaryExtract != null) {
+            md.append(summaryExtract).append("\n\n");
+        }
+        md.append("- **Live Open-Meteo Forecast:** `").append(tempObj).append("°C` — ").append(condition).append("\n");
+        md.append("- **Soundtrack Preview (iTunes 30s):** *").append(trackTitle).append("* — ").append(artistName).append("\n");
+        md.append("- **A2A FX & Budget Verdict:** ").append(handoff.get("summary")).append("\n\n");
+        md.append("Use the inline player below to sample the 30-second audio preview or select your preferred neighborhood sequence.");
+        return md.toString();
+    }
+
+    @SuppressWarnings("unchecked")
     private List<Map<String, Object>> buildTurnMedia(String city) {
-        String heroUrl = switch (city.toLowerCase(Locale.ROOT)) {
+        Map<String, Object> trip = activeNomadTripState();
+        String fallbackHeroUrl = switch (city.toLowerCase(Locale.ROOT)) {
             case "lisbon" -> "https://images.unsplash.com/photo-1513735492246-483525079686?auto=format&fit=crop&w=1000&q=80";
             case "reykjavik" -> "https://images.unsplash.com/photo-1504893524553-b855bce32c67?auto=format&fit=crop&w=1000&q=80";
             default -> "https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?auto=format&fit=crop&w=1000&q=80";
         };
+        String heroUrl = trip.get("heroImageUrl") instanceof String h && !h.isBlank() ? h : fallbackHeroUrl;
         String trackTitle = switch (city.toLowerCase(Locale.ROOT)) {
             case "lisbon" -> "Canção do Mar (Acoustic Fado Session)";
             case "reykjavik" -> "Hoppípolla — Nordic Strings";
@@ -823,6 +878,15 @@ public class OpsPilotOrchestratorService {
             case "reykjavik" -> "Reykjavik Chamber Collective";
             default -> "Kyoto Koto Consort";
         };
+        String previewUrl = "https://www.w3schools.com/html/horse.mp3";
+        String artworkUrl = heroUrl;
+        if (trip.get("soundtrack") instanceof Map<?, ?> st) {
+            Map<String, Object> track = (Map<String, Object>) st;
+            trackTitle = String.valueOf(track.getOrDefault("trackName", trackTitle));
+            artist = String.valueOf(track.getOrDefault("artistName", artist));
+            previewUrl = String.valueOf(track.getOrDefault("previewUrl", previewUrl));
+            artworkUrl = String.valueOf(track.getOrDefault("artworkUrl", heroUrl));
+        }
         return List.of(
                 Map.of(
                         "type", "image",
@@ -833,15 +897,15 @@ public class OpsPilotOrchestratorService {
                         "type", "audio",
                         "title", trackTitle,
                         "subtitle", artist + " • Apple iTunes 30s Preview",
-                        "url", "https://www.w3schools.com/html/horse.mp3",
-                        "artworkUrl", heroUrl,
+                        "url", previewUrl,
+                        "artworkUrl", artworkUrl,
                         "durationSeconds", 30),
                 Map.of(
                         "type", "video",
                         "title", city + " Golden Hour Aerial Study",
                         "subtitle", "1080p Field Reel • Slow Architecture",
                         "url", "https://www.w3schools.com/html/mov_bbb.mp4",
-                        "posterUrl", heroUrl),
+                        "posterUrl", fallbackHeroUrl),
                 Map.of(
                         "type", "document",
                         "title", "Nomad-" + city + "-Concierge-Folio.pdf",

@@ -351,4 +351,30 @@ test('Nomad AG-UI Component Kit reducer populates timeline callTypes, reasoning,
 	assert.deepEqual(state.messages.at(-1).interaction.selectedValues, ['gion']);
 	state = lockTurnInteraction(state, lastMsg.id);
 	assert.equal(state.messages.at(-1).interaction.submitted, true);
+
+	// Duplicate stepId / callId events are deduplicated so ExecutionTimeline never throws each_key_duplicate
+	let dupState = createInitialWorkbenchState('thread-dup');
+	dupState = reduceAgUiEvent(dupState, { id: 'd1', type: 'RUN_STARTED', payload: {} });
+	dupState = reduceAgUiEvent(dupState, {
+		id: 'd2',
+		type: 'STEP_STARTED',
+		payload: { stepId: 'a2a-same', skillId: 'convert-and-audit-budget' }
+	});
+	dupState = reduceAgUiEvent(dupState, {
+		id: 'd3',
+		type: 'STEP_FINISHED',
+		payload: { stepId: 'a2a-same', skillId: 'convert-and-audit-budget', summary: 'FX OK' }
+	});
+	dupState = reduceAgUiEvent(dupState, {
+		id: 'd4',
+		type: 'STEP_STARTED',
+		payload: { stepId: 'a2a-same', skillId: 'verify-travel-advisory' }
+	});
+	dupState = reduceAgUiEvent(dupState, {
+		id: 'd5',
+		type: 'STEP_FINISHED',
+		payload: { stepId: 'a2a-same', skillId: 'verify-travel-advisory', summary: 'Advisory OK' }
+	});
+	const timelineIds = dupState.activeTurn.timeline.map((item) => item.id);
+	assert.equal(new Set(timelineIds).size, timelineIds.length, 'Timeline IDs must be strictly unique');
 });

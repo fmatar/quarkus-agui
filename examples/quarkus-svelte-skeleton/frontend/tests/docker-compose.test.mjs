@@ -21,6 +21,7 @@ test('Docker Compose topology defines mcp-server, a2a-server, backend, and front
 	assert.match(content, /8080:8080/);
 	assert.match(content, /5173:5173/);
 	assert.match(content, /AGUI_A2A_BASE_URL=http:\/\/a2a-server:8082/);
+	assert.match(content, /AGUI_A2A_PUBLIC_URL=http:\/\/a2a-server:8082/);
 	assert.match(content, /AGUI_MCP_BASE_URL=http:\/\/mcp-server:8081/);
 });
 

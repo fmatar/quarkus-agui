@@ -25,6 +25,7 @@ services:
     environment:
       - QUARKUS_HTTP_HOST=0.0.0.0
       - QUARKUS_HTTP_PORT=8082
+      - AGUI_A2A_PUBLIC_URL=http://a2a-server:8082
     restart: unless-stopped
 
   backend:
@@ -40,6 +41,7 @@ services:
       - QUARKUS_HTTP_PORT=8080
       - AGUI_MCP_BASE_URL=http://mcp-server:8081
       - AGUI_A2A_BASE_URL=http://a2a-server:8082
+      - AGUI_OLLAMA_BASE_URL=http://host.docker.internal:11434
     depends_on:
       - mcp-server
       - a2a-server
