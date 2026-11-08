@@ -320,47 +320,7 @@ export function createInitialWorkbenchState(threadId = 'thread-nomad-1') {
 						durationSeconds: 30
 					}
 				],
-				interaction: {
-					id: 'choice-welcome-kyoto',
-					mode: 'single_select',
-					prompt: 'Select an opening cultural cadence for your Kyoto dossier:',
-					selectedValues: [],
-					submitted: false,
-					options: [
-						{
-							id: 'arashiyama-dawn',
-							label: 'Arashiyama Bamboo & Katsura Imperial Villa',
-							description: 'Early-morning moss garden architectural walk + private matcha pavilion',
-							badge: 'Dawn • ¥24,000'
-						},
-						{
-							id: 'gion-koto',
-							label: 'Gion Machiya Private Koto & Kaiseki Evening',
-							description: 'Seasonal Kaiseki tasting menu with live Koto & shakuhachi acoustics',
-							badge: 'Evening • ¥38,000'
-						},
-						{
-							id: 'higashiyama-ceramics',
-							label: 'Higashiyama Raku Kiln & Vinyl Listening Bar',
-							description: 'Private ceramic conservation studio + analog jazz kissaten',
-							badge: 'Late Night • ¥19,000'
-						}
-					],
-					actions: [
-						{
-							id: 'act-hitl',
-							label: 'Hold Arashiyama Suite ($1,840)',
-							prompt: 'Reserve Hoshinoya Arashiyama Pavilion in Kyoto for 4 nights ($1840)',
-							variant: 'primary'
-						},
-						{
-							id: 'act-lisbon',
-							label: 'Explore Lisbon Dossier',
-							prompt: 'Plan a 4-night Lisbon Fado, azulejo atelier & coastal itinerary',
-							variant: 'secondary'
-						}
-					]
-				},
+				interaction: null,
 				sources: [
 					{ title: 'Open-Meteo Live Weather', url: 'https://api.open-meteo.com', protocol: 'mcp:tool' },
 					{ title: 'Wikipedia REST API v1', url: 'https://en.wikipedia.org/wiki/Kyoto', protocol: 'mcp:tool' },
@@ -368,9 +328,9 @@ export function createInitialWorkbenchState(threadId = 'thread-nomad-1') {
 					{ title: 'Frankfurter ECB FX', url: 'https://api.frankfurter.dev', protocol: 'a2a:task' }
 				],
 				followUps: [
-					'Plan an evening Fado & azulejo walk in Lisbon',
-					'Design an aurora & geothermal itinerary in Reykjavik',
-					'Plan a 4-night Tokyo modernist architecture & vinyl kissaten trip',
+					'Give me 2 random evening options in Kyoto to pick from',
+					'Create 4 culinary and music experiences in Lisbon so I can select multiple',
+					'Plan a 3-day architectural, culinary and music trip in Beirut',
 					'Reserve Hoshinoya Arashiyama Pavilion in Kyoto for 4 nights'
 				]
 			}
