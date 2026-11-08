@@ -204,8 +204,10 @@ public class McpGatewayClient {
                     case "reykjavik" -> "Crisp Sub-Arctic Aurora Sky";
                     default -> "Clear Cedar & Autumn Mist";
                 };
+                String defaultCountry = A2aGatewayClient.resolveCountryForCity(city);
                 Map<String, Object> weather = new LinkedHashMap<>();
                 weather.put("city", city);
+                weather.put("country", defaultCountry);
                 weather.put("temperatureC", tempC);
                 weather.put("condition", condition);
                 weather.put("source", "api.open-meteo.com");
@@ -213,7 +215,13 @@ public class McpGatewayClient {
                 if (remote != null && !remote.isEmpty()) {
                     weather.putAll(remote);
                 }
+                String resolvedCountry = String.valueOf(weather.getOrDefault("country", defaultCountry));
+                String resolvedCurrency = A2aGatewayClient.resolveCurrencyForCountry(resolvedCountry);
                 nomadTrip.put("activeCity", weather.getOrDefault("city", city));
+                nomadTrip.put("country", resolvedCountry);
+                nomadTrip.put("currency", resolvedCurrency);
+                nomadTrip.put("exchangeRate", A2aGatewayClient.resolveDefaultRateForCurrency(resolvedCurrency));
+                nomadTrip.put("stopTitle", defaultSanctuaryForCity(city));
                 nomadTrip.put("temperatureC", weather.getOrDefault("temperatureC", tempC));
                 nomadTrip.put("weatherCondition", weather.getOrDefault("condition", condition));
                 yield Map.of(
@@ -232,10 +240,15 @@ public class McpGatewayClient {
                 if (remote != null && !remote.isEmpty()) {
                     culture.putAll(remote);
                 }
+                String resolvedCountry = nomadTrip.get("country") instanceof String c && !c.isBlank()
+                        && city.equalsIgnoreCase(String.valueOf(nomadTrip.get("activeCity")))
+                        ? c
+                        : A2aGatewayClient.resolveCountryForCity(city);
+                String resolvedCurrency = A2aGatewayClient.resolveCurrencyForCountry(resolvedCountry);
                 nomadTrip.put("activeCity", city);
-                nomadTrip.put("country", culture.getOrDefault("country", "Japan"));
-                nomadTrip.put("currency", culture.getOrDefault("currency", "JPY"));
-                nomadTrip.put("exchangeRate", culture.getOrDefault("exchangeRate", 151.40));
+                nomadTrip.put("country", resolvedCountry);
+                nomadTrip.put("currency", resolvedCurrency);
+                nomadTrip.put("exchangeRate", A2aGatewayClient.resolveDefaultRateForCurrency(resolvedCurrency));
                 if (culture.get("audioTrack") != null) {
                     nomadTrip.put("soundtrack", culture.get("audioTrack"));
                 }
@@ -351,5 +364,17 @@ public class McpGatewayClient {
         }
         String trimmed = raw.trim();
         return Character.toUpperCase(trimmed.charAt(0)) + trimmed.substring(1);
+    }
+
+    private String defaultSanctuaryForCity(String city) {
+        return switch (city.toLowerCase(Locale.ROOT)) {
+            case "kyoto" -> "Hoshinoya Arashiyama Pavilion";
+            case "lisbon" -> "Palácio Belmonte Alfama Suite";
+            case "reykjavik" -> "The Retreat at Blue Lagoon Moss Villa";
+            case "tokyo" -> "Aman Tokyo Otemachi Sanctuary";
+            case "paris" -> "Cour des Vosges Marais Residence";
+            case "oaxaca" -> "Casa Oaxaca Courtyard Sanctuary";
+            default -> city + " Architectural Sanctuary";
+        };
     }
 }

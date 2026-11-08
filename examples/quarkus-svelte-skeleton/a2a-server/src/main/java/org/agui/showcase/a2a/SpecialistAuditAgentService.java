@@ -94,11 +94,7 @@ public class SpecialistAuditAgentService {
         String city = String.valueOf(ctx.getOrDefault("city", detectCity(prompt)));
         String targetCurrency = String.valueOf(ctx.getOrDefault("currency", defaultCurrencyForCity(city)));
         double budgetUsd = ctx.get("budgetUsd") instanceof Number n ? n.doubleValue() : 2400.0;
-        double rate = switch (targetCurrency.toUpperCase(Locale.ROOT)) {
-            case "EUR" -> 0.92;
-            case "ISK" -> 137.80;
-            default -> 151.40;
-        };
+        double rate = defaultRateForCurrency(targetCurrency);
         String source = "frankfurter-fallback";
         try {
             String url = frankfurterBaseUrl + "/v1/latest?base=USD&symbols=" + URLEncoder.encode(targetCurrency, StandardCharsets.UTF_8);
@@ -131,24 +127,23 @@ public class SpecialistAuditAgentService {
 
     private AuditResult performTravelAdvisoryAudit(String prompt, Map<String, Object> ctx) {
         String city = String.valueOf(ctx.getOrDefault("city", detectCity(prompt)));
-        String country = switch (city.toLowerCase(Locale.ROOT)) {
-            case "lisbon" -> "Portugal";
-            case "reykjavik" -> "Iceland";
-            default -> "Japan";
-        };
-        String capital = switch (city.toLowerCase(Locale.ROOT)) {
-            case "lisbon" -> "Lisbon";
-            case "reykjavik" -> "Reykjavik";
-            default -> "Tokyo";
-        };
-        String region = switch (city.toLowerCase(Locale.ROOT)) {
-            case "lisbon", "reykjavik" -> "Europe";
-            default -> "Asia";
-        };
-        String timezone = switch (city.toLowerCase(Locale.ROOT)) {
-            case "lisbon", "reykjavik" -> "UTC+00:00";
-            default -> "UTC+09:00";
-        };
+        String country = defaultCountryForCity(city);
+        String capital = city;
+        String region = "Global";
+        String timezone = "UTC+00:00";
+        if ("Japan".equals(country)) {
+            capital = "Tokyo";
+            region = "Asia";
+            timezone = "UTC+09:00";
+        } else if ("Portugal".equals(country) || "Iceland".equals(country) || "United Kingdom".equals(country)) {
+            region = "Europe";
+            timezone = "UTC+00:00";
+        } else if ("France".equals(country) || "Italy".equals(country) || "Spain".equals(country)
+                || "Germany".equals(country) || "Austria".equals(country) || "Switzerland".equals(country)
+                || "Denmark".equals(country) || "Netherlands".equals(country)) {
+            region = "Europe";
+            timezone = "UTC+01:00";
+        }
         String source = "restcountries-fallback";
         try {
             String url = restCountriesBaseUrl + "/v3.1/name/" + URLEncoder.encode(country, StandardCharsets.UTF_8);
@@ -186,21 +181,107 @@ public class SpecialistAuditAgentService {
     }
 
     private String detectCity(String prompt) {
-        String lower = prompt == null ? "" : prompt.toLowerCase(Locale.ROOT);
+        String raw = prompt == null ? "" : prompt.replaceFirst("^\\[[^\\]]+\\]\\s*", "").trim();
+        String lower = raw.toLowerCase(Locale.ROOT);
         if (lower.contains("lisbon") || lower.contains("portugal")) {
             return "Lisbon";
         }
         if (lower.contains("reykjavik") || lower.contains("iceland")) {
             return "Reykjavik";
         }
+        if (lower.contains("kyoto")) {
+            return "Kyoto";
+        }
+        for (String candidate : List.of(
+                "Tokyo", "Osaka", "Paris", "Rome", "Milan", "Florence", "Venice", "Barcelona", "Madrid",
+                "London", "Edinburgh", "Berlin", "Munich", "Vienna", "Zurich", "Geneva", "Amsterdam",
+                "Copenhagen", "Stockholm", "Oslo", "Prague", "Athens", "Istanbul", "Marrakech", "Cairo",
+                "Seoul", "Bangkok", "Singapore", "Taipei", "Sydney", "Melbourne", "New York", "Oaxaca",
+                "Mexico City", "Buenos Aires")) {
+            if (lower.contains(candidate.toLowerCase(Locale.ROOT))) {
+                return candidate;
+            }
+        }
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile(
+                "\\b(?:in|to|for|visit|explore|around|about)\\s+([A-Z][a-zA-Z]+(?:\\s+[A-Z][a-zA-Z]+)?)\\b")
+                .matcher(raw);
+        if (m.find()) {
+            return m.group(1).trim();
+        }
         return "Kyoto";
     }
 
-    private String defaultCurrencyForCity(String city) {
+    private String defaultCountryForCity(String city) {
         return switch (city.toLowerCase(Locale.ROOT)) {
-            case "lisbon" -> "EUR";
-            case "reykjavik" -> "ISK";
+            case "lisbon", "porto" -> "Portugal";
+            case "reykjavik" -> "Iceland";
+            case "tokyo", "kyoto", "osaka" -> "Japan";
+            case "paris", "lyon", "nice" -> "France";
+            case "rome", "milan", "florence", "venice" -> "Italy";
+            case "barcelona", "madrid", "seville" -> "Spain";
+            case "london", "edinburgh" -> "United Kingdom";
+            case "berlin", "munich" -> "Germany";
+            case "vienna" -> "Austria";
+            case "zurich", "geneva" -> "Switzerland";
+            case "amsterdam" -> "Netherlands";
+            case "copenhagen" -> "Denmark";
+            case "stockholm" -> "Sweden";
+            case "oslo" -> "Norway";
+            case "prague" -> "Czechia";
+            case "athens" -> "Greece";
+            case "istanbul" -> "Turkey";
+            case "marrakech" -> "Morocco";
+            case "cairo" -> "Egypt";
+            case "seoul" -> "South Korea";
+            case "bangkok" -> "Thailand";
+            case "singapore" -> "Singapore";
+            case "sydney", "melbourne" -> "Australia";
+            case "new york", "san francisco" -> "United States";
+            case "oaxaca", "mexico city" -> "Mexico";
+            case "buenos aires" -> "Argentina";
+            default -> "Japan";
+        };
+    }
+
+    private String defaultCurrencyForCity(String city) {
+        return switch (defaultCountryForCity(city)) {
+            case "Portugal", "France", "Italy", "Spain", "Germany", "Austria", "Netherlands", "Greece" -> "EUR";
+            case "Iceland" -> "ISK";
+            case "United Kingdom" -> "GBP";
+            case "Switzerland" -> "CHF";
+            case "Denmark" -> "DKK";
+            case "Sweden" -> "SEK";
+            case "Norway" -> "NOK";
+            case "Czechia" -> "CZK";
+            case "Turkey" -> "TRY";
+            case "Morocco" -> "MAD";
+            case "South Korea" -> "KRW";
+            case "Thailand" -> "THB";
+            case "Singapore" -> "SGD";
+            case "Australia" -> "AUD";
+            case "United States" -> "USD";
+            case "Mexico" -> "MXN";
             default -> "JPY";
+        };
+    }
+
+    private double defaultRateForCurrency(String currency) {
+        return switch (currency.toUpperCase(Locale.ROOT)) {
+            case "EUR" -> 0.92;
+            case "ISK" -> 137.80;
+            case "GBP" -> 0.79;
+            case "CHF" -> 0.88;
+            case "DKK" -> 6.86;
+            case "SEK" -> 10.45;
+            case "NOK" -> 10.65;
+            case "KRW" -> 1380.0;
+            case "THB" -> 34.50;
+            case "SGD" -> 1.34;
+            case "AUD" -> 1.52;
+            case "MXN" -> 19.80;
+            case "MAD" -> 9.90;
+            case "USD" -> 1.00;
+            default -> 151.40;
         };
     }
 }

@@ -90,7 +90,7 @@
 				onkeydown={handleKeydown}
 				disabled={isStreaming}
 				rows="1"
-				placeholder="Ask Nomad Concierge or type / for protocol & destination commands (/kyoto, /lisbon, /media, /choices, /hitl)..."
+				placeholder="Ask about any city, weather, local music, architecture, or type / for quick commands..."
 				class="w-full max-h-32 resize-none rounded-xl border border-[#CFCAC0] bg-white px-3.5 py-2.5 text-xs sm:text-sm text-[#141413] placeholder-[#78756F] transition-colors focus:border-[#C84B31] focus:outline-none disabled:opacity-45"
 			></textarea>
 		</div>

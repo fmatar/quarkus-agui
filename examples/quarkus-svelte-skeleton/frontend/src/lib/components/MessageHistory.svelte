@@ -42,9 +42,8 @@
 				<div class="mb-1 flex items-center justify-between text-[11px] text-[#575551]">
 					<span class="inline-flex items-center gap-1.5 font-semibold text-[#141413]">
 						<User class="size-3.5 text-[#C84B31]" />
-						<span>Traveler</span>
+						<span>You</span>
 					</span>
-					<span class="font-mono text-[10px]">{msg.id}</span>
 				</div>
 				<div class="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</div>
 			</article>

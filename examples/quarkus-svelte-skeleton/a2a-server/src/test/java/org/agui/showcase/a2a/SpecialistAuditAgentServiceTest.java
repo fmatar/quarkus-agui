@@ -120,5 +120,13 @@ class SpecialistAuditAgentServiceTest {
         );
         assertEquals("Japan", advLive.data().get("country"));
         assertEquals("restcountries.com", advLive.data().get("source"));
+
+        SpecialistAuditAgentService.AuditResult dynamicCityFx = service.performAudit(
+            "convert-and-audit-budget",
+            "[convert-and-audit-budget] Plan a trip to Oaxaca",
+            Map.of()
+        );
+        assertEquals("Oaxaca", dynamicCityFx.data().get("city"));
+        assertEquals("MXN", dynamicCityFx.data().get("targetCurrency"));
     }
 }

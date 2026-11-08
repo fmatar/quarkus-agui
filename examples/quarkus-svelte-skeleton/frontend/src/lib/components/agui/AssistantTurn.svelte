@@ -27,19 +27,14 @@
 			<div class="flex size-7 items-center justify-center rounded-lg bg-[#141413] text-white">
 				<Compass class="size-4" />
 			</div>
-			<span class="text-xs font-semibold text-[#141413]">Nomad Concierge Orchestrator</span>
-			<span class="rounded bg-[#EFECE6] px-1.5 py-0.5 font-mono text-[10px] text-[#575551]">
-				:8080
-			</span>
+			<span class="text-xs font-semibold text-[#141413]">Nomad Concierge</span>
 		</div>
 
 		{#if isStreaming}
 			<div class="inline-flex items-center gap-1.5 font-mono text-[11px] font-medium text-[#C84B31]">
 				<span class="size-1.5 rounded-full bg-[#C84B31] animate-pulse-dot"></span>
-				<span>{statusText || 'Streaming AG-UI frames...'}</span>
+				<span>{statusText || 'Curating dossier...'}</span>
 			</div>
-		{:else}
-			<span class="font-mono text-[10px] text-[#78756F]">{turn.id}</span>
 		{/if}
 	</header>
 

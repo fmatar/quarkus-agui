@@ -65,7 +65,7 @@
 		workbench = {
 			...workbench,
 			isStreaming: true,
-			statusText: 'Connecting to Nomad Concierge (:8080)...',
+			statusText: 'Curating destination dossier...',
 			streamBuffer: '',
 			activeTurn: {
 				reasoning: null,
@@ -196,14 +196,10 @@
 			</div>
 			<div>
 				<h1 class="text-sm font-bold tracking-tight text-[#141413] sm:text-base">
-					Nomad — Cultural Concierge & AG-UI Studio
+					Nomad — Cultural & Architectural Concierge
 				</h1>
 				<div class="flex items-center gap-2 text-[11px] text-[#575551]">
-					<span>Quarkus AG-UI (:8080)</span>
-					<span>•</span>
-					<span>MCP (:8081)</span>
-					<span>•</span>
-					<span>A2A (:8082)</span>
+					<span>Live Open-Meteo Weather • Wikipedia Dossiers • iTunes 30s Audio • Frankfurter FX</span>
 				</div>
 			</div>
 		</div>
@@ -270,18 +266,6 @@
 	<section
 		class="workbench-chat nomad-panel flex h-full min-h-0 flex-col justify-between overflow-hidden rounded-2xl"
 	>
-		<div class="flex shrink-0 items-center justify-between border-b border-[#E4E0D8] bg-[#FAF9F6] px-5 py-2.5 text-xs">
-			<div class="flex items-center gap-2 font-semibold text-[#141413]">
-				<span>Active Concierge Stream</span>
-				<span class="rounded bg-[#EFECE6] px-2 py-0.5 font-mono text-[10px] font-normal text-[#575551]">
-					{workbench.statusText}
-				</span>
-			</div>
-			<div class="font-mono text-[11px] text-[#575551]">
-				Session: <span class="font-semibold text-[#141413]">{workbench.threadId}</span>
-			</div>
-		</div>
-
 		<MessageHistory
 			messages={workbench.messages}
 			isStreaming={workbench.isStreaming}
