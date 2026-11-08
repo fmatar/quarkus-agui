@@ -572,10 +572,14 @@ public class OpsPilotOrchestratorService {
             String toolContext,
             MultiEmitter<? super String> emitter) {
         try {
+            boolean hasInteractiveCard = isChoiceElicitationRequest(userPrompt);
             String systemPrompt = "You are Nomad, an authoritative, refined AI Travel, Architecture, Weather, FX & Local Culture Concierge. "
                     + "Ground your response in the live Open-Meteo weather, Wikipedia cultural summary, Apple iTunes 30-second local music preview, "
                     + "Frankfurter FX conversion, and REST Countries travel advisory provided in the context. "
-                    + "Format your response with a clean Markdown heading and concise bullet points covering atmospheric architecture, local listening/music culture, and practical weather/currency insights.";
+                    + "Format your response with a clean Markdown heading and concise bullet points covering atmospheric architecture, local listening/music culture, and practical weather/currency insights."
+                    + (hasInteractiveCard
+                            ? " An interactive AG-UI clickable selection card is rendered directly below your message—invite the traveler to click their preferred option(s) in the card below rather than typing a number."
+                            : "");
 
             String augmentedUserPrompt = toolContext.isEmpty()
                     ? userPrompt
@@ -1003,6 +1007,7 @@ public class OpsPilotOrchestratorService {
         return 3;
     }
 
+    @SuppressWarnings("unchecked")
     private Map<String, Object> generateOllamaInteractiveChoices(
             String model,
             String city,
@@ -1015,11 +1020,20 @@ public class OpsPilotOrchestratorService {
         String currency = A2aGatewayClient.resolveCurrencyForCountry(country);
 
         try {
+            StringBuilder slots = new StringBuilder();
+            for (int i = 1; i <= count; i++) {
+                if (i > 1) {
+                    slots.append(", ");
+                }
+                slots.append("{\"id\": \"option-").append(i)
+                        .append("\", \"label\": \"Distinct ").append(city).append(" Experience ").append(i)
+                        .append("\", \"description\": \"1-sentence vivid cultural, architectural or musical summary\", \"badge\": \"Timing • ")
+                        .append(currency).append("\"}");
+            }
             String systemPrompt = "You are a JSON generator for an interactive AG-UI travel choice component. "
-                    + "Respond ONLY with a valid JSON object matching this exact schema: "
-                    + "{\"prompt\": \"string\", \"mode\": \"" + requestedMode + "\", \"options\": ["
-                    + "{\"id\": \"slug-1\", \"label\": \"Title\", \"description\": \"1-sentence summary\", \"badge\": \"Timing • " + currency + "\"}]}. "
-                    + "Generate exactly " + count + " distinct, authentic local options in " + city + ", " + country + ".";
+                    + "Respond ONLY with a valid JSON object containing EXACTLY " + count + " items in the options array: "
+                    + "{\"prompt\": \"string\", \"mode\": \"" + requestedMode + "\", \"options\": [" + slots + "]}. "
+                    + "Every option MUST be a real, distinct neighborhood, venue, landmark, or cultural experience in " + city + ", " + country + ".";
 
             Map<String, Object> payload = new LinkedHashMap<>();
             payload.put("model", model);
@@ -1028,7 +1042,7 @@ public class OpsPilotOrchestratorService {
             payload.put("format", "json");
             payload.put("messages", List.of(
                     Map.of("role", "system", "content", systemPrompt),
-                    Map.of("role", "user", "content", userPrompt)));
+                    Map.of("role", "user", "content", "Generate exactly " + count + " distinct selectable options in " + city + " for: " + userPrompt)));
 
             HttpRequest req = HttpRequest.newBuilder()
                     .uri(URI.create(ollamaBaseUrl + "/api/chat"))
@@ -1056,7 +1070,7 @@ public class OpsPilotOrchestratorService {
                             String desc = item.path("description").asText("Curated local experience in " + city).trim();
                             String badge = item.path("badge").asText("Curated • " + currency).trim();
                             parsedOptions.add(Map.of(
-                                    "id", id.isEmpty() ? "opt-" + idx : id,
+                                    "id", id.isEmpty() ? "opt-" + idx : id + "-" + idx,
                                     "label", label,
                                     "description", desc,
                                     "badge", badge));
@@ -1066,6 +1080,16 @@ public class OpsPilotOrchestratorService {
                             }
                         }
                         if (!parsedOptions.isEmpty()) {
+                            if (parsedOptions.size() < count && fallback.get("options") instanceof List<?> fallbackOpts) {
+                                for (Object fbObj : fallbackOpts) {
+                                    if (parsedOptions.size() >= count) {
+                                        break;
+                                    }
+                                    if (fbObj instanceof Map<?, ?> fbMap) {
+                                        parsedOptions.add((Map<String, Object>) fbMap);
+                                    }
+                                }
+                            }
                             String promptHeading = json.path("prompt").asText(
                                     requestedMode.equals("multi_select")
                                             ? "Select multiple " + city + " experiences to combine:"
