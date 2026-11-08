@@ -14,9 +14,7 @@ COPY quarkus-extension ./quarkus-extension
 COPY examples ./examples
 
 RUN chmod +x ./mvnw && \
-    ./mvnw -B package -DskipTests \
-    -pl examples/quarkus-svelte-skeleton/mcp-server,examples/quarkus-svelte-skeleton/a2a-server,examples/quarkus-svelte-skeleton/backend \
-    -am
+    ./mvnw -B install -DskipTests -Dmaven.test.skip=true
 
 # ---------------------------------------------------------------------------
 # Stage: mcp-server (:8081)

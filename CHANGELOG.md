@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- fix(showcase): include `pnpm-workspace.yaml` (`allowBuilds: esbuild: true`) in `frontend/Dockerfile`, add `frontend/.dockerignore`, and use `install -DskipTests` in `Dockerfile.quarkus` so all 4 Docker Compose images build cleanly ([#36](https://github.com/fmatar/quarkus-agui/issues/36))
+
 ### Added
 - feat(showcase): add `docker-compose.yml`, multi-stage `Dockerfile.quarkus`, `frontend/Dockerfile`, and `run-showcase.sh` launcher for one-command execution of the 4-service Nomad Tri-Protocol showcase ([#34](https://github.com/fmatar/quarkus-agui/issues/34))
 - feat(showcase): implement Nomad AI Travel, Weather, Currency & Local Culture Concierge (Open-Meteo, Wikipedia REST, Apple iTunes 30s audio preview, Frankfurter FX, REST Countries), 10-type protocol call taxonomy (`callType`), modular Svelte 5 Runes AG-UI Component Kit (`src/lib/components/agui/*`), and commercial minimalist UI (`ADR-004`, [#32](https://github.com/fmatar/quarkus-agui/issues/32))

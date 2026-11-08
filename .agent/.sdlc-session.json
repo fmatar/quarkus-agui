@@ -1,11 +1,11 @@
 {
-  "activeSessionId": 34,
+  "activeSessionId": 36,
   "sessions": {
-    "34": {
+    "36": {
       "active": true,
-      "issueId": 34,
-      "type": "feat",
-      "branch": "feature/issue-#34-nomad-docker-compose",
+      "issueId": 36,
+      "type": "bug",
+      "branch": "fix/issue-#36-docker-compose-frontend-build",
       "worktree": null,
       "stage": 5,
       "stageName": "Documentation, Showcase & Changelog Sync",
@@ -18,18 +18,18 @@
         "mutationScore": 85.0,
         "uiScreenshotPath": null,
         "checkpoints": {
-          "stage1": "2026-11-08T15:25:00.000Z",
-          "stage2": "2026-11-08T15:25:15.000Z",
-          "stage3": "2026-11-08T15:25:30.000Z",
-          "stage4": "2026-11-08T15:28:15.000Z",
-          "stage5": "2026-11-08T15:30:55.000Z",
+          "stage1": "2026-11-08T16:18:50.000Z",
+          "stage2": "2026-11-08T16:18:55.000Z",
+          "stage3": "2026-11-08T16:19:00.000Z",
+          "stage4": "2026-11-08T16:22:00.000Z",
+          "stage5": "2026-11-08T16:23:00.000Z",
           "stage6": null,
           "stage7": null,
           "stage8": null
         }
       },
-      "startedAt": "2026-11-08T15:25:00.000Z",
-      "updatedAt": "2026-11-08T15:30:55.000Z",
+      "startedAt": "2026-11-08T16:18:50.000Z",
+      "updatedAt": "2026-11-08T16:23:00.000Z",
       "activeSubagents": []
     }
   }

@@ -37,6 +37,16 @@ test('Multi-stage Quarkus Dockerfile, Frontend Dockerfile, and run-showcase.sh e
 	assert.match(quarkusContent, /AS mcp-server/);
 	assert.match(quarkusContent, /AS a2a-server/);
 	assert.match(quarkusContent, /AS backend/);
+	assert.match(quarkusContent, /install -DskipTests/);
+
+	const frontendContent = fs.readFileSync(frontendDockerfile, 'utf8');
+	assert.match(frontendContent, /pnpm-workspace\.yaml/);
+
+	const frontendDockerignore = path.join(showcaseDir, 'frontend', '.dockerignore');
+	assert.equal(fs.existsSync(frontendDockerignore), true, 'frontend/.dockerignore should exist');
+	const ignoreContent = fs.readFileSync(frontendDockerignore, 'utf8');
+	assert.match(ignoreContent, /node_modules/);
+	assert.match(ignoreContent, /\.svelte-kit/);
 
 	const repoRoot = path.resolve(showcaseDir, '../..');
 	for (const requiredDir of ['ag-ui-core', 'quarkus-ag-ui-bom', 'quarkus-extension', 'examples']) {
