@@ -17,6 +17,6 @@ class A2aAgentResourceTest {
             .statusCode(200)
             .body("name", equalTo("Sentinel-A2A-Auditor"))
             .body("capabilities.streaming", equalTo(true))
-            .body("skills.size()", equalTo(3));
+            .body("skills.size()", equalTo(5));
     }
 }

@@ -43,4 +43,25 @@ public class McpServerResource {
     public Map<String, Object> getTopology() {
         return telemetryService.getTopologySnapshot();
     }
+
+    @GET
+    @Path("/resources/itinerary")
+    public Map<String, Object> getItinerary() {
+        return telemetryService.getActiveTripSnapshot();
+    }
+
+    @GET
+    @Path("/resources/preferences")
+    public Map<String, Object> getPreferences() {
+        return telemetryService.getTravelerPreferences();
+    }
+
+    @GET
+    @Path("/prompts")
+    public Map<String, Object> listPrompts() {
+        return Map.of(
+            "serverName", ClusterTelemetryService.SERVER_NAME,
+            "prompts", telemetryService.listPrompts()
+        );
+    }
 }

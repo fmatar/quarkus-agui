@@ -107,6 +107,7 @@ flowchart TD
 | **ADR-001** | Multi-Module Maven & SvelteKit Clean Architecture for AG-UI Protocol | `technical` | `accepted` | #1 | CAP-01, CAP-03, CAP-04, CAP-07 |
 | **ADR-002** | Example-First Tri-Protocol (AG-UI + MCP + A2A) Evolution on Java 25, Quarkus 3.40.1.1 & pnpm | `product` | `accepted` | #2 | CAP-01, CAP-02, CAP-03, CAP-04, CAP-05, CAP-06, CAP-07, CAP-08 |
 | **ADR-003** | Multi-Extension BOM and Concentric Transport Architecture (Core, SSE, WebSockets) | `technical` | `accepted` | #30 | CAP-06, CAP-07 |
+| **ADR-004** | Nomad Cultural Concierge Showcase & Modular Svelte 5 AG-UI Component Kit | `product` | `accepted` | #32 | CAP-01, CAP-02, CAP-03, CAP-04, CAP-08 |
 
 ---
 

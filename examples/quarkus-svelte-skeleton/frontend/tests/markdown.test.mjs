@@ -7,7 +7,7 @@ test('renderMarkdownToHtml formats headings and bold text', () => {
 	const html = renderMarkdownToHtml(md);
 	assert.ok(html.includes('<h1'));
 	assert.ok(html.includes('SRE Audit Report</h1>'));
-	assert.ok(html.includes('<strong class="font-semibold text-white">Status:</strong>'));
+	assert.ok(html.includes('<strong class="font-semibold text-[#141413]">Status:</strong>'));
 });
 
 test('renderMarkdownToHtml wraps code blocks with language badge and copy action', () => {

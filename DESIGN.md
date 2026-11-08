@@ -1,31 +1,31 @@
 ---
-name: Quarkus AG-UI SRE Workbench
-description: High-density Cyber-Industrial Telemetry & SRE Command Center for Tri-Protocol (AG-UI + MCP + A2A) Agent Operations
+name: Nomad Concierge & AG-UI Protocol Studio
+description: Precision Travel Instrument & Editorial Concierge Desk for Tri-Protocol (AG-UI + MCP + A2A) Agent Operations
 colors:
-  bg-substrate: "#070a12"
-  bg-panel: "rgba(13, 19, 34, 0.75)"
-  bg-panel-dark: "rgba(11, 15, 25, 0.95)"
-  border-subtle: "rgba(56, 189, 248, 0.12)"
-  border-glow: "rgba(56, 189, 248, 0.25)"
-  accent-cyan: "#38bdf8"
-  accent-emerald: "#10b981"
-  accent-amber: "#f59e0b"
-  accent-crimson: "#ef4444"
-  accent-purple: "#a855f7"
-  text-primary: "#f1f5f9"
-  text-secondary: "#94a3b8"
-  text-muted: "#64748b"
+  bg-substrate: "#f6f5f2"
+  bg-rail: "#efece6"
+  bg-surface: "#ffffff"
+  bg-subtle: "#f3f0ea"
+  border-hairline: "#e4e0d8"
+  border-strong: "#cfcac0"
+  accent-terracotta: "#c84b31"
+  accent-emerald: "#1f6e50"
+  accent-indigo: "#3b4cca"
+  accent-ochre: "#9a4a06"
+  ink-primary: "#141413"
+  ink-secondary: "#575551"
+  ink-muted: "#78756f"
 typography:
   display:
-    fontFamily: "ui-sans-serif, system-ui, -apple-system, sans-serif"
+    fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif"
     fontSize: "1.125rem"
     fontWeight: 700
-    lineHeight: 1.2
+    lineHeight: 1.25
   body:
-    fontFamily: "ui-sans-serif, system-ui, -apple-system, sans-serif"
+    fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif"
     fontSize: "0.875rem"
     fontWeight: 400
-    lineHeight: 1.5
+    lineHeight: 1.55
   mono:
     fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
     fontSize: "0.75rem"
@@ -44,25 +44,20 @@ spacing:
   xl: "32px"
 ---
 
-# Design System: Cyber-Industrial Telemetry & SRE Command
+# Design System: Precision Travel Instrument & Editorial Concierge Desk (`seed:cdbde94d37fa1dbc`)
 
 ## 1. Visual Theme & Philosophy
-The Workbench rejects generic enterprise SaaS white-box templates in favor of a specialized **Cyber-Industrial SRE Command Center**. Deep obsidian glass substrates (`#070a12`, `rgba(13, 19, 34, 0.75)`), sub-pixel hairline cyan borders (`rgba(56, 189, 248, 0.12)`), and high-contrast phosphor accents deliver clear scanability under high operational density.
+The Nomad Concierge & AG-UI Protocol Studio replaces dark neon cyber-terminal clichés with a **Precision Travel Instrument & Editorial Concierge Desk** inspired by Dieter Rams industrial clarity and Monocle travel folios. Warm anodized alabaster (`#F6F5F2`), brushed limestone (`#EFECE6`), and crisp paper surfaces (`#FFFFFF`) frame deep obsidian typography (`#141413`), 1px `#E4E0D8` structural borders, and tabular numerals.
 
-## 2. Color Roles & Signal Conduits
-- **Substrate & Panels**: `#070a12` with subtle grid mesh backdrop; frosted glass cards with 16px backdrop blur.
-- **Emerald (`#10b981`)**: Healthy microservices, running agent threads, connected SSE protocols.
-- **Cyan (`#38bdf8`)**: Live AG-UI text tokens, MCP tool dispatch markers, active interactive focus.
-- **Amber (`#f59e0b`)**: CPU throttling, latency alerts, and Human-in-the-Loop (HITL) authorization gates.
-- **Crimson (`#ef4444`)**: Service outages, degraded pods, and stream abort triggers.
-- **Purple (`#a855f7`)**: Sentinel-A2A multi-agent delegations and concentric architecture audits.
+## 2. Color Roles & Protocol Taxonomy Signals
+- **Ground & Surfaces**: Anodized Alabaster (`#F6F5F2`), Brushed Limestone Rail (`#EFECE6`), Crisp Paper Cards (`#FFFFFF`).
+- **Obsidian Ink (`#141413`) & Muted Stone (`#575551`)**: High-contrast (`>10:1` primary, `>6.5:1` secondary) editorial legibility.
+- **Terracotta (`#C84B31`)**: Primary interactive selection, active streaming indicators, and Human-in-the-Loop (`hitl:approval`) gates.
+- **Forest Emerald (`#1F6E50`)**: Verified A2A specialist delegations (`a2a:discovery`, `a2a:task`, `a2a:artifact`) and Frankfurter FX audits.
+- **Indigo (`#3B4CCA`)**: MCP capabilities (`mcp:tool`, `mcp:resource`, `mcp:prompt`, `mcp:sampling`).
+- **Warm Ochre (`#9A4A06`)**: Client-side AG-UI surface rendering (`tool:ui`).
 
-## 3. Surface Layout (3-Pane Responsive Architecture)
-1. **Left Rail (`ClusterStatePanel`)**: Live cluster topology, pod replicas, CPU gauges, replica +/- controls, and 1-click A2A specialist skill delegations.
-2. **Center Stage (`AgentChatContainer` + `MessageHistory` + `StreamRenderer`)**: Stream timeline displaying user instructions, OpsPilot responses, embedded MCP tool pills, A2A delegation cards, live typing tokens, and prominent HITL approval modals.
-3. **Right Drawer (`ProtocolInspector`)**: SSE protocol wire inspector with filter tabs (`ALL`, `AG-UI`, `MCP`, `A2A`), formatted JSON payloads, and frame counters.
-
-## 4. Components & Interactive Affordances
-- **Action Buttons**: Sleek gradient fills with subtle micro-scale clicks (`active:scale-95`).
-- **Telemetry Cards**: Frosted cards with hairline borders (`ring-1 ring-slate-800/80`) illuminating with cyan micro-glow on hover.
-- **Approval Gate**: High-visibility amber-to-slate gradient card with authorization and abort buttons.
+## 3. Surface Layout (3-Pane Responsive Studio)
+1. **Left Rail (`ClusterStatePanel` — Trip Dossier)**: Live destination dossier (Open-Meteo weather, Frankfurter FX conversion, sanctuary budget gauge, active local soundtrack) and 1-click destination/A2A triggers.
+2. **Center Stage (`AgentChatContainer` + `MessageHistory` + `AssistantTurn` + `InputBar`)**: Unified `AssistantTurn` component kit rendering `ReasoningAccordion`, `ExecutionTimeline` with `ProtocolCallBadge`, `StreamingMarkdownBody`, `MediaGallery` (image lightbox, playable 30s `.m4a`/`.mp3` iTunes preview, video reel, PDF folio), `StructuredResponseBlock` (`single_select` / `multi_select` choice cards + actions), `HitlApprovalCard`, `TurnFooter`, and `/` slash-command autocomplete.
+3. **Right Drawer (`ProtocolInspector`)**: Collapsible AG-UI SSE wire inspector with protocol filters (`ALL`, `AG-UI`, `MCP`, `A2A`), `ProtocolCallBadge` tags, and expandable JSON payloads.

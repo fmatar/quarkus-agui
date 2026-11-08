@@ -61,7 +61,7 @@ class OpsPilotOrchestratorServiceTest {
         assertNotNull(service.agUiA2aBridge());
         List<?> mcpTools = (List<?>) catalog.get("mcpTools");
         assertNotNull(mcpTools);
-        assertEquals(3, mcpTools.size());
+        assertEquals(6, mcpTools.size());
 
         Map<?, ?> a2aAgent = (Map<?, ?>) catalog.get("a2aAgent");
         assertNotNull(a2aAgent);
@@ -231,5 +231,60 @@ class OpsPilotOrchestratorServiceTest {
 
         assertEquals("", AgentResource.unwrapSseDataPayload(null));
         assertEquals("{\"id\":\"1\"}", AgentResource.unwrapSseDataPayload("data: {\"id\":\"1\"}\n\n"));
+    }
+
+    @Test
+    void nomadDestinationAndSlashCommandWorkflowsEmitCallTypesMediaInteractionAndHitlBooking() {
+        // 1. /kyoto cultural concierge workflow
+        AgentRunRequest kyotoReq = new AgentRunRequest(
+                "thread-nomad-kyoto",
+                "/kyoto Curate a 4-night cultural and musical escape in Kyoto",
+                Map.of("city", "Kyoto"),
+                "deterministic");
+        List<String> kyotoFrames = service.streamRun(kyotoReq).collect().asList().await().indefinitely();
+        assertTrue(kyotoFrames.stream().anyMatch(f -> f.contains("\"callType\":\"mcp:prompt\"")));
+        assertTrue(kyotoFrames.stream().anyMatch(f -> f.contains("\"callType\":\"mcp:resource\"")));
+        assertTrue(kyotoFrames.stream().anyMatch(f -> f.contains("\"callType\":\"mcp:tool\"")));
+        assertTrue(kyotoFrames.stream().anyMatch(f -> f.contains("\"callType\":\"tool:function\"")));
+        assertTrue(kyotoFrames.stream().anyMatch(f -> f.contains("\"callType\":\"tool:ui\"")));
+        assertTrue(kyotoFrames.stream().anyMatch(f -> f.contains("\"callType\":\"a2a:discovery\"")));
+        assertTrue(kyotoFrames.stream().anyMatch(f -> f.contains("\"callType\":\"a2a:task\"")));
+        assertTrue(kyotoFrames.stream().anyMatch(f -> f.contains("\"callType\":\"a2a:artifact\"")));
+        assertTrue(kyotoFrames.stream().anyMatch(f -> f.contains("\"media\":")));
+        assertTrue(kyotoFrames.stream().anyMatch(f -> f.contains("\"interaction\":")));
+        assertTrue(kyotoFrames.stream().anyMatch(f -> f.contains("\"sources\":")));
+        assertTrue(kyotoFrames.stream().anyMatch(f -> f.contains("\"followUps\":")));
+
+        // 2. /lisbon and /reykjavik and /choices and /media slash commands
+        List<String> lisbonFrames = service.streamRun(new AgentRunRequest(
+                "thread-lisbon", "/lisbon Fado & coastal walk", Map.of(), "deterministic")).collect().asList().await().indefinitely();
+        assertTrue(lisbonFrames.stream().anyMatch(f -> f.contains("Lisbon")));
+
+        List<String> reykjavikFrames = service.streamRun(new AgentRunRequest(
+                "thread-reykjavik", "/reykjavik Aurora & geothermal", Map.of(), "deterministic")).collect().asList().await().indefinitely();
+        assertTrue(reykjavikFrames.stream().anyMatch(f -> f.contains("Reykjavik")));
+
+        List<String> choicesFrames = service.streamRun(new AgentRunRequest(
+                "thread-choices", "/choices multi_select neighborhoods", Map.of(), "deterministic")).collect().asList().await().indefinitely();
+        assertTrue(choicesFrames.stream().anyMatch(f -> f.contains("multi_select")));
+
+        // 3. Nomad HITL luxury sanctuary booking gate (/hitl or reserve > $1,500) + approval with modifiedArgs
+        AgentRunRequest hitlBookingReq = new AgentRunRequest(
+                "thread-nomad-hitl",
+                "/hitl Reserve Hoshinoya Arashiyama Pavilion in Kyoto for 4 nights ($1840)",
+                Map.of("city", "Kyoto"),
+                "deterministic");
+        List<String> hitlFrames = service.streamRun(hitlBookingReq).collect().asList().await().indefinitely();
+        assertTrue(hitlFrames.stream().anyMatch(f -> f.contains("\"callType\":\"hitl:approval\"")));
+        assertTrue(hitlFrames.getLast().contains("\"status\":\"interrupted\""));
+
+        AgentApprovalRequest approveWithMods = new AgentApprovalRequest(
+                "thread-nomad-hitl",
+                true,
+                "Confirmed 5 nights with private tea pavilion",
+                Map.of("nights", 5, "costUsd", 2150.0, "city", "Kyoto"));
+        List<String> resumedFrames = service.approvePendingAction(approveWithMods).collect().asList().await().indefinitely();
+        assertTrue(resumedFrames.stream().anyMatch(f -> f.contains("updateTripItinerary")));
+        assertTrue(resumedFrames.getLast().contains("\"status\":\"completed\""));
     }
 }

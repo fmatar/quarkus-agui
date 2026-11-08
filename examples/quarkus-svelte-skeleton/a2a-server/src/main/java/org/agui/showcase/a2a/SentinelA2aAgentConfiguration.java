@@ -64,6 +64,20 @@ public class SentinelA2aAgentConfiguration {
                                 .description("Synthesizes horizontal scaling and circuit-breaker remediation blueprints")
                                 .tags(List.of("sre", "remediation", "scaling"))
                                 .examples(List.of("Plan remediation for degraded payment-service"))
+                                .build(),
+                        org.a2aproject.sdk.spec.AgentSkill.builder()
+                                .id("convert-and-audit-budget")
+                                .name("Convert Currency & Audit Travel Budget")
+                                .description("Converts trip budgets via Frankfurter FX API (USD -> JPY/EUR/ISK) and verifies reservation limits")
+                                .tags(List.of("nomad", "currency", "frankfurter", "budget"))
+                                .examples(List.of("Convert Kyoto trip budget to JPY"))
+                                .build(),
+                        org.a2aproject.sdk.spec.AgentSkill.builder()
+                                .id("verify-travel-advisory")
+                                .name("Verify Destination Country & Cultural Advisory")
+                                .description("Resolves destination country metadata, timezone, and cultural readiness via REST Countries API")
+                                .tags(List.of("nomad", "advisory", "countries"))
+                                .examples(List.of("Verify travel advisory for Lisbon Portugal"))
                                 .build()))
                 .build();
     }
@@ -91,6 +105,12 @@ public class SentinelA2aAgentConfiguration {
         }
         if (lower.contains("remediat") || lower.contains("incident") || lower.contains("scale")) {
             return "plan-incident-remediation";
+        }
+        if (lower.contains("currency") || lower.contains("budget") || lower.contains("jpy") || lower.contains("eur") || lower.contains("isk") || lower.contains("fx")) {
+            return "convert-and-audit-budget";
+        }
+        if (lower.contains("advisory") || lower.contains("visa") || lower.contains("country") || lower.contains("japan") || lower.contains("portugal") || lower.contains("iceland")) {
+            return "verify-travel-advisory";
         }
         return "audit-clean-architecture";
     }

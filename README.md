@@ -97,10 +97,10 @@ To expose any LangChain4j `TokenStream`, MCP tool client, or A2A sub-agent over 
 | **`quarkus-ag-ui-runtime`** | [`quarkus-extension/runtime/`](quarkus-extension/runtime/pom.xml) | Quarkus 3.40.1.1 Starter aggregating Core + SSE + WebSockets | Zero-config starter |
 | **`quarkus-ag-ui-deployment`** | [`quarkus-extension/deployment/`](quarkus-extension/deployment/pom.xml) | Quarkus Build-Time Processor + Dev UI + GraalVM 25 | $< 50\text{MB}$ Native Image RSS |
 | **`quarkus-ag-ui-integration-tests`** | [`quarkus-extension/integration-tests/`](quarkus-extension/integration-tests/pom.xml) | `@QuarkusTest` & `@QuarkusIntegrationTest` | Ephemeral port `0` isolation |
-| **`mcp-server` (`:8081`)** | [`examples/quarkus-svelte-skeleton/mcp-server/`](examples/quarkus-svelte-skeleton/mcp-server/pom.xml) | Quarkus 3.40.1.1 MCP Tool & Resource Server | `inspectClusterHealth`, `queryServiceLogs`, `scaleDeployment` |
-| **`a2a-server` (`:8082`)** | [`examples/quarkus-svelte-skeleton/a2a-server/`](examples/quarkus-svelte-skeleton/a2a-server/pom.xml) | Quarkus 3.40.1.1 A2A Specialist Auditor (`Sentinel-A2A-Auditor`) | `/.well-known/agent.json` & `/api/a2a/tasks/send` |
-| **`backend` (`:8080`)** | [`examples/quarkus-svelte-skeleton/backend/`](examples/quarkus-svelte-skeleton/backend/pom.xml) | Quarkus 3.40.1.1 + Dual-Mode LangChain4j OpsPilot Orchestrator | Real-time `\n\n` AG-UI SSE frame streaming |
-| **`frontend` (`:5173`)** | [`examples/quarkus-svelte-skeleton/frontend/`](examples/quarkus-svelte-skeleton/frontend/) | `pnpm` + SvelteKit (Svelte 5 Runes) + `@skeletonlabs/skeleton-svelte` + `@lucide/svelte` | 3-Pane AG-UI Workbench + Inspector |
+| **`mcp-server` (`:8081`)** | [`examples/quarkus-svelte-skeleton/mcp-server/`](examples/quarkus-svelte-skeleton/mcp-server/pom.xml) | Quarkus 3.40.1.1 Nomad & Cluster MCP Server | `fetchCityWeather`, `discoverLocalCultureAndMedia`, `updateTripItinerary`, MCP Resources & Prompts |
+| **`a2a-server` (`:8082`)** | [`examples/quarkus-svelte-skeleton/a2a-server/`](examples/quarkus-svelte-skeleton/a2a-server/pom.xml) | Quarkus 3.40.1.1 A2A Specialist Server (`Sentinel-A2A-Auditor`) | `convert-and-audit-budget` (Frankfurter FX), `verify-travel-advisory` (REST Countries), Architecture & Security Audits |
+| **`backend` (`:8080`)** | [`examples/quarkus-svelte-skeleton/backend/`](examples/quarkus-svelte-skeleton/backend/pom.xml) | Quarkus 3.40.1.1 Nomad Concierge & OpsPilot Orchestrator | Enriched AG-UI SSE streaming (`callType` taxonomy, `media`, `interaction`, `sources`, `followUps`, HITL) |
+| **`frontend` (`:5173`)** | [`examples/quarkus-svelte-skeleton/frontend/`](examples/quarkus-svelte-skeleton/frontend/) | `pnpm` + SvelteKit (Svelte 5 Runes) + Modular AG-UI Component Kit (`src/lib/components/agui/*`) | 3-Pane Nomad Concierge Studio + Wire Telemetry Inspector |
 
 ---
 
@@ -112,4 +112,4 @@ To expose any LangChain4j `TokenStream`, MCP tool client, or A2A sub-agent over 
 - **C4 Architecture**: [`docs/specs/C4_ARCHITECTURE.md`](docs/specs/C4_ARCHITECTURE.md)
 - **Living Kanban & Traceability Matrix**: [`docs/KANBAN.md`](docs/KANBAN.md)
 - **Causal Decision Lineage**: [`docs/DECISION_MAP.md`](docs/DECISION_MAP.md)
-- **Architectural Decision Records (ADRs)**: [`docs/adr/ADR-001`](docs/adr/ADR-001-multi-module-maven-sveltekit-clean-architecture-fo.md), [`docs/adr/ADR-002`](docs/adr/ADR-002-example-first-tri-protocol-ag-ui-mcp-a2a-evoluti.md), [`docs/adr/ADR-003`](docs/adr/ADR-003-multi-extension-bom-and-concentric-transport-arc.md)
+- **Architectural Decision Records (ADRs)**: [`docs/adr/ADR-001`](docs/adr/ADR-001-multi-module-maven-sveltekit-clean-architecture-fo.md), [`docs/adr/ADR-002`](docs/adr/ADR-002-example-first-tri-protocol-ag-ui-mcp-a2a-evoluti.md), [`docs/adr/ADR-003`](docs/adr/ADR-003-multi-extension-bom-and-concentric-transport-arc.md), [`docs/adr/ADR-004`](docs/adr/ADR-004-nomad-concierge-and-svelte5-agui-component-kit.md)
