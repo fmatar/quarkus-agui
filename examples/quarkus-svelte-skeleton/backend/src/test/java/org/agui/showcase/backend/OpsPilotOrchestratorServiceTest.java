@@ -298,5 +298,14 @@ class OpsPilotOrchestratorServiceTest {
         assertNotNull(freeFormChat.a2aHandoffs().get(1).get("taskId"));
         assertFalse(freeFormChat.a2aHandoffs().get(0).get("taskId").equals(freeFormChat.a2aHandoffs().get(1).get("taskId")));
         assertTrue(freeFormChat.reply().contains("Tokyo"));
+
+        // 5. Natural language city extraction ("in Oaxaca") + weather-focused prompt
+        AgentChatResponse oaxacaWeather = service.executeChat(new AgentRunRequest(
+                "thread-oaxaca",
+                "What should I pack for the weather in Oaxaca?",
+                Map.of(),
+                "deterministic"));
+        assertTrue(oaxacaWeather.reply().contains("Oaxaca"));
+        assertTrue(oaxacaWeather.reply().contains("Meteorological"));
     }
 }

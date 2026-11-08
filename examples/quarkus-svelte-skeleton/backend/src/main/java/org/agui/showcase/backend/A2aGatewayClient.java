@@ -69,10 +69,10 @@ public class A2aGatewayClient {
 
         final String finalTargetService = targetService;
         final int finalTargetReplicas = targetReplicas;
-        final String city = lowerPrompt.contains("lisbon") ? "Lisbon"
-                : (lowerPrompt.contains("reykjavik") ? "Reykjavik" : "Kyoto");
-        final String currency = "Lisbon".equals(city) ? "EUR" : ("Reykjavik".equals(city) ? "ISK" : "JPY");
-        final double fxRate = "Lisbon".equals(city) ? 0.92 : ("Reykjavik".equals(city) ? 137.80 : 151.40);
+        final String city = resolveNomadCityFromPrompt(prompt);
+        final String country = resolveCountryForCity(city);
+        final String currency = resolveCurrencyForCountry(country);
+        final double fxRate = resolveDefaultRateForCurrency(currency);
 
         Map<String, Object> report = switch (resolvedSkill) {
             case "audit-clean-architecture" -> Map.of(
@@ -108,11 +108,11 @@ public class A2aGatewayClient {
                             city, 3200.0 * fxRate, currency, fxRate, currency));
             case "verify-travel-advisory" -> Map.of(
                     "city", city,
-                    "country", "Lisbon".equals(city) ? "Portugal" : ("Reykjavik".equals(city) ? "Iceland" : "Japan"),
+                    "country", country,
                     "advisoryStatus", "CLEAR — All Cultural & Transit Corridors Open",
                     "verdict", String.format(
-                            "REST Countries & Advisory verified for %s: visa-free entry active, local cultural venues open.",
-                            city));
+                            "REST Countries & Advisory verified for %s (%s): visa-free entry active, local cultural venues open.",
+                            city, country));
             default -> throw new IllegalArgumentException("Unsupported A2A skill: " + resolvedSkill);
         };
 
@@ -143,5 +143,110 @@ public class A2aGatewayClient {
         } catch (Exception ignored) {
             return fallbackSummary;
         }
+    }
+
+    static String resolveNomadCityFromPrompt(String prompt) {
+        String raw = prompt == null ? "" : prompt.replaceFirst("^/[a-z]+\\s*", "").trim();
+        String lower = raw.toLowerCase(java.util.Locale.ROOT);
+        if (lower.contains("lisbon") || lower.contains("portugal") || lower.contains("fado") || lower.contains("alfama")) {
+            return "Lisbon";
+        }
+        if (lower.contains("reykjavik") || lower.contains("iceland") || lower.contains("aurora") || lower.contains("harpa")) {
+            return "Reykjavik";
+        }
+        if (lower.contains("kyoto") || lower.contains("koto") || lower.contains("arashiyama") || lower.contains("gion")) {
+            return "Kyoto";
+        }
+        for (String candidate : List.of(
+                "Tokyo", "Osaka", "Paris", "Rome", "Milan", "Florence", "Venice", "Barcelona", "Madrid",
+                "London", "Edinburgh", "Berlin", "Munich", "Vienna", "Zurich", "Geneva", "Amsterdam",
+                "Copenhagen", "Stockholm", "Oslo", "Prague", "Athens", "Istanbul", "Marrakech", "Cairo",
+                "Seoul", "Bangkok", "Singapore", "Taipei", "Sydney", "Melbourne", "New York", "Oaxaca",
+                "Mexico City", "Buenos Aires")) {
+            if (lower.contains(candidate.toLowerCase(java.util.Locale.ROOT))) {
+                return candidate;
+            }
+        }
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile(
+                "\\b(?:in|to|for|visit|explore|around|about)\\s+([A-Z][a-zA-Z]+(?:\\s+[A-Z][a-zA-Z]+)?)\\b")
+                .matcher(raw);
+        if (m.find()) {
+            return m.group(1).trim();
+        }
+        return "Kyoto";
+    }
+
+    static String resolveCountryForCity(String city) {
+        return switch (city.toLowerCase(java.util.Locale.ROOT)) {
+            case "lisbon", "porto" -> "Portugal";
+            case "reykjavik" -> "Iceland";
+            case "tokyo", "kyoto", "osaka" -> "Japan";
+            case "paris", "lyon", "nice" -> "France";
+            case "rome", "milan", "florence", "venice" -> "Italy";
+            case "barcelona", "madrid", "seville" -> "Spain";
+            case "london", "edinburgh" -> "United Kingdom";
+            case "berlin", "munich" -> "Germany";
+            case "vienna" -> "Austria";
+            case "zurich", "geneva" -> "Switzerland";
+            case "amsterdam" -> "Netherlands";
+            case "copenhagen" -> "Denmark";
+            case "stockholm" -> "Sweden";
+            case "oslo" -> "Norway";
+            case "prague" -> "Czechia";
+            case "athens" -> "Greece";
+            case "istanbul" -> "Turkey";
+            case "marrakech" -> "Morocco";
+            case "cairo" -> "Egypt";
+            case "seoul" -> "South Korea";
+            case "bangkok" -> "Thailand";
+            case "singapore" -> "Singapore";
+            case "sydney", "melbourne" -> "Australia";
+            case "new york", "san francisco" -> "United States";
+            case "oaxaca", "mexico city" -> "Mexico";
+            case "buenos aires" -> "Argentina";
+            default -> "Japan";
+        };
+    }
+
+    static String resolveCurrencyForCountry(String country) {
+        return switch (country) {
+            case "Portugal", "France", "Italy", "Spain", "Germany", "Austria", "Netherlands", "Greece" -> "EUR";
+            case "Iceland" -> "ISK";
+            case "United Kingdom" -> "GBP";
+            case "Switzerland" -> "CHF";
+            case "Denmark" -> "DKK";
+            case "Sweden" -> "SEK";
+            case "Norway" -> "NOK";
+            case "Czechia" -> "CZK";
+            case "Turkey" -> "TRY";
+            case "Morocco" -> "MAD";
+            case "South Korea" -> "KRW";
+            case "Thailand" -> "THB";
+            case "Singapore" -> "SGD";
+            case "Australia" -> "AUD";
+            case "United States" -> "USD";
+            case "Mexico" -> "MXN";
+            default -> "JPY";
+        };
+    }
+
+    static double resolveDefaultRateForCurrency(String currency) {
+        return switch (currency.toUpperCase(java.util.Locale.ROOT)) {
+            case "EUR" -> 0.92;
+            case "ISK" -> 137.80;
+            case "GBP" -> 0.79;
+            case "CHF" -> 0.88;
+            case "DKK" -> 6.86;
+            case "SEK" -> 10.45;
+            case "NOK" -> 10.65;
+            case "KRW" -> 1380.0;
+            case "THB" -> 34.50;
+            case "SGD" -> 1.34;
+            case "AUD" -> 1.52;
+            case "MXN" -> 19.80;
+            case "MAD" -> 9.90;
+            case "USD" -> 1.00;
+            default -> 151.40;
+        };
     }
 }

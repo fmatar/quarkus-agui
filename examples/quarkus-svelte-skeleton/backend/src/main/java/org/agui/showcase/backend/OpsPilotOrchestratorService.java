@@ -234,7 +234,9 @@ public class OpsPilotOrchestratorService {
 
         frames.add(formatSseEvent(threadId, "STATUS", Map.of(
                 "phase", "executing_mcp_tool",
-                "message", "Invoking MCP tool on quarkus-mcp-cluster-ops (:8081)")));
+                "message", nomadFlow
+                        ? "Querying live Open-Meteo weather, Wikipedia cultural dossier & Apple iTunes 30s audio preview"
+                        : "Invoking MCP tool on quarkus-mcp-cluster-ops (:8081)")));
 
         for (Map<String, Object> call : chat.mcpCalls()) {
             String callId = "call-" + UUID.randomUUID().toString().substring(0, 8);
@@ -380,87 +382,148 @@ public class OpsPilotOrchestratorService {
             }
 
             StringBuilder toolContext = new StringBuilder();
-            boolean shouldInvokeMcp = containsAny(lower, List.of("health", "cluster", "status", "service", "log", "scale", "replica"));
-            boolean shouldInvokeA2a = containsAny(lower, List.of("audit", "arch", "ring", "security", "posture", "cve", "remediat", "incident", "scale"));
+            boolean nomadFlow = isNomadPrompt(lower);
+            String city = detectNomadCity(prompt, request);
 
-            if (shouldInvokeMcp) {
-                String toolName = "inspectClusterHealth";
-                Map<String, Object> args = Map.of();
-                if (lower.contains("log")) {
-                    toolName = "queryServiceLogs";
-                    args = Map.of("serviceName", lower.contains("order") ? "order-processor" : "payment-gateway");
-                } else if (lower.contains("scale")) {
-                    toolName = "scaleDeployment";
-                    int replicas = extractReplicas(lower, 4);
-                    String svc = "payment-gateway";
-                    if (lower.contains("order-processor") || lower.contains("order")) {
-                        svc = "order-processor";
-                    } else if (lower.contains("identity-provider") || lower.contains("identity")) {
-                        svc = "identity-provider";
-                    } else if (lower.contains("payment-service") || lower.contains("payment")) {
-                        svc = "payment-gateway";
-                    }
-                    args = Map.of("serviceName", svc, "replicas", replicas);
-                }
-
-                String callId = "call-" + UUID.randomUUID().toString().substring(0, 8);
+            if (nomadFlow) {
                 emitter.emit(formatSseEvent(threadId, "STATUS", Map.of(
                         "phase", "executing_mcp_tool",
-                        "message", "Invoking MCP tool `" + toolName + "` on quarkus-mcp-cluster-ops (:8081)")));
-                emitter.emit(formatSseEvent(threadId, "TOOL_CALL", Map.of(
-                        "callId", callId,
-                        "tool", toolName,
-                        "protocol", "MCP",
-                        "server", "quarkus-mcp-cluster-ops (:8081)",
-                        "args", args)));
+                        "message", "Querying live Open-Meteo weather, Wikipedia cultural dossier & Apple iTunes 30s audio preview for " + city)));
 
-                Map<String, Object> callResult = mcpClient.callTool(toolName, args);
-                emitter.emit(formatSseEvent(threadId, "TOOL_RESULT", Map.of(
-                        "callId", callId,
-                        "tool", toolName,
-                        "protocol", "MCP",
-                        "result", callResult.get("result"))));
-                emitter.emit(formatSseEvent(threadId, "STATE_DELTA", Map.of(
-                        "clusterState", mcpClient.readClusterState(),
-                        "lastTool", toolName)));
-                toolContext.append("\n[MCP Tool Executed (`").append(toolName).append("` on :8081)]: ")
-                        .append(objectMapper.writeValueAsString(callResult.get("result")));
-            }
-
-            if (shouldInvokeA2a) {
-                String skillId = "audit-clean-architecture";
-                if (containsAny(lower, List.of("security", "posture", "cve"))) {
-                    skillId = "assess-security-posture";
-                } else if (containsAny(lower, List.of("remediat", "incident", "scale"))) {
-                    skillId = "plan-incident-remediation";
+                for (Map<String, Object> call : List.of(
+                        mcpClient.callTool("fetchCityWeather", Map.of("city", city)),
+                        mcpClient.callTool("discoverLocalCultureAndMedia", Map.of("destination", city, "genre", "traditional")))) {
+                    String callId = "call-" + UUID.randomUUID().toString().substring(0, 8);
+                    emitter.emit(formatSseEvent(threadId, "TOOL_CALL", Map.of(
+                            "callId", callId,
+                            "tool", call.get("toolName"),
+                            "protocol", "MCP",
+                            "callType", "mcp:tool",
+                            "server", call.get("server"),
+                            "args", call.get("arguments"))));
+                    emitter.emit(formatSseEvent(threadId, "TOOL_RESULT", Map.of(
+                            "callId", callId,
+                            "tool", call.get("toolName"),
+                            "protocol", "MCP",
+                            "callType", "mcp:tool",
+                            "result", call.get("result"))));
+                    toolContext.append("\n[MCP `").append(call.get("toolName")).append("`]: ")
+                            .append(objectMapper.writeValueAsString(call.get("result")));
                 }
-                emitter.emit(formatSseEvent(threadId, "STATUS", Map.of(
-                        "phase", "delegating_a2a_task",
-                        "message", "Delegating `" + skillId + "` to Sentinel-A2A-Auditor (:8082)")));
-                String stepId = "a2a-" + UUID.randomUUID().toString().substring(0, 8);
-                emitter.emit(formatSseEvent(threadId, "STEP_STARTED", Map.of(
-                        "stepId", stepId,
-                        "protocol", "A2A",
-                        "agentName", "Sentinel-A2A-Auditor",
-                        "skillId", skillId)));
-                Map<String, Object> handoff = a2aClient.delegateTask(stepId, skillId, prompt);
-                emitter.emit(formatSseEvent(threadId, "STEP_FINISHED", Map.of(
-                        "stepId", stepId,
-                        "protocol", "A2A",
-                        "agentName", handoff.get("agentName"),
-                        "skillId", skillId,
-                        "summary", handoff.get("summary"),
-                        "report", handoff.get("report"))));
-                toolContext.append("\n[A2A Specialist (`Sentinel-A2A-Auditor` :8082, skill `").append(skillId).append("`)]: ")
-                        .append(handoff.get("summary")).append(" | Report: ")
-                        .append(objectMapper.writeValueAsString(handoff.get("report")));
+
+                for (String skillId : List.of("convert-and-audit-budget", "verify-travel-advisory")) {
+                    String stepId = "a2a-" + skillId.substring(0, 3) + "-" + UUID.randomUUID().toString().substring(0, 6);
+                    emitter.emit(formatSseEvent(threadId, "STEP_STARTED", Map.of(
+                            "stepId", stepId,
+                            "protocol", "A2A",
+                            "callType", "a2a:task",
+                            "agentName", "Sentinel-A2A-Auditor",
+                            "skillId", skillId)));
+                    Map<String, Object> handoff = a2aClient.delegateTask(stepId, skillId, prompt);
+                    emitter.emit(formatSseEvent(threadId, "STEP_FINISHED", Map.of(
+                            "stepId", stepId,
+                            "protocol", "A2A",
+                            "callType", "a2a:task",
+                            "agentName", handoff.get("agentName"),
+                            "skillId", skillId,
+                            "summary", handoff.get("summary"),
+                            "report", handoff.get("report"))));
+                    toolContext.append("\n[A2A `").append(skillId).append("`]: ")
+                            .append(handoff.get("summary"));
+                }
+
+                Map<String, Object> stateDelta = new LinkedHashMap<>();
+                stateDelta.put("clusterState", mcpClient.readClusterState());
+                stateDelta.put("lastTool", "discoverLocalCultureAndMedia");
+                stateDelta.put("lastA2aSkill", "convert-and-audit-budget");
+                stateDelta.put("media", buildTurnMedia(city));
+                stateDelta.put("interaction", buildTurnInteraction(city, lower));
+                stateDelta.put("sources", buildTurnSources(city));
+                stateDelta.put("followUps", buildTurnFollowUps(city));
+                emitter.emit(formatSseEvent(threadId, "STATE_DELTA", stateDelta));
+            } else {
+                boolean shouldInvokeMcp = containsAny(lower, List.of("health", "cluster", "status", "service", "log", "scale", "replica"));
+                boolean shouldInvokeA2a = containsAny(lower, List.of("audit", "arch", "ring", "security", "posture", "cve", "remediat", "incident", "scale"));
+
+                if (shouldInvokeMcp) {
+                    String toolName = "inspectClusterHealth";
+                    Map<String, Object> args = Map.of();
+                    if (lower.contains("log")) {
+                        toolName = "queryServiceLogs";
+                        args = Map.of("serviceName", lower.contains("order") ? "order-processor" : "payment-gateway");
+                    } else if (lower.contains("scale")) {
+                        toolName = "scaleDeployment";
+                        int replicas = extractReplicas(lower, 4);
+                        String svc = "payment-gateway";
+                        if (lower.contains("order-processor") || lower.contains("order")) {
+                            svc = "order-processor";
+                        } else if (lower.contains("identity-provider") || lower.contains("identity")) {
+                            svc = "identity-provider";
+                        } else if (lower.contains("payment-service") || lower.contains("payment")) {
+                            svc = "payment-gateway";
+                        }
+                        args = Map.of("serviceName", svc, "replicas", replicas);
+                    }
+
+                    String callId = "call-" + UUID.randomUUID().toString().substring(0, 8);
+                    emitter.emit(formatSseEvent(threadId, "STATUS", Map.of(
+                            "phase", "executing_mcp_tool",
+                            "message", "Invoking MCP tool `" + toolName + "` on quarkus-mcp-cluster-ops (:8081)")));
+                    emitter.emit(formatSseEvent(threadId, "TOOL_CALL", Map.of(
+                            "callId", callId,
+                            "tool", toolName,
+                            "protocol", "MCP",
+                            "server", "quarkus-mcp-cluster-ops (:8081)",
+                            "args", args)));
+
+                    Map<String, Object> callResult = mcpClient.callTool(toolName, args);
+                    emitter.emit(formatSseEvent(threadId, "TOOL_RESULT", Map.of(
+                            "callId", callId,
+                            "tool", toolName,
+                            "protocol", "MCP",
+                            "result", callResult.get("result"))));
+                    emitter.emit(formatSseEvent(threadId, "STATE_DELTA", Map.of(
+                            "clusterState", mcpClient.readClusterState(),
+                            "lastTool", toolName)));
+                    toolContext.append("\n[MCP Tool Executed (`").append(toolName).append("` on :8081)]: ")
+                            .append(objectMapper.writeValueAsString(callResult.get("result")));
+                }
+
+                if (shouldInvokeA2a) {
+                    String skillId = "audit-clean-architecture";
+                    if (containsAny(lower, List.of("security", "posture", "cve"))) {
+                        skillId = "assess-security-posture";
+                    } else if (containsAny(lower, List.of("remediat", "incident", "scale"))) {
+                        skillId = "plan-incident-remediation";
+                    }
+                    emitter.emit(formatSseEvent(threadId, "STATUS", Map.of(
+                            "phase", "delegating_a2a_task",
+                            "message", "Delegating `" + skillId + "` to Sentinel-A2A-Auditor (:8082)")));
+                    String stepId = "a2a-" + UUID.randomUUID().toString().substring(0, 8);
+                    emitter.emit(formatSseEvent(threadId, "STEP_STARTED", Map.of(
+                            "stepId", stepId,
+                            "protocol", "A2A",
+                            "agentName", "Sentinel-A2A-Auditor",
+                            "skillId", skillId)));
+                    Map<String, Object> handoff = a2aClient.delegateTask(stepId, skillId, prompt);
+                    emitter.emit(formatSseEvent(threadId, "STEP_FINISHED", Map.of(
+                            "stepId", stepId,
+                            "protocol", "A2A",
+                            "agentName", handoff.get("agentName"),
+                            "skillId", skillId,
+                            "summary", handoff.get("summary"),
+                            "report", handoff.get("report"))));
+                    toolContext.append("\n[A2A Specialist (`Sentinel-A2A-Auditor` :8082, skill `").append(skillId).append("`)]: ")
+                            .append(handoff.get("summary")).append(" | Report: ")
+                            .append(objectMapper.writeValueAsString(handoff.get("report")));
+                }
             }
 
             emitter.emit(formatSseEvent(threadId, "STATUS", Map.of(
                     "phase", "streaming_llm_tokens",
                     "message", "Streaming live tokens from Ollama (" + ollamaModel + ")")));
 
-            boolean streamedFromOllama = streamTokensFromOllama(threadId, ollamaModel, prompt, toolContext.toString(), emitter);
+            boolean streamedFromOllama = streamTokensFromOllama(threadId, ollamaModel, prompt, toolContext.toString(), nomadFlow, emitter);
             if (!streamedFromOllama) {
                 AgentChatResponse fallback = executeChat(request);
                 List<String> fallbackFrames = new ArrayList<>();
@@ -488,18 +551,22 @@ public class OpsPilotOrchestratorService {
             String model,
             String userPrompt,
             String toolContext,
+            boolean nomadFlow,
             MultiEmitter<? super String> emitter) {
         try {
-            String systemPrompt = "You are OpsPilot, a concise Quarkus SRE & Clean Architecture AI Agent speaking the AG-UI protocol. "
-                    + "You orchestrate an MCP Server on port 8081 (tools: inspectClusterHealth, queryServiceLogs, scaleDeployment) "
-                    + "and an A2A Specialist Agent on port 8082 (Sentinel-A2A-Auditor: audit-clean-architecture, assess-security-posture, plan-incident-remediation). "
-                    + "Current cluster state: " + objectMapper.writeValueAsString(mcpClient.readClusterState()) + ". "
-                    + "Keep responses clear, direct, and under 4 sentences.";
+            String systemPrompt = nomadFlow
+                    ? "You are Nomad, an authoritative, refined AI Travel, Architecture, Weather, FX & Local Culture Concierge. "
+                            + "Ground your response in the live Open-Meteo weather, Wikipedia cultural summary, Apple iTunes 30-second local music preview, "
+                            + "Frankfurter FX conversion, and REST Countries travel advisory provided in the context. "
+                            + "Format your response with a clean Markdown heading and concise bullet points covering atmospheric architecture, local listening/music culture, and practical weather/currency insights."
+                    : "You are OpsPilot, a concise Quarkus SRE & Clean Architecture AI Agent speaking the AG-UI protocol. "
+                            + "Current cluster state: " + objectMapper.writeValueAsString(mcpClient.readClusterState()) + ". "
+                            + "Keep responses clear, direct, and under 4 sentences.";
 
             String augmentedUserPrompt = toolContext.isEmpty()
                     ? userPrompt
-                    : userPrompt + "\n\nLive Telemetry & Agent Results:" + toolContext
-                            + "\nSummarize the findings and answer the operator concisely.";
+                    : userPrompt + "\n\nLive API Telemetry & Specialist Dossier:" + toolContext
+                            + "\nSynthesize these live findings into an atmospheric, practical response.";
 
             Map<String, Object> payload = new LinkedHashMap<>();
             payload.put("model", model);
@@ -784,7 +851,8 @@ public class OpsPilotOrchestratorService {
     }
 
     private String detectNomadCity(String prompt, AgentRunRequest request) {
-        String lower = prompt == null ? "" : prompt.toLowerCase(Locale.ROOT);
+        String raw = prompt == null ? "" : prompt.replaceFirst("^/[a-z]+\\s*", "").trim();
+        String lower = raw.toLowerCase(Locale.ROOT);
         if (lower.contains("lisbon") || lower.contains("portugal") || lower.contains("fado") || lower.contains("alfama")) {
             return "Lisbon";
         }
@@ -794,8 +862,23 @@ public class OpsPilotOrchestratorService {
         if (lower.contains("kyoto") || lower.contains("koto") || lower.contains("arashiyama") || lower.contains("gion")) {
             return "Kyoto";
         }
-        for (String candidate : List.of("Tokyo", "Paris", "Rome", "Barcelona", "London", "Seoul", "New York", "Marrakech", "Istanbul", "Vienna")) {
+        for (String candidate : List.of(
+                "Tokyo", "Osaka", "Paris", "Rome", "Milan", "Florence", "Venice", "Barcelona", "Madrid",
+                "London", "Edinburgh", "Berlin", "Munich", "Vienna", "Zurich", "Geneva", "Amsterdam",
+                "Copenhagen", "Stockholm", "Oslo", "Prague", "Athens", "Istanbul", "Marrakech", "Cairo",
+                "Seoul", "Bangkok", "Singapore", "Taipei", "Sydney", "Melbourne", "New York", "Oaxaca",
+                "Mexico City", "Buenos Aires")) {
             if (lower.contains(candidate.toLowerCase(Locale.ROOT))) {
+                return candidate;
+            }
+        }
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile(
+                "\\b(?:in|to|for|visit|explore|around|about)\\s+([A-Z][a-zA-Z]+(?:\\s+[A-Z][a-zA-Z]+)?)\\b")
+                .matcher(raw);
+        while (m.find()) {
+            String candidate = m.group(1).trim();
+            String candLower = candidate.toLowerCase(Locale.ROOT);
+            if (!List.of("the", "this", "that", "my", "our", "your", "local", "weekend", "evening", "morning", "night").contains(candLower)) {
                 return candidate;
             }
         }
@@ -808,6 +891,10 @@ public class OpsPilotOrchestratorService {
                     && !activeCity.isBlank()) {
                 return activeCity.trim();
             }
+        }
+        Map<String, Object> currentTrip = activeNomadTripState();
+        if (currentTrip.get("activeCity") instanceof String currentCity && !currentCity.isBlank()) {
+            return currentCity.trim();
         }
         return "Kyoto";
     }
@@ -826,6 +913,8 @@ public class OpsPilotOrchestratorService {
         Map<String, Object> trip = activeNomadTripState();
         Object tempObj = trip.getOrDefault("temperatureC", 18.4);
         String condition = String.valueOf(trip.getOrDefault("weatherCondition", "Clear Cedar & Autumn Mist"));
+        String country = String.valueOf(trip.getOrDefault("country", A2aGatewayClient.resolveCountryForCity(city)));
+        String currency = String.valueOf(trip.getOrDefault("currency", A2aGatewayClient.resolveCurrencyForCountry(country)));
         String summaryExtract = trip.get("culturalSummary") instanceof String s && !s.isBlank() ? s : null;
         String trackTitle = "Haru no Umi (Spring Sea — Koto & Shakuhachi)";
         String artistName = "Kyoto Koto Consort";
@@ -835,27 +924,40 @@ public class OpsPilotOrchestratorService {
         }
 
         String cleanedPrompt = userPrompt == null ? "" : userPrompt.replaceFirst("^/[a-z]+\\s*", "").trim();
-        String promptNote = (!cleanedPrompt.isBlank() && !cleanedPrompt.equalsIgnoreCase(city))
-                ? " tailored to *\"" + cleanedPrompt + "\"*"
-                : "";
+        String lowerPrompt = cleanedPrompt.toLowerCase(Locale.ROOT);
 
         String header = switch (city.toLowerCase(Locale.ROOT)) {
-            case "lisbon" -> "### Lisbon — Atlantic Light, Azulejos & Evening Fado";
-            case "reykjavik" -> "### Reykjavik — Basalt Geometry, Geothermal Steam & Nordic Strings";
-            case "kyoto" -> "### Kyoto — Cedar Machiya, Moss Gardens & Koto Acoustics";
-            default -> "### " + city + " — Architectural, Cultural & Acoustic Dossier";
+            case "lisbon" -> "### Lisbon, Portugal — Atlantic Light, Azulejos & Evening Fado";
+            case "reykjavik" -> "### Reykjavik, Iceland — Basalt Geometry, Geothermal Steam & Nordic Strings";
+            case "kyoto" -> "### Kyoto, Japan — Cedar Machiya, Moss Gardens & Koto Acoustics";
+            case "tokyo" -> "### Tokyo, Japan — Modernist Timber, Vinyl Kissaten & Late-Night Culinary Craft";
+            default -> "### " + city + ", " + country + " — Architectural, Cultural & Acoustic Dossier";
         };
 
         StringBuilder md = new StringBuilder(header).append("\n\n");
-        md.append("I have synchronized your **").append(city).append(" Cultural Dossier**").append(promptNote)
-                .append(" via `nomad-mcp-concierge (:8081)` and verified currency & entry advisories with `Sentinel-A2A-Auditor (:8082)`.\n\n");
         if (summaryExtract != null) {
             md.append(summaryExtract).append("\n\n");
         }
-        md.append("- **Live Open-Meteo Forecast:** `").append(tempObj).append("°C` — ").append(condition).append("\n");
-        md.append("- **Soundtrack Preview (iTunes 30s):** *").append(trackTitle).append("* — ").append(artistName).append("\n");
-        md.append("- **A2A FX & Budget Verdict:** ").append(handoff.get("summary")).append("\n\n");
-        md.append("Use the inline player below to sample the 30-second audio preview or select your preferred neighborhood sequence.");
+
+        if (lowerPrompt.contains("music") || lowerPrompt.contains("soundtrack") || lowerPrompt.contains("listen") || lowerPrompt.contains("vinyl") || lowerPrompt.contains("song")) {
+            md.append("#### Acoustic & Listening Curation\n");
+            md.append("- **Featured 30s Apple iTunes Preview:** *").append(trackTitle).append("* by **").append(artistName).append("** (playable in the media card below)\n");
+            md.append("- **Evening Listening Atmosphere:** Pair an intimate analog listening session in **").append(city)
+                    .append("** with current outdoor conditions (`").append(tempObj).append("°C`, ").append(condition).append(").\n");
+            md.append("- **Budget & Currency Note:** ").append(handoff.get("summary")).append("\n\n");
+        } else if (lowerPrompt.contains("weather") || lowerPrompt.contains("pack") || lowerPrompt.contains("forecast") || lowerPrompt.contains("temperature")) {
+            md.append("#### Live Meteorological & Packing Briefing\n");
+            md.append("- **Current Open-Meteo Telemetry:** `").append(tempObj).append("°C` — **").append(condition).append("** in ").append(city).append("\n");
+            md.append("- **Recommended Layers:** Breathable architectural layers suited for `").append(tempObj)
+                    .append("°C` walking corridors between morning sanctuary visits and evening acoustic venues.\n");
+            md.append("- **Local Soundtrack:** *").append(trackTitle).append("* — ").append(artistName).append("\n\n");
+        } else {
+            md.append("- **Live Open-Meteo Weather:** `").append(tempObj).append("°C` — ").append(condition).append("\n");
+            md.append("- **Local Soundtrack (30s Preview):** *").append(trackTitle).append("* — **").append(artistName).append("**\n");
+            md.append("- **Currency & FX Settlement (").append(currency).append("):** ").append(handoff.get("summary")).append("\n\n");
+        }
+
+        md.append("Sample the live 30-second audio preview below or select a curated ").append(city).append(" experience sequence to refine your itinerary.");
         return md.toString();
     }
 
@@ -890,8 +992,8 @@ public class OpsPilotOrchestratorService {
         return List.of(
                 Map.of(
                         "type", "image",
-                        "title", city + " Architectural & Cultural Panorama",
-                        "subtitle", "Wikipedia REST API v1 • Curated Landmark Frame",
+                        "title", city + " — Architectural & Cultural Landmark",
+                        "subtitle", "Wikipedia REST API • Live Destination Photography",
                         "url", heroUrl),
                 Map.of(
                         "type", "audio",
@@ -899,22 +1001,12 @@ public class OpsPilotOrchestratorService {
                         "subtitle", artist + " • Apple iTunes 30s Preview",
                         "url", previewUrl,
                         "artworkUrl", artworkUrl,
-                        "durationSeconds", 30),
-                Map.of(
-                        "type", "video",
-                        "title", city + " Golden Hour Aerial Study",
-                        "subtitle", "1080p Field Reel • Slow Architecture",
-                        "url", "https://www.w3schools.com/html/mov_bbb.mp4",
-                        "posterUrl", fallbackHeroUrl),
-                Map.of(
-                        "type", "document",
-                        "title", "Nomad-" + city + "-Concierge-Folio.pdf",
-                        "subtitle", "Signed A2A & MCP Itinerary Dossier • 4 Pages",
-                        "url", "https://en.wikipedia.org/wiki/" + city));
+                        "durationSeconds", 30));
     }
 
     private Map<String, Object> buildTurnInteraction(String city, String lower) {
         String mode = lower.contains("multi") ? "multi_select" : "single_select";
+        String currency = A2aGatewayClient.resolveCurrencyForCountry(A2aGatewayClient.resolveCountryForCity(city));
         List<Map<String, Object>> options = switch (city.toLowerCase(Locale.ROOT)) {
             case "lisbon" -> List.of(
                     Map.of("id", "alfama-fado", "label", "Alfama Historic Fado & Miradouro Walk", "description", "Intimate acoustic Fado tavern + Santa Luzia tile terrace", "badge", "Evening • €140"),
@@ -924,14 +1016,22 @@ public class OpsPilotOrchestratorService {
                     Map.of("id", "harpa-acoustics", "label", "Harpa Basalt Hall & Nordic Strings Rehearsal", "description", "Private acoustic walk-through + harbor listening lounge", "badge", "Evening • $210"),
                     Map.of("id", "sky-lagoon", "label", "Geothermal Cliffside Ritual & Turf Architecture", "description", "Seven-step oceanfront thermal soak + slow dining", "badge", "Afternoon • $280"),
                     Map.of("id", "snaefellsnes", "label", "Snæfellsnes Volcanic Fjord Expedition", "description", "Black church at Búðir + glacier ridge photography", "badge", "Full Day • $390"));
-            default -> List.of(
+            case "kyoto" -> List.of(
                     Map.of("id", "arashiyama-dawn", "label", "Arashiyama Bamboo & Katsura Imperial Villa", "description", "Early-morning moss garden architectural walk + matcha pavilion", "badge", "Dawn • ¥24,000"),
                     Map.of("id", "gion-koto", "label", "Gion Machiya Private Koto & Kaiseki Evening", "description", "11-course seasonal Kaiseki with live Koto performance", "badge", "Evening • ¥38,000"),
                     Map.of("id", "higashiyama-ceramics", "label", "Higashiyama Raku Kiln & Vinyl Listening Bar", "description", "Private ceramic studio visit + analog jazz kissaten", "badge", "Late Night • ¥19,000"));
+            case "tokyo" -> List.of(
+                    Map.of("id", "aoyama-architecture", "label", "Omotesando & Aoyama Modernist Architecture Walk", "description", "Nezu Museum bamboo courtyard + Tadao Ando concrete galleries", "badge", "Morning • ¥18,000"),
+                    Map.of("id", "shibuya-kissaten", "label", "Shibuya & Daikanyama Vinyl Kissaten Circuit", "description", "Hi-fi tube-amplifier jazz listening bars + artisanal coffee", "badge", "Evening • ¥22,000"),
+                    Map.of("id", "ginza-omakase", "label", "Ginza Counter Omakase & Tsukiji Craft Study", "description", "Intimate 10-seat seasonal Edomae tasting + sake pairing", "badge", "Night • ¥42,000"));
+            default -> List.of(
+                    Map.of("id", city.toLowerCase(Locale.ROOT) + "-arch", "label", city + " Architectural Landmarks & Courtyards", "description", "Private curator-led walk through historic and modernist districts in " + city, "badge", "Morning • " + currency),
+                    Map.of("id", city.toLowerCase(Locale.ROOT) + "-music", "label", city + " Evening Acoustic & Vinyl Listening Session", "description", "Intimate neighborhood performance and local culinary tasting in " + city, "badge", "Evening • " + currency),
+                    Map.of("id", city.toLowerCase(Locale.ROOT) + "-atelier", "label", city + " Artisan Craft & Slow Dining Sanctuary", "description", "Studio visit with local makers followed by seasonal chef's table", "badge", "Full Day • " + currency));
         };
         List<Map<String, Object>> actions = List.of(
-                Map.of("id", "act-hitl-book", "label", "Hold Sanctuary Suite ($1,840 — HITL Gate)", "prompt", "/hitl Reserve " + city + " Sanctuary Suite for 4 nights ($1840)", "variant", "primary"),
-                Map.of("id", "act-fx-audit", "label", "Re-run Frankfurter FX Audit (:8082)", "prompt", "/a2a Convert and audit " + city + " budget", "variant", "secondary"));
+                Map.of("id", "act-hitl-book", "label", "Hold " + city + " Sanctuary Suite ($1,840)", "prompt", "Reserve " + city + " Sanctuary Suite for 4 nights ($1840)", "variant", "primary"),
+                Map.of("id", "act-fx-audit", "label", "Audit " + currency + " Exchange Rate & Budget", "prompt", "Convert and audit " + city + " trip budget in " + currency, "variant", "secondary"));
         return Map.of(
                 "id", "choice-" + city.toLowerCase(Locale.ROOT),
                 "mode", mode,
@@ -943,7 +1043,7 @@ public class OpsPilotOrchestratorService {
     private List<Map<String, Object>> buildTurnSources(String city) {
         return List.of(
                 Map.of("title", "Open-Meteo Weather API (" + city + ")", "url", "https://api.open-meteo.com", "protocol", "mcp:tool"),
-                Map.of("title", "Wikipedia REST API v1 (" + city + ")", "url", "https://en.wikipedia.org/wiki/" + city, "protocol", "mcp:tool"),
+                Map.of("title", "Wikipedia REST API v1 (" + city + ")", "url", "https://en.wikipedia.org/wiki/" + city.replace(" ", "_"), "protocol", "mcp:tool"),
                 Map.of("title", "Apple iTunes 30s Audio Preview", "url", "https://itunes.apple.com", "protocol", "mcp:tool"),
                 Map.of("title", "Frankfurter ECB FX Reference", "url", "https://api.frankfurter.dev", "protocol", "a2a:task"),
                 Map.of("title", "REST Countries Advisory v3.1", "url", "https://restcountries.com", "protocol", "a2a:artifact"));
@@ -951,11 +1051,11 @@ public class OpsPilotOrchestratorService {
 
     private List<String> buildTurnFollowUps(String city) {
         return List.of(
-                "/kyoto Curate a 4-night Kyoto architectural & Koto escape",
-                "/lisbon Plan an evening Fado & azulejo walk in Lisbon",
-                "/reykjavik Design an aurora & geothermal itinerary in Reykjavik",
-                "/hitl Reserve " + city + " Sanctuary Pavilion ($1,840 — HITL Gate)",
-                "/choices Compare multi-select neighborhood experiences in " + city);
+                "Recommend intimate evening music venues and listening bars in " + city,
+                "What should I pack for the current weather in " + city + "?",
+                "Reserve " + city + " Sanctuary Suite for 4 nights",
+                "Plan a 4-night architectural & Fado escape in Lisbon",
+                "Design an aurora, basalt architecture & geothermal itinerary in Reykjavik");
     }
 
     private void appendTextDeltaFrames(List<String> frames, String threadId, String text) {

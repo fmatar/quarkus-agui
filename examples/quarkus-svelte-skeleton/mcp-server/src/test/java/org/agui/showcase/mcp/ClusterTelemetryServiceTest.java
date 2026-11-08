@@ -113,23 +113,32 @@ class ClusterTelemetryServiceTest {
         assertEquals("Reykjavik", reykjavikCulture.get("destination"));
         assertNotNull(reykjavikCulture.get("audioTrack"));
 
-        // 2. Live JSON response parsing path via httpFetcher
+        // 2. Live JSON response parsing path via httpFetcher (including Open-Meteo geocoding for unseeded city)
         service.httpFetcher = url -> {
+            if (url.contains("/v1/search")) {
+                return "{\"results\":[{\"name\":\"Oaxaca\",\"country\":\"Mexico\",\"latitude\":17.0732,\"longitude\":-96.7266}]}";
+            }
             if (url.contains("/v1/forecast")) {
-                return "{\"current\":{\"temperature_2m\":19.6,\"wind_speed_10m\":11.2,\"weather_code\":1}}";
+                return "{\"current\":{\"temperature_2m\":24.8,\"wind_speed_10m\":9.4,\"weather_code\":2}}";
             }
             if (url.contains("/api/rest_v1/page/summary/")) {
-                return "{\"title\":\"Kyoto\",\"extract\":\"Kyoto is the cultural heart of Japan.\",\"thumbnail\":{\"source\":\"https://upload.wikimedia.org/kyoto.jpg\"}}";
+                return "{\"title\":\"Kyoto\",\"extract\":\"Kyoto is the cultural heart of Japan.\",\"originalimage\":{\"source\":\"https://upload.wikimedia.org/kyoto-hd.jpg\"},\"thumbnail\":{\"source\":\"https://upload.wikimedia.org/kyoto.jpg\"}}";
             }
             if (url.contains("/search")) {
-                return "{\"resultCount\":1,\"results\":[{\"trackName\":\"Sakura Koto\",\"artistName\":\"Kyoto Ensemble\",\"previewUrl\":\"https://audio-ssl.itunes.apple.com/sakura.m4a\",\"artworkUrl100\":\"https://is1-ssl.mzstatic.com/art.jpg\"}]}";
+                return "{\"resultCount\":1,\"results\":[{\"trackName\":\"Sakura Koto\",\"artistName\":\"Kyoto Ensemble\",\"previewUrl\":\"https://audio-ssl.itunes.apple.com/sakura.m4a\",\"artworkUrl100\":\"https://is1-ssl.mzstatic.com/100x100bb.jpg\"}]}";
             }
             return null;
         };
 
+        Map<String, Object> geocodedWeather = service.fetchCityWeather("Oaxaca");
+        assertEquals("Oaxaca", geocodedWeather.get("city"));
+        assertEquals("Mexico", geocodedWeather.get("country"));
+        assertEquals(24.8, geocodedWeather.get("temperatureC"));
+        assertEquals("Partly Clouded Horizon", geocodedWeather.get("condition"));
+
         Map<String, Object> liveWeather = service.fetchCityWeather("Kyoto");
         assertEquals("Kyoto", liveWeather.get("city"));
-        assertEquals(19.6, liveWeather.get("temperatureC"));
+        assertEquals(24.8, liveWeather.get("temperatureC"));
         assertEquals("api.open-meteo.com", liveWeather.get("source"));
 
         Map<String, Object> liveCulture = service.discoverLocalCultureAndMedia("Kyoto", "koto");

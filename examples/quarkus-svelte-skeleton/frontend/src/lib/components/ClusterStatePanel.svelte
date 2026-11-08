@@ -53,7 +53,7 @@
 				<h2 class="text-sm font-bold tracking-tight text-[#141413]">Trip Dossier</h2>
 			</div>
 			<span class="rounded-md bg-white px-2 py-0.5 font-mono text-[10px] font-medium text-[#1F6E50] border border-[#E4E0D8]">
-				MCP :8081
+				Live Itinerary
 			</span>
 		</div>
 
@@ -150,37 +150,37 @@
 			</div>
 		</div>
 
-		<!-- A2A Specialist Actions -->
+		<!-- Concierge Actions -->
 		<div class="space-y-2 pt-1">
-			<h3 class="text-xs font-bold text-[#141413]">A2A Specialist Verifications (:8082)</h3>
+			<h3 class="text-xs font-bold text-[#141413]">Concierge Verifications</h3>
 			<div class="space-y-1.5">
 				<button
 					type="button"
 					disabled={isStreaming}
-					onclick={() => onTriggerSkill?.(`/a2a Convert ${nomadTrip.activeCity} budget to ${nomadTrip.currency} and audit limits`)}
-					class="flex w-full items-center justify-between rounded-xl border border-[#E4E0D8] bg-white px-3 py-2 text-left font-mono text-[11px] text-[#141413] transition-colors hover:border-[#1F6E50] disabled:opacity-40"
+					onclick={() => onTriggerSkill?.(`Convert ${nomadTrip.activeCity} budget to ${nomadTrip.currency} and audit limits`)}
+					class="flex w-full items-center justify-between rounded-xl border border-[#E4E0D8] bg-white px-3 py-2 text-left text-xs font-medium text-[#141413] transition-colors hover:border-[#1F6E50] disabled:opacity-40"
 				>
-					<span class="truncate">convert-and-audit-budget</span>
+					<span class="truncate">Audit FX & Trip Budget ({nomadTrip.currency})</span>
 					<ShieldCheck class="size-3.5 text-[#1F6E50] shrink-0" />
 				</button>
 
 				<button
 					type="button"
 					disabled={isStreaming}
-					onclick={() => onTriggerSkill?.(`/a2a Verify travel advisory for ${nomadTrip.activeCity}`)}
-					class="flex w-full items-center justify-between rounded-xl border border-[#E4E0D8] bg-white px-3 py-2 text-left font-mono text-[11px] text-[#141413] transition-colors hover:border-[#1F6E50] disabled:opacity-40"
+					onclick={() => onTriggerSkill?.(`Verify travel advisory and entry readiness for ${nomadTrip.activeCity}`)}
+					class="flex w-full items-center justify-between rounded-xl border border-[#E4E0D8] bg-white px-3 py-2 text-left text-xs font-medium text-[#141413] transition-colors hover:border-[#1F6E50] disabled:opacity-40"
 				>
-					<span class="truncate">verify-travel-advisory</span>
+					<span class="truncate">Verify Entry & Cultural Advisory</span>
 					<ShieldCheck class="size-3.5 text-[#1F6E50] shrink-0" />
 				</button>
 
 				<button
 					type="button"
 					disabled={isStreaming}
-					onclick={() => onTriggerSkill?.(`/hitl Reserve ${nomadTrip.stopTitle} in ${nomadTrip.activeCity} ($1840)`)}
-					class="flex w-full items-center justify-between rounded-xl border border-[#C84B31]/40 bg-[#FBEEE9]/70 px-3 py-2 text-left font-mono text-[11px] font-semibold text-[#C84B31] transition-colors hover:bg-[#FBEEE9] disabled:opacity-40"
+					onclick={() => onTriggerSkill?.(`Reserve ${nomadTrip.stopTitle} in ${nomadTrip.activeCity} for 4 nights ($1840)`)}
+					class="flex w-full items-center justify-between rounded-xl border border-[#C84B31]/40 bg-[#FBEEE9]/70 px-3 py-2 text-left text-xs font-semibold text-[#C84B31] transition-colors hover:bg-[#FBEEE9] disabled:opacity-40"
 				>
-					<span class="truncate">hitl-reserve-sanctuary</span>
+					<span class="truncate">Hold Sanctuary Suite ($1,840)</span>
 					<Server class="size-3.5 shrink-0" />
 				</button>
 			</div>
@@ -188,7 +188,7 @@
 	</div>
 
 	<div class="mt-3 flex items-center justify-between border-t border-[#E4E0D8] pt-2.5 font-mono text-[10px] text-[#575551]">
-		<span>AG-UI + MCP + A2A</span>
-		<span class="font-semibold text-[#1F6E50]">Live Connected</span>
+		<span>Open-Meteo • Wikipedia • iTunes • ECB FX</span>
+		<span class="font-semibold text-[#1F6E50]">Live</span>
 	</div>
 </aside>

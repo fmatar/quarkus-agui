@@ -13,7 +13,7 @@ export const NOMAD_DESTINATIONS = [
 		temperatureC: 18.4,
 		condition: 'Clear Cedar & Autumn Mist',
 		tagline: 'Arashiyama Moss Gardens, Gion Machiya & Koto Acoustics',
-		prompt: '/kyoto Curate a 4-night Kyoto architectural, culinary & Koto music itinerary'
+		prompt: 'Curate a 4-night Kyoto architectural, culinary & Koto music itinerary'
 	},
 	{
 		id: 'lisbon',
@@ -24,7 +24,7 @@ export const NOMAD_DESTINATIONS = [
 		temperatureC: 22.1,
 		condition: 'Atlantic Breeze & Golden Sun',
 		tagline: 'Alfama Azulejo Terraces, Miradouros & Acoustic Fado',
-		prompt: '/lisbon Plan a 4-night Lisbon Fado, azulejo atelier & coastal itinerary'
+		prompt: 'Plan a 4-night Lisbon Fado, azulejo atelier & coastal itinerary'
 	},
 	{
 		id: 'reykjavik',
@@ -35,7 +35,7 @@ export const NOMAD_DESTINATIONS = [
 		temperatureC: 6.2,
 		condition: 'Crisp Sub-Arctic Aurora Sky',
 		tagline: 'Harpa Basalt Geometry, Geothermal Lagoons & Nordic Strings',
-		prompt: '/reykjavik Design a 4-night Reykjavik aurora, geothermal & chamber music escape'
+		prompt: 'Design a 4-night Reykjavik aurora, geothermal & chamber music escape'
 	}
 ];
 
@@ -45,89 +45,89 @@ export const SLASH_COMMANDS = [
 		label: 'Kyoto Cultural & Koto Dossier',
 		description: 'Open-Meteo weather, Wikipedia landmarks, 30s Koto preview & JPY FX audit',
 		protocol: 'MCP + A2A',
-		prompt: '/kyoto Curate a 4-night Kyoto architectural, culinary & Koto music itinerary'
+		prompt: 'Curate a 4-night Kyoto architectural, culinary & Koto music itinerary'
 	},
 	{
 		command: '/lisbon',
 		label: 'Lisbon Fado & Azulejo Walk',
 		description: 'Atlantic weather, Alfama Fado 30s audio preview & EUR budget conversion',
 		protocol: 'MCP + A2A',
-		prompt: '/lisbon Plan a 4-night Lisbon Fado, azulejo atelier & coastal itinerary'
+		prompt: 'Plan a 4-night Lisbon Fado, azulejo atelier & coastal itinerary'
 	},
 	{
 		command: '/reykjavik',
 		label: 'Reykjavik Aurora & Nordic Strings',
 		description: 'Sub-Arctic weather, Harpa acoustics 30s preview & ISK budget audit',
 		protocol: 'MCP + A2A',
-		prompt: '/reykjavik Design a 4-night Reykjavik aurora, geothermal & chamber music escape'
+		prompt: 'Design a 4-night Reykjavik aurora, geothermal & chamber music escape'
 	},
 	{
 		command: '/media',
-		label: 'Showcase Rich Media Gallery',
-		description: 'Render destination photography, 30s iTunes audio player, aerial video & PDF folio',
+		label: 'Destination Photography & Audio Preview',
+		description: 'Fetch Wikipedia landmark photography & 30s Apple iTunes local soundtrack',
 		protocol: 'AG-UI Media',
-		prompt: '/media Showcase Kyoto landmark photography, 30s Koto audio preview and video reel'
+		prompt: 'Showcase Kyoto landmark photography and 30s local Koto audio preview'
 	},
 	{
 		command: '/choices',
 		label: 'Interactive Multi-Select Choices',
-		description: 'Render multi-select neighborhood cards and quick action triggers',
+		description: 'Compare and select multiple neighborhood experiences',
 		protocol: 'AG-UI ChoiceGroup',
-		prompt: '/choices Compare multi_select neighborhood experiences in Kyoto'
+		prompt: 'Compare multi_select neighborhood experiences in Kyoto'
 	},
 	{
 		command: '/mcp',
-		label: 'MCP Prompt, Resource & Tool Trace',
-		description: 'Execute MCP Prompt expansion, Resource read & live weather/culture tools (:8081)',
-		protocol: 'MCP (:8081)',
-		prompt: '/mcp Inspect Kyoto weather, active itinerary resource and cultural media'
+		label: 'Live Weather & Cultural Media',
+		description: 'Query Open-Meteo forecast, Wikipedia REST API & iTunes soundtrack',
+		protocol: 'MCP',
+		prompt: 'Inspect Kyoto weather, active itinerary and cultural media'
 	},
 	{
 		command: '/a2a',
-		label: 'A2A Currency & Advisory Audit',
-		description: 'Discover /.well-known/agent-card.json & run Frankfurter FX audit (:8082)',
-		protocol: 'A2A (:8082)',
-		prompt: '/a2a Convert Kyoto budget to JPY and verify Japan travel advisory'
+		label: 'Currency & Travel Advisory Audit',
+		description: 'Run Frankfurter ECB FX conversion & REST Countries advisory check',
+		protocol: 'A2A',
+		prompt: 'Convert Kyoto budget to JPY and verify Japan travel advisory'
 	},
 	{
 		command: '/hitl',
-		label: 'HITL Sanctuary Booking Gate',
-		description: 'Trigger Human-in-the-Loop approval gate for a >$1,500 sanctuary hold',
+		label: 'Sanctuary Reservation Hold',
+		description: 'Request traveler authorization for a >$1,500 sanctuary suite hold',
 		protocol: 'HITL Gate',
-		prompt: '/hitl Reserve Hoshinoya Arashiyama Pavilion in Kyoto for 4 nights ($1840)'
+		prompt: 'Reserve Hoshinoya Arashiyama Pavilion in Kyoto for 4 nights ($1840)'
 	}
 ];
 
 export const SCENARIO_PRESETS = [
 	{
 		id: 'nomad-kyoto',
-		label: 'Kyoto • Koto & Moss',
+		label: 'Kyoto',
 		protocol: 'MCP + A2A',
-		prompt: '/kyoto Curate a 4-night Kyoto architectural, culinary & Koto music itinerary'
+		prompt: 'Curate a 4-night Kyoto architectural, culinary & Koto music itinerary'
 	},
 	{
 		id: 'nomad-lisbon',
-		label: 'Lisbon • Fado & Sun',
+		label: 'Lisbon',
 		protocol: 'MCP + A2A',
-		prompt: '/lisbon Plan a 4-night Lisbon Fado, azulejo atelier & coastal itinerary'
+		prompt: 'Plan a 4-night Lisbon Fado, azulejo atelier & coastal itinerary'
 	},
 	{
 		id: 'nomad-reykjavik',
-		label: 'Reykjavik • Aurora',
+		label: 'Reykjavik',
 		protocol: 'MCP + A2A',
-		prompt: '/reykjavik Design a 4-night Reykjavik aurora, geothermal & chamber music escape'
+		prompt: 'Design a 4-night Reykjavik aurora, geothermal & chamber music escape'
 	},
 	{
 		id: 'nomad-choices',
-		label: 'Multi-Select Plan',
-		protocol: 'AG-UI Choice',
-		prompt: '/choices Compare multi_select neighborhood experiences in Kyoto'
+		label: 'Tokyo',
+		protocol: 'MCP + A2A',
+		prompt: 'Plan a 4-night Tokyo modernist architecture, vinyl kissaten & culinary itinerary'
 	},
 	{
 		id: 'nomad-hitl',
-		label: 'Hold Sanctuary (HITL)',
+		label: 'Reserve Sanctuary',
 		protocol: 'HITL Approval',
-		prompt: '/hitl Reserve Hoshinoya Arashiyama Pavilion in Kyoto for 4 nights ($1840)'
+		prompt: 'Reserve Hoshinoya Arashiyama Pavilion in Kyoto for 4 nights ($1840)'
 	}
 ];
 
@@ -298,18 +298,18 @@ export function createInitialWorkbenchState(threadId = 'thread-opspilot-1') {
 				role: 'assistant',
 				status: 'completed',
 				content:
-					'### Welcome to Nomad — Architectural & Cultural Concierge\n\nI orchestrate live **Open-Meteo weather**, **Wikipedia landmark dossiers**, and **30-second Apple iTunes local music previews** over **MCP (`:8081`)**, paired with **Frankfurter ECB currency conversion** and **REST Countries travel advisories** via **A2A (`:8082`)**.\n\nSelect a destination dossier above, sample the 30-second Kyoto Koto preview below, or type `/` in the composer to explore every AG-UI protocol capability.',
+					'### Welcome to Nomad — Architectural, Weather & Local Culture Concierge\n\nI curate bespoke travel dossiers for **any city in the world**, combining live **Open-Meteo weather forecasts**, **Wikipedia architectural & cultural context**, and **30-second Apple iTunes local music previews** with **Frankfurter ECB currency conversion** and **REST Countries travel advisories**.\n\nAsk about any destination (e.g., *Tokyo*, *Oaxaca*, *Paris*, *Copenhagen*, *Marrakech*), sample the 30-second Kyoto Koto preview below, or choose an experience sequence to begin.',
 				reasoning: {
 					durationMs: 840,
 					thought:
-						'Initialized tri-protocol concierge session: bound MCP resources (itinerary://active-trip, traveler://preferences) on :8081 and verified A2A AgentCard v1.4.0 on :8082.'
+						'Initialized active Kyoto itinerary dossier with live Open-Meteo telemetry, Wikipedia cultural context, Apple iTunes 30s audio preview, and Frankfurter JPY FX rate.'
 				},
 				timeline: [
 					{
 						id: 'init-mcp-res',
 						callType: 'mcp:resource',
 						title: 'itinerary://active-trip',
-						subtitle: 'nomad-mcp-concierge (:8081)',
+						subtitle: 'Active Trip Dossier',
 						status: 'completed',
 						detail: 'Loaded 4-night Kyoto sanctuary dossier ($1,680 / $3,200 USD allocated)'
 					},
@@ -317,7 +317,7 @@ export function createInitialWorkbenchState(threadId = 'thread-opspilot-1') {
 						id: 'init-mcp-tool',
 						callType: 'mcp:tool',
 						title: 'fetchCityWeather',
-						subtitle: 'Open-Meteo Live API (:8081)',
+						subtitle: 'Open-Meteo Live API',
 						status: 'completed',
 						detail: 'Kyoto • 18.4°C — Clear Cedar & Autumn Mist'
 					},
@@ -325,7 +325,7 @@ export function createInitialWorkbenchState(threadId = 'thread-opspilot-1') {
 						id: 'init-a2a-fx',
 						callType: 'a2a:task',
 						title: 'convert-and-audit-budget',
-						subtitle: 'Sentinel-A2A-Auditor (:8082)',
+						subtitle: 'Frankfurter ECB FX',
 						status: 'completed',
 						detail: 'Frankfurter FX: $3,200 USD = ¥484,480 JPY (1 USD = 151.40 JPY)'
 					}
@@ -335,8 +335,8 @@ export function createInitialWorkbenchState(threadId = 'thread-opspilot-1') {
 				media: [
 					{
 						type: 'image',
-						title: 'Kyoto Architectural & Cultural Panorama',
-						subtitle: 'Arashiyama & Higashiyama • Wikipedia REST API v1',
+						title: 'Kyoto — Architectural & Cultural Landmark',
+						subtitle: 'Wikipedia REST API • Live Destination Photography',
 						url: 'https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?auto=format&fit=crop&w=1000&q=80'
 					},
 					{
@@ -376,14 +376,14 @@ export function createInitialWorkbenchState(threadId = 'thread-opspilot-1') {
 					actions: [
 						{
 							id: 'act-hitl',
-							label: 'Hold Arashiyama Suite ($1,840 — HITL Gate)',
-							prompt: '/hitl Reserve Hoshinoya Arashiyama Pavilion in Kyoto for 4 nights ($1840)',
+							label: 'Hold Arashiyama Suite ($1,840)',
+							prompt: 'Reserve Hoshinoya Arashiyama Pavilion in Kyoto for 4 nights ($1840)',
 							variant: 'primary'
 						},
 						{
 							id: 'act-lisbon',
-							label: 'Switch Dossier to Lisbon (/lisbon)',
-							prompt: '/lisbon Plan a 4-night Lisbon Fado, azulejo atelier & coastal itinerary',
+							label: 'Explore Lisbon Dossier',
+							prompt: 'Plan a 4-night Lisbon Fado, azulejo atelier & coastal itinerary',
 							variant: 'secondary'
 						}
 					]
@@ -395,10 +395,10 @@ export function createInitialWorkbenchState(threadId = 'thread-opspilot-1') {
 					{ title: 'Frankfurter ECB FX', url: 'https://api.frankfurter.dev', protocol: 'a2a:task' }
 				],
 				followUps: [
-					'/lisbon Plan an evening Fado & azulejo walk in Lisbon',
-					'/reykjavik Design an aurora & geothermal itinerary in Reykjavik',
-					'/choices Compare multi-select neighborhood experiences in Kyoto',
-					'/hitl Reserve Hoshinoya Arashiyama Pavilion ($1,840 — HITL Gate)'
+					'Plan an evening Fado & azulejo walk in Lisbon',
+					'Design an aurora & geothermal itinerary in Reykjavik',
+					'Plan a 4-night Tokyo modernist architecture & vinyl kissaten trip',
+					'Reserve Hoshinoya Arashiyama Pavilion in Kyoto for 4 nights'
 				]
 			}
 		],

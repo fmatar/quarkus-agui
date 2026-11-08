@@ -103,6 +103,12 @@ public class SentinelA2aAgentConfiguration {
             return metaSkill.trim();
         }
         String lower = prompt == null ? "" : prompt.toLowerCase(Locale.ROOT);
+        if (lower.contains("[convert-and-audit-budget]")) {
+            return "convert-and-audit-budget";
+        }
+        if (lower.contains("[verify-travel-advisory]")) {
+            return "verify-travel-advisory";
+        }
         if (lower.contains("security") || lower.contains("posture") || lower.contains("mtls") || lower.contains("cve")) {
             return "assess-security-posture";
         }
