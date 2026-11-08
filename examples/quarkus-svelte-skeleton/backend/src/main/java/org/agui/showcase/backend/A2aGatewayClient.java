@@ -125,8 +125,8 @@ public class A2aGatewayClient {
                 "Tokyo", "Osaka", "Paris", "Rome", "Milan", "Florence", "Venice", "Barcelona", "Madrid",
                 "London", "Edinburgh", "Berlin", "Munich", "Vienna", "Zurich", "Geneva", "Amsterdam",
                 "Copenhagen", "Stockholm", "Oslo", "Prague", "Athens", "Istanbul", "Marrakech", "Cairo",
-                "Seoul", "Bangkok", "Singapore", "Taipei", "Sydney", "Melbourne", "New York", "Oaxaca",
-                "Mexico City", "Buenos Aires")) {
+                "Seoul", "Bangkok", "Singapore", "Taipei", "Sydney", "Melbourne", "New York", "Toronto",
+                "Vancouver", "Montreal", "Oaxaca", "Mexico City", "Buenos Aires", "Rio de Janeiro", "Sao Paulo")) {
             if (lower.contains(candidate.toLowerCase(Locale.ROOT))) {
                 return candidate;
             }
@@ -164,10 +164,13 @@ public class A2aGatewayClient {
             case "seoul" -> "South Korea";
             case "bangkok" -> "Thailand";
             case "singapore" -> "Singapore";
+            case "taipei" -> "Taiwan";
             case "sydney", "melbourne" -> "Australia";
             case "new york", "san francisco" -> "United States";
+            case "toronto", "vancouver", "montreal" -> "Canada";
             case "oaxaca", "mexico city" -> "Mexico";
             case "buenos aires" -> "Argentina";
+            case "rio de janeiro", "sao paulo" -> "Brazil";
             default -> "Japan";
         };
     }
@@ -184,12 +187,17 @@ public class A2aGatewayClient {
             case "Czechia" -> "CZK";
             case "Turkey" -> "TRY";
             case "Morocco" -> "MAD";
+            case "Egypt" -> "EGP";
             case "South Korea" -> "KRW";
             case "Thailand" -> "THB";
             case "Singapore" -> "SGD";
+            case "Taiwan" -> "TWD";
             case "Australia" -> "AUD";
             case "United States" -> "USD";
+            case "Canada" -> "CAD";
             case "Mexico" -> "MXN";
+            case "Argentina" -> "ARS";
+            case "Brazil" -> "BRL";
             default -> "JPY";
         };
     }
@@ -203,12 +211,19 @@ public class A2aGatewayClient {
             case "DKK" -> 6.86;
             case "SEK" -> 10.45;
             case "NOK" -> 10.65;
+            case "CZK" -> 23.40;
+            case "TRY" -> 34.20;
             case "KRW" -> 1380.0;
             case "THB" -> 34.50;
             case "SGD" -> 1.34;
+            case "TWD" -> 32.40;
             case "AUD" -> 1.52;
+            case "CAD" -> 1.39;
             case "MXN" -> 19.80;
+            case "ARS" -> 1015.0;
+            case "BRL" -> 5.80;
             case "MAD" -> 9.90;
+            case "EGP" -> 49.20;
             case "USD" -> 1.00;
             default -> 151.40;
         };

@@ -644,12 +644,29 @@ export function reduceAgUiEvent(state, event) {
 			};
 		}
 
-		case 'TEXT_DELTA':
+		case 'TEXT_DELTA': {
+			const chunk = payload.content ?? '';
+			const prevEvent = state.events.at(-1);
+			const coalescedEvents =
+				prevEvent && prevEvent.type === 'TEXT_DELTA'
+					? [
+							...state.events.slice(0, -1),
+							{
+								...prevEvent,
+								payload: {
+									...prevEvent.payload,
+									content: (prevEvent.payload?.content ?? '') + chunk,
+									chunks: (prevEvent.payload?.chunks ?? 1) + 1
+								}
+							}
+						]
+					: nextEvents;
 			return {
 				...state,
-				streamBuffer: state.streamBuffer + (payload.content ?? ''),
-				events: nextEvents
+				streamBuffer: state.streamBuffer + chunk,
+				events: coalescedEvents
 			};
+		}
 
 		case 'RUN_FINISHED': {
 			if (payload.status === 'interrupted') {

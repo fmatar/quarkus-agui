@@ -388,4 +388,27 @@ test('Nomad AG-UI Component Kit reducer populates timeline callTypes, reasoning,
 	});
 	const timelineIds = dupState.activeTurn.timeline.map((item) => item.id);
 	assert.equal(new Set(timelineIds).size, timelineIds.length, 'Timeline IDs must be strictly unique');
+
+	// Consecutive TEXT_DELTA events coalesce in state.events while accumulating streamBuffer
+	let streamState = createInitialWorkbenchState('thread-coalesce');
+	streamState = reduceAgUiEvent(streamState, { id: 'c1', type: 'RUN_STARTED', payload: {} });
+	streamState = reduceAgUiEvent(streamState, {
+		id: 'c2',
+		type: 'TEXT_DELTA',
+		payload: { content: 'Hello ' }
+	});
+	streamState = reduceAgUiEvent(streamState, {
+		id: 'c3',
+		type: 'TEXT_DELTA',
+		payload: { content: 'Oaxaca ' }
+	});
+	streamState = reduceAgUiEvent(streamState, {
+		id: 'c4',
+		type: 'TEXT_DELTA',
+		payload: { content: 'world!' }
+	});
+	assert.equal(streamState.streamBuffer, 'Hello Oaxaca world!');
+	assert.equal(streamState.events.length, 2);
+	assert.equal(streamState.events[1].payload.content, 'Hello Oaxaca world!');
+	assert.equal(streamState.events[1].payload.chunks, 3);
 });

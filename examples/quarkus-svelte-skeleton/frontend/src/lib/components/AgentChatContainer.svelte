@@ -19,16 +19,28 @@
 	import ProtocolInspector from './ProtocolInspector.svelte';
 
 	const LLM_MODES = [
-		{ value: 'deterministic', label: 'Deterministic Concierge Engine (Instant)' },
 		{ value: 'ollama:llama3.2:latest', label: 'Llama 3.2 • Live Local Ollama' },
-		{ value: 'ollama:qwen3.5:4b', label: 'Qwen 3.5 4B • Live Local Ollama' },
-		{ value: 'ollama:ministral-3:8b', label: 'Ministral 8B • Live Local Ollama' }
+		{ value: 'ollama:ministral-3:8b', label: 'Ministral 8B • Live Local Ollama' },
+		{ value: 'ollama:gemma3:latest', label: 'Gemma 3 • Live Local Ollama' },
+		{ value: 'ollama:qwen2.5:3b', label: 'Qwen 2.5 3B • Live Local Ollama' },
+		{ value: 'deterministic', label: 'Deterministic Concierge Engine (Instant)' }
 	];
 
 	let workbench = $state(createInitialWorkbenchState('thread-nomad-1'));
-	let selectedMode = $state('deterministic');
+	let selectedMode = $state('ollama:llama3.2:latest');
 	let abortController = $state(null);
 	let isInspectorOpen = $state(true);
+
+	function resolvePresetPrompt(preset) {
+		if (preset.id === 'nomad-hitl') {
+			const trip = workbench.clusterState?.nomadTrip;
+			const city = trip?.activeCity ?? 'Kyoto';
+			const stopTitle = trip?.stopTitle ?? `${city} Architectural Sanctuary`;
+			const nights = trip?.nights ?? 4;
+			return `Reserve ${stopTitle} in ${city} for ${nights} nights ($1840)`;
+		}
+		return preset.prompt;
+	}
 
 	async function consumeSseResponse(response) {
 		if (!response.ok || !response.body) {
@@ -217,7 +229,7 @@
 					<button
 						type="button"
 						disabled={workbench.isStreaming}
-						onclick={() => runScenarioPrompt(preset.prompt)}
+						onclick={() => runScenarioPrompt(resolvePresetPrompt(preset))}
 						class="group inline-flex items-center gap-1 rounded-xl border border-[#E4E0D8] bg-white px-3 py-1.5 text-xs font-semibold text-[#141413] transition-colors hover:border-[#C84B31] hover:bg-[#FBEEE9]/40 disabled:opacity-40"
 					>
 						<span>{preset.label}</span>
