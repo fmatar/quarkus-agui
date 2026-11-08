@@ -35,6 +35,17 @@ node .agent/scripts/sdlc-engine.mjs product status
 ```
 
 ### 3. Explore the Tri-Protocol Reference Showcase (`examples/quarkus-svelte-skeleton`)
+
+#### Option A: One-Command Docker Compose Stack (Recommended)
+```bash
+# Build & launch all 4 services (:8081 MCP, :8082 A2A, :8080 Orchestrator, :5173 Studio UI)
+docker compose -f examples/quarkus-svelte-skeleton/docker-compose.yml up --build
+
+# Or use the showcase launcher script (--docker default, or --local for host dev mode):
+./examples/quarkus-svelte-skeleton/run-showcase.sh
+```
+
+#### Option B: Local Hot-Reload Dev Mode (4 Terminals)
 ```bash
 # Terminal 1: Start the Quarkus MCP Server (Port 8081)
 ./mvnw -f examples/quarkus-svelte-skeleton/mcp-server/pom.xml quarkus:dev

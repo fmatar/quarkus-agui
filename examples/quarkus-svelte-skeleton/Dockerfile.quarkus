@@ -1,0 +1,49 @@
+# syntax=docker/dockerfile:1
+# Multi-stage Quarkus 3.40.1.1 + Java 25 build for Nomad Tri-Protocol Showcase
+# Build context: repository root (../..)
+
+FROM eclipse-temurin:25-jdk AS builder
+WORKDIR /workspace
+
+COPY mvnw ./
+COPY .mvn ./.mvn
+COPY pom.xml ./
+COPY ag-ui-core ./ag-ui-core
+COPY quarkus-ag-ui-bom ./quarkus-ag-ui-bom
+COPY quarkus-extension ./quarkus-extension
+COPY examples ./examples
+
+RUN chmod +x ./mvnw && \
+    ./mvnw -B package -DskipTests \
+    -pl examples/quarkus-svelte-skeleton/mcp-server,examples/quarkus-svelte-skeleton/a2a-server,examples/quarkus-svelte-skeleton/backend \
+    -am
+
+# ---------------------------------------------------------------------------
+# Stage: mcp-server (:8081)
+# ---------------------------------------------------------------------------
+FROM eclipse-temurin:25-jre AS mcp-server
+WORKDIR /deployments
+COPY --from=builder /workspace/examples/quarkus-svelte-skeleton/mcp-server/target/quarkus-app/ /deployments/
+EXPOSE 8081
+ENV JAVA_OPTS="-Dquarkus.http.host=0.0.0.0 -Dquarkus.http.port=8081"
+ENTRYPOINT ["java", "-Dquarkus.http.host=0.0.0.0", "-Dquarkus.http.port=8081", "-jar", "/deployments/quarkus-run.jar"]
+
+# ---------------------------------------------------------------------------
+# Stage: a2a-server (:8082)
+# ---------------------------------------------------------------------------
+FROM eclipse-temurin:25-jre AS a2a-server
+WORKDIR /deployments
+COPY --from=builder /workspace/examples/quarkus-svelte-skeleton/a2a-server/target/quarkus-app/ /deployments/
+EXPOSE 8082
+ENV JAVA_OPTS="-Dquarkus.http.host=0.0.0.0 -Dquarkus.http.port=8082"
+ENTRYPOINT ["java", "-Dquarkus.http.host=0.0.0.0", "-Dquarkus.http.port=8082", "-jar", "/deployments/quarkus-run.jar"]
+
+# ---------------------------------------------------------------------------
+# Stage: backend (:8080)
+# ---------------------------------------------------------------------------
+FROM eclipse-temurin:25-jre AS backend
+WORKDIR /deployments
+COPY --from=builder /workspace/examples/quarkus-svelte-skeleton/backend/target/quarkus-app/ /deployments/
+EXPOSE 8080
+ENV JAVA_OPTS="-Dquarkus.http.host=0.0.0.0 -Dquarkus.http.port=8080"
+ENTRYPOINT ["java", "-Dquarkus.http.host=0.0.0.0", "-Dquarkus.http.port=8080", "-jar", "/deployments/quarkus-run.jar"]

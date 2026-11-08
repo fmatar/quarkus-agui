@@ -13,10 +13,8 @@
 
 | 📥 Backlog | 📋 Ready | ⚡ In Progress | 🔍 In Review | ✅ Done |
 | :--- | :--- | :--- | :--- | :--- |
-| | #7693: [FEAT] feat(showcase): Nomad AI Travel & Culture Concierge with modular Svelte 5 AG-UI Component Kit and commercial minimalist UI | | | |
-| | #7866: [FEAT] feat(ui): redesign SRE workbench with cyber-industrial aesthetic, markdown parser, and stable viewport | | | |
-| | #2463: [FEAT] feat(ui): redesign SRE workbench with cyber-industrial aesthetic, markdown parser, and stable viewport | | | |
-| | #6464: [FEAT] feat: refactor(a2a): clean up legacy Wave 1 A2A artifacts in favor of official a2a-java 1.4.0.Final server | | | |
+|  |  |  | [#34 feat(showcase): add Docker Compose stack, Dockerfiles, and single-command launcher for Nomad Concierge](https://github.com/fmatar/quarkus-agui/issues/34) | [#32 feat(showcase): Nomad AI Travel & Culture Concierge with modular Svelte 5 AG-UI Component Kit and commercial minimalist UI](https://github.com/fmatar/quarkus-agui/issues/32) |
+|  |  |  |  | [#30 feat(arch): refactor extensions with BOM and concentric Clean Architecture (Core, SSE, WebSockets)](https://github.com/fmatar/quarkus-agui/issues/30) |
 |  |  |  |  | [#9 feat(CAP-08): Migrate Showcase to quarkus-ag-ui Extension & Full E2E + Native Benchmarks](https://github.com/fmatar/quarkus-agui/issues/9) |
 |  |  |  |  | [#8 feat(CAP-07): Extract quarkus-ag-ui-deployment, GraalVM 25 Reflection, Dev UI & Integration Tests](https://github.com/fmatar/quarkus-agui/issues/8) |
 |  |  |  |  | [#7 feat(CAP-06): Extract quarkus-ag-ui-runtime (AgUiBridge, AgUiMcpBridge, AgUiA2aBridge, Mutiny SSE)](https://github.com/fmatar/quarkus-agui/issues/7) |
@@ -33,6 +31,9 @@
 
 | Issue | Status | Priority | Component | Quality Gate | Spec Link |
 | :--- | :--- | :--- | :--- | :--- | :--- |
+| [#34 feat(showcase): add Docker Compose stack, Dockerfiles, and single-command launcher for Nomad Concierge](https://github.com/fmatar/quarkus-agui/issues/34) | `status:in-review` | P1 - High | DevOps | `Passed` | [README.md](README.md) |
+| [#32 feat(showcase): Nomad AI Travel & Culture Concierge with modular Svelte 5 AG-UI Component Kit and commercial minimalist UI](https://github.com/fmatar/quarkus-agui/issues/32) | `status:done` | P0 - Critical | Showcase | `Passed` | [ADR-004](docs/adr/ADR-004-nomad-concierge-and-svelte5-agui-component-kit.md) |
+| [#30 feat(arch): refactor extensions with BOM and concentric Clean Architecture (Core, SSE, WebSockets)](https://github.com/fmatar/quarkus-agui/issues/30) | `status:done` | P0 - Critical | Architecture | `Passed` | [ADR-003](docs/adr/ADR-003-multi-extension-bom-and-concentric-transport-arc.md) |
 | [#9 feat(CAP-08): Migrate Showcase to quarkus-ag-ui Extension & Full E2E + Native Benchmarks](https://github.com/fmatar/quarkus-agui/issues/9) | `status:done` | P1 - High | Architecture | `Passed` | [SPEC-08](docs/specs/cap-08-migrate-showcase-e2e-benchmarks.md) |
 | [#8 feat(CAP-07): Extract quarkus-ag-ui-deployment, GraalVM 25 Reflection, Dev UI & Integration Tests](https://github.com/fmatar/quarkus-agui/issues/8) | `status:done` | P1 - High | DevOps | `Passed` | [SPEC-07](docs/specs/cap-07-extract-quarkus-deployment-it.md) |
 | [#7 feat(CAP-06): Extract quarkus-ag-ui-runtime (AgUiBridge, AgUiMcpBridge, AgUiA2aBridge, Mutiny SSE)](https://github.com/fmatar/quarkus-agui/issues/7) | `status:done` | P1 - High | Backend | `Passed` | [SPEC-06](docs/specs/cap-06-extract-quarkus-runtime.md) |
