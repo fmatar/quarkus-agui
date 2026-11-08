@@ -62,7 +62,12 @@ class ClusterTelemetryServiceTest {
         assertEquals("Reykjavik", reykjavikCulture.get("destination"));
         assertNotNull(reykjavikCulture.get("audioTrack"));
 
+        Map<String, Object> beirutWeather = service.fetchCityWeather("Beirut");
+        assertEquals("Beirut", beirutWeather.get("city"));
+        assertEquals("Lebanon", beirutWeather.get("country"));
+
         for (String city : List.of(
+                "Beirut", "Amman", "Dubai", "Cairo", "Athens", "Rio de Janeiro",
                 "Tokyo", "Paris", "Rome", "Barcelona", "Marrakech", "Oaxaca",
                 "Buenos Aires", "Vienna", "Berlin", "Copenhagen", "Seoul", "Istanbul", "Zurich")) {
             Map<String, Object> c = service.discoverLocalCultureAndMedia(city, "traditional");

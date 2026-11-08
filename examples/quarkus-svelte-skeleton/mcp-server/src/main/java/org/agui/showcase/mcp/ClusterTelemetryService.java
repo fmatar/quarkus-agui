@@ -166,16 +166,25 @@ public class ClusterTelemetryService {
             default -> "Clear Cedar & Autumn Mist";
         };
         String resolvedCountry = switch (lowerCity) {
-            case "lisbon" -> "Portugal";
+            case "lisbon", "porto" -> "Portugal";
             case "reykjavik" -> "Iceland";
-            case "paris" -> "France";
-            case "rome" -> "Italy";
-            case "barcelona" -> "Spain";
-            case "london" -> "United Kingdom";
+            case "paris", "lyon", "nice" -> "France";
+            case "rome", "milan", "florence", "venice" -> "Italy";
+            case "barcelona", "madrid", "seville" -> "Spain";
+            case "london", "edinburgh" -> "United Kingdom";
             case "seoul" -> "South Korea";
-            case "new york" -> "United States";
-            case "marrakech" -> "Morocco";
-            default -> "Japan";
+            case "new york", "san francisco" -> "United States";
+            case "marrakech", "casablanca" -> "Morocco";
+            case "beirut" -> "Lebanon";
+            case "amman" -> "Jordan";
+            case "dubai", "abu dhabi" -> "United Arab Emirates";
+            case "cairo" -> "Egypt";
+            case "istanbul" -> "Turkey";
+            case "oaxaca", "mexico city" -> "Mexico";
+            case "buenos aires" -> "Argentina";
+            case "rio de janeiro", "sao paulo" -> "Brazil";
+            case "kyoto", "tokyo", "osaka" -> "Japan";
+            default -> resolvedCity;
         };
 
         if (!isPreseeded) {
@@ -271,6 +280,12 @@ public class ClusterTelemetryService {
             case "copenhagen" -> "Danish String Quartet";
             case "seoul" -> "Yiruma";
             case "istanbul" -> "Mercan Dede";
+            case "beirut" -> "Fairuz";
+            case "cairo" -> "Umm Kulthum";
+            case "amman" -> "Faraj Abyad";
+            case "dubai", "abu dhabi" -> "Naseer Shamma";
+            case "rio de janeiro", "sao paulo" -> "Antonio Carlos Jobim";
+            case "athens" -> "Mikis Theodorakis";
             default -> resolvedCity;
         };
         String trimmedGenre = genre == null ? "" : genre.trim();
@@ -282,7 +297,8 @@ public class ClusterTelemetryService {
         String wikiExtract = switch (lowerCity) {
             case "lisbon" -> "Lisbon's hillside neighborhoods of Alfama and Chiado blend maritime azulejo tilework, historic tramlines, and intimate Fado houses.";
             case "reykjavik" -> "Reykjavik pairs geothermal coastal lagoons and modernist Nordic architecture at Harpa with an experimental neo-classical music scene.";
-            default -> "Kyoto preserves over a millennium of Zen temple gardens, machiya timber townhouses in Gion, and contemplative koto and shakuhachi acoustics.";
+            case "kyoto" -> "Kyoto preserves over a millennium of Zen temple gardens, machiya timber townhouses in Gion, and contemplative koto and shakuhachi acoustics.";
+            default -> resolvedCity + " blends historic and modernist architecture, neighborhood culinary traditions, and local acoustic heritage.";
         };
         String imageUrl = switch (lowerCity) {
             case "lisbon" -> "https://images.unsplash.com/photo-1513735492246-483525079686?auto=format&fit=crop&w=1000&q=80";

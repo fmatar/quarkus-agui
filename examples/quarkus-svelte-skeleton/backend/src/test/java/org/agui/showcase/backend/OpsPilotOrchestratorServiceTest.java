@@ -301,12 +301,31 @@ class OpsPilotOrchestratorServiceTest {
         assertTrue(oaxacaWeather.reply().contains("Meteorological"));
 
         for (String city : List.of(
+                "Beirut", "Amman", "Dubai", "Riyadh", "Doha", "Kuwait City", "Manama", "Muscat", "Jerusalem",
                 "Lisbon", "Reykjavik", "Tokyo", "Paris", "Rome", "Barcelona", "London", "Berlin",
                 "Vienna", "Zurich", "Amsterdam", "Copenhagen", "Stockholm", "Oslo", "Prague",
-                "Athens", "Istanbul", "Marrakech", "Cairo", "Seoul", "Bangkok", "Singapore",
-                "Taipei", "Sydney", "New York", "Toronto", "Oaxaca", "Buenos Aires", "Rio de Janeiro")) {
+                "Warsaw", "Budapest", "Dubrovnik", "Athens", "Istanbul", "Marrakech", "Tunis", "Cairo",
+                "Nairobi", "Cape Town", "Lagos", "Accra", "Mumbai", "Kathmandu", "Colombo",
+                "Seoul", "Bangkok", "Hanoi", "Singapore", "Kuala Lumpur", "Jakarta", "Manila",
+                "Taipei", "Hong Kong", "Shanghai", "Sydney", "Auckland", "New York", "Toronto",
+                "Oaxaca", "Havana", "Bogota", "Lima", "Santiago", "Buenos Aires", "Rio de Janeiro")) {
             Map<String, Object> handoff = a2aClient.delegateTask("task-" + city, "convert-and-audit-budget", "Audit budget in " + city);
             assertNotNull(handoff.get("summary"));
         }
+
+        // 6. Verify Beirut resolves Lebanon / LBP (never JPY) and Open-Meteo dynamic country registration
+        AgentChatResponse beirutChat = service.executeChat(new AgentRunRequest(
+                "thread-beirut",
+                "Plan a 3-day architectural, culinary and music trip in Beirut",
+                Map.of(),
+                "deterministic"));
+        assertTrue(beirutChat.reply().contains("Beirut"));
+        assertTrue(beirutChat.reply().contains("Lebanon"));
+        assertTrue(beirutChat.reply().contains("LBP"));
+        assertFalse(beirutChat.reply().contains("JPY"));
+
+        A2aGatewayClient.registerCityCountry("Batroun", "Lebanon");
+        assertEquals("Lebanon", A2aGatewayClient.resolveCountryForCity("Batroun"));
+        assertEquals("LBP", A2aGatewayClient.resolveCurrencyForCountry("Lebanon"));
     }
 }

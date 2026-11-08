@@ -4,6 +4,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -24,7 +25,15 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 @ApplicationScoped
 public class A2aGatewayClient {
 
+    private static final Map<String, String> DYNAMIC_CITY_COUNTRIES = new ConcurrentHashMap<>();
+
     private final AgUiA2aBridge a2aBridge = new AgUiA2aBridge();
+
+    static void registerCityCountry(String city, String country) {
+        if (city != null && !city.isBlank() && country != null && !country.isBlank()) {
+            DYNAMIC_CITY_COUNTRIES.put(city.trim().toLowerCase(Locale.ROOT), country.trim());
+        }
+    }
 
     @ConfigProperty(name = "agui.a2a.base-url", defaultValue = "http://127.0.0.1:8082")
     String a2aBaseUrl = "http://127.0.0.1:8082";
@@ -122,11 +131,20 @@ public class A2aGatewayClient {
             return "Kyoto";
         }
         for (String candidate : List.of(
-                "Tokyo", "Osaka", "Paris", "Rome", "Milan", "Florence", "Venice", "Barcelona", "Madrid",
-                "London", "Edinburgh", "Berlin", "Munich", "Vienna", "Zurich", "Geneva", "Amsterdam",
-                "Copenhagen", "Stockholm", "Oslo", "Prague", "Athens", "Istanbul", "Marrakech", "Cairo",
-                "Seoul", "Bangkok", "Singapore", "Taipei", "Sydney", "Melbourne", "New York", "Toronto",
-                "Vancouver", "Montreal", "Oaxaca", "Mexico City", "Buenos Aires", "Rio de Janeiro", "Sao Paulo")) {
+                "Beirut", "Amman", "Dubai", "Abu Dhabi", "Doha", "Riyadh", "Muscat", "Kuwait City", "Manama",
+                "Jerusalem", "Tel Aviv", "Tunis", "Algiers", "Casablanca", "Marrakech", "Cairo", "Alexandria",
+                "Nairobi", "Cape Town", "Johannesburg", "Lagos", "Accra", "Addis Ababa", "Dakar",
+                "Tokyo", "Osaka", "Paris", "Rome", "Milan", "Florence", "Venice", "Barcelona", "Madrid", "Seville",
+                "London", "Edinburgh", "Dublin", "Berlin", "Munich", "Vienna", "Zurich", "Geneva", "Amsterdam",
+                "Brussels", "Copenhagen", "Stockholm", "Oslo", "Helsinki", "Prague", "Budapest", "Warsaw",
+                "Dubrovnik", "Split", "Athens", "Santorini", "Istanbul", "Cappadocia", "Tbilisi", "Yerevan", "Baku",
+                "Seoul", "Busan", "Bangkok", "Chiang Mai", "Singapore", "Taipei", "Hong Kong", "Shanghai", "Beijing",
+                "Hanoi", "Ho Chi Minh City", "Kuala Lumpur", "Jakarta", "Bali", "Manila", "Mumbai", "New Delhi",
+                "Jaipur", "Kathmandu", "Colombo", "Sydney", "Melbourne", "Auckland", "Queenstown",
+                "New York", "San Francisco", "Chicago", "Los Angeles", "New Orleans", "Miami", "Seattle", "Boston",
+                "Toronto", "Vancouver", "Montreal", "Oaxaca", "Mexico City", "Havana", "Bogota", "Medellin",
+                "Cartagena", "Lima", "Cusco", "Santiago", "Valparaiso", "Buenos Aires", "Montevideo",
+                "Rio de Janeiro", "Sao Paulo")) {
             if (lower.contains(candidate.toLowerCase(Locale.ROOT))) {
                 return candidate;
             }
@@ -141,69 +159,155 @@ public class A2aGatewayClient {
     }
 
     static String resolveCountryForCity(String city) {
+        if (city == null || city.isBlank()) {
+            return "Japan";
+        }
+        String dynamic = DYNAMIC_CITY_COUNTRIES.get(city.trim().toLowerCase(Locale.ROOT));
+        if (dynamic != null && !dynamic.isBlank()) {
+            return dynamic;
+        }
         return switch (city.toLowerCase(Locale.ROOT)) {
+            case "beirut", "byblos", "baalbek", "tyre", "tripoli", "batroun" -> "Lebanon";
+            case "amman", "petra", "aqaba" -> "Jordan";
+            case "dubai", "abu dhabi", "sharjah" -> "United Arab Emirates";
+            case "riyadh", "jeddah", "alula" -> "Saudi Arabia";
+            case "doha" -> "Qatar";
+            case "muscat" -> "Oman";
+            case "kuwait city" -> "Kuwait";
+            case "manama" -> "Bahrain";
+            case "jerusalem", "tel aviv", "haifa" -> "Israel";
             case "lisbon", "porto" -> "Portugal";
             case "reykjavik" -> "Iceland";
             case "tokyo", "kyoto", "osaka" -> "Japan";
-            case "paris", "lyon", "nice" -> "France";
-            case "rome", "milan", "florence", "venice" -> "Italy";
-            case "barcelona", "madrid", "seville" -> "Spain";
+            case "paris", "lyon", "nice", "marseille" -> "France";
+            case "rome", "milan", "florence", "venice", "naples" -> "Italy";
+            case "barcelona", "madrid", "seville", "granada" -> "Spain";
             case "london", "edinburgh" -> "United Kingdom";
-            case "berlin", "munich" -> "Germany";
-            case "vienna" -> "Austria";
+            case "dublin" -> "Ireland";
+            case "berlin", "munich", "hamburg" -> "Germany";
+            case "vienna", "salzburg" -> "Austria";
             case "zurich", "geneva" -> "Switzerland";
             case "amsterdam" -> "Netherlands";
+            case "brussels", "bruges" -> "Belgium";
             case "copenhagen" -> "Denmark";
             case "stockholm" -> "Sweden";
-            case "oslo" -> "Norway";
+            case "oslo", "bergen" -> "Norway";
+            case "helsinki" -> "Finland";
             case "prague" -> "Czechia";
-            case "athens" -> "Greece";
-            case "istanbul" -> "Turkey";
-            case "marrakech" -> "Morocco";
-            case "cairo" -> "Egypt";
-            case "seoul" -> "South Korea";
-            case "bangkok" -> "Thailand";
+            case "budapest" -> "Hungary";
+            case "warsaw", "krakow" -> "Poland";
+            case "dubrovnik", "split", "zagreb" -> "Croatia";
+            case "athens", "santorini", "thessaloniki" -> "Greece";
+            case "istanbul", "cappadocia", "izmir" -> "Turkey";
+            case "marrakech", "casablanca", "fez", "tangier" -> "Morocco";
+            case "tunis" -> "Tunisia";
+            case "cairo", "alexandria", "luxor", "aswan" -> "Egypt";
+            case "nairobi" -> "Kenya";
+            case "cape town", "johannesburg" -> "South Africa";
+            case "lagos" -> "Nigeria";
+            case "accra" -> "Ghana";
+            case "seoul", "busan" -> "South Korea";
+            case "bangkok", "chiang mai" -> "Thailand";
+            case "hanoi", "ho chi minh city" -> "Vietnam";
             case "singapore" -> "Singapore";
+            case "kuala lumpur" -> "Malaysia";
+            case "jakarta", "bali" -> "Indonesia";
+            case "manila" -> "Philippines";
             case "taipei" -> "Taiwan";
+            case "hong kong" -> "Hong Kong";
+            case "shanghai", "beijing" -> "China";
+            case "mumbai", "new delhi", "jaipur" -> "India";
+            case "kathmandu" -> "Nepal";
+            case "colombo" -> "Sri Lanka";
             case "sydney", "melbourne" -> "Australia";
-            case "new york", "san francisco" -> "United States";
+            case "auckland", "queenstown" -> "New Zealand";
+            case "new york", "san francisco", "chicago", "los angeles", "new orleans", "miami", "seattle", "boston" -> "United States";
             case "toronto", "vancouver", "montreal" -> "Canada";
             case "oaxaca", "mexico city" -> "Mexico";
+            case "havana" -> "Cuba";
+            case "bogota", "medellin", "cartagena" -> "Colombia";
+            case "lima", "cusco" -> "Peru";
+            case "santiago", "valparaiso" -> "Chile";
             case "buenos aires" -> "Argentina";
             case "rio de janeiro", "sao paulo" -> "Brazil";
-            default -> "Japan";
+            default -> city;
         };
     }
 
     static String resolveCurrencyForCountry(String country) {
-        return switch (country) {
-            case "Portugal", "France", "Italy", "Spain", "Germany", "Austria", "Netherlands", "Greece" -> "EUR";
+        if (country == null || country.isBlank()) {
+            return "USD";
+        }
+        return switch (country.trim()) {
+            case "Lebanon" -> "LBP";
+            case "Jordan" -> "JOD";
+            case "United Arab Emirates" -> "AED";
+            case "Saudi Arabia" -> "SAR";
+            case "Qatar" -> "QAR";
+            case "Kuwait" -> "KWD";
+            case "Bahrain" -> "BHD";
+            case "Oman" -> "OMR";
+            case "Israel" -> "ILS";
+            case "Portugal", "France", "Italy", "Spain", "Germany", "Austria", "Netherlands",
+                 "Belgium", "Ireland", "Finland", "Greece", "Croatia" -> "EUR";
             case "Iceland" -> "ISK";
             case "United Kingdom" -> "GBP";
             case "Switzerland" -> "CHF";
             case "Denmark" -> "DKK";
             case "Sweden" -> "SEK";
             case "Norway" -> "NOK";
-            case "Czechia" -> "CZK";
-            case "Turkey" -> "TRY";
+            case "Czechia", "Czech Republic" -> "CZK";
+            case "Poland" -> "PLN";
+            case "Hungary" -> "HUF";
+            case "Romania" -> "RON";
+            case "Turkey", "Türkiye" -> "TRY";
             case "Morocco" -> "MAD";
+            case "Tunisia" -> "TND";
             case "Egypt" -> "EGP";
+            case "Kenya" -> "KES";
+            case "South Africa" -> "ZAR";
+            case "Nigeria" -> "NGN";
+            case "Ghana" -> "GHS";
+            case "India" -> "INR";
+            case "Nepal" -> "NPR";
+            case "Sri Lanka" -> "LKR";
+            case "Japan" -> "JPY";
             case "South Korea" -> "KRW";
             case "Thailand" -> "THB";
+            case "Vietnam" -> "VND";
             case "Singapore" -> "SGD";
+            case "Malaysia" -> "MYR";
+            case "Indonesia" -> "IDR";
+            case "Philippines" -> "PHP";
             case "Taiwan" -> "TWD";
+            case "Hong Kong" -> "HKD";
+            case "China" -> "CNY";
             case "Australia" -> "AUD";
+            case "New Zealand" -> "NZD";
             case "United States" -> "USD";
             case "Canada" -> "CAD";
             case "Mexico" -> "MXN";
+            case "Cuba" -> "CUP";
+            case "Colombia" -> "COP";
+            case "Peru" -> "PEN";
+            case "Chile" -> "CLP";
             case "Argentina" -> "ARS";
             case "Brazil" -> "BRL";
-            default -> "JPY";
+            default -> "USD";
         };
     }
 
     static double resolveDefaultRateForCurrency(String currency) {
         return switch (currency.toUpperCase(Locale.ROOT)) {
+            case "LBP" -> 89500.0;
+            case "JOD" -> 0.71;
+            case "AED" -> 3.67;
+            case "SAR" -> 3.75;
+            case "QAR" -> 3.64;
+            case "KWD" -> 0.31;
+            case "BHD" -> 0.38;
+            case "OMR" -> 0.38;
+            case "ILS" -> 3.74;
             case "EUR" -> 0.92;
             case "ISK" -> 137.80;
             case "GBP" -> 0.79;
@@ -212,20 +316,43 @@ public class A2aGatewayClient {
             case "SEK" -> 10.45;
             case "NOK" -> 10.65;
             case "CZK" -> 23.40;
+            case "PLN" -> 4.02;
+            case "HUF" -> 378.0;
+            case "RON" -> 4.58;
             case "TRY" -> 34.20;
+            case "JPY" -> 151.40;
             case "KRW" -> 1380.0;
             case "THB" -> 34.50;
+            case "VND" -> 25400.0;
             case "SGD" -> 1.34;
+            case "MYR" -> 4.45;
+            case "IDR" -> 15850.0;
+            case "PHP" -> 58.60;
             case "TWD" -> 32.40;
+            case "HKD" -> 7.78;
+            case "CNY" -> 7.24;
+            case "INR" -> 84.40;
+            case "NPR" -> 134.80;
+            case "LKR" -> 293.0;
             case "AUD" -> 1.52;
+            case "NZD" -> 1.69;
             case "CAD" -> 1.39;
             case "MXN" -> 19.80;
+            case "CUP" -> 24.0;
+            case "COP" -> 4420.0;
+            case "PEN" -> 3.78;
+            case "CLP" -> 975.0;
             case "ARS" -> 1015.0;
             case "BRL" -> 5.80;
             case "MAD" -> 9.90;
+            case "TND" -> 3.12;
             case "EGP" -> 49.20;
+            case "KES" -> 129.0;
+            case "ZAR" -> 18.10;
+            case "NGN" -> 1650.0;
+            case "GHS" -> 15.80;
             case "USD" -> 1.00;
-            default -> 151.40;
+            default -> 1.00;
         };
     }
 }
