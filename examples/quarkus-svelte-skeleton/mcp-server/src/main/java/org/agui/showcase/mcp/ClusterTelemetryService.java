@@ -182,11 +182,24 @@ public class ClusterTelemetryService {
         double[] coords = switch (resolvedCity.toLowerCase(Locale.ROOT)) {
             case "lisbon" -> new double[]{38.7223, -9.1393, 22.1, 14.0};
             case "reykjavik" -> new double[]{64.1466, -21.9426, 6.2, 19.5};
+            case "tokyo" -> new double[]{35.6762, 139.6503, 19.2, 11.0};
+            case "paris" -> new double[]{48.8566, 2.3522, 16.8, 12.0};
+            case "rome" -> new double[]{41.9028, 12.4964, 21.4, 9.5};
+            case "barcelona" -> new double[]{41.3874, 2.1686, 22.5, 13.0};
+            case "london" -> new double[]{51.5072, -0.1276, 14.6, 15.0};
+            case "seoul" -> new double[]{37.5665, 126.9780, 17.5, 10.0};
+            case "new york" -> new double[]{40.7128, -74.0060, 18.0, 14.5};
+            case "marrakech" -> new double[]{31.6295, -7.9811, 26.4, 10.5};
             default -> new double[]{35.0116, 135.7681, 18.4, 8.5};
         };
         String defaultCondition = switch (resolvedCity.toLowerCase(Locale.ROOT)) {
             case "lisbon" -> "Atlantic Breeze & Golden Sun";
             case "reykjavik" -> "Crisp Sub-Arctic Aurora Sky";
+            case "tokyo" -> "Clear Pacific Horizon";
+            case "paris" -> "Soft Seine Daylight";
+            case "rome" -> "Warm Mediterranean Sun";
+            case "barcelona" -> "Balearic Coastal Breeze";
+            case "marrakech" -> "Warm Atlas Foothill Sun";
             default -> "Clear Cedar & Autumn Mist";
         };
         double tempC = coords[2];

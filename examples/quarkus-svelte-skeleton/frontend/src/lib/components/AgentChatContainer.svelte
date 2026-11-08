@@ -64,6 +64,17 @@
 	async function runScenarioPrompt(promptText) {
 		workbench = {
 			...workbench,
+			isStreaming: true,
+			statusText: 'Connecting to Nomad Concierge (:8080)...',
+			streamBuffer: '',
+			activeTurn: {
+				reasoning: null,
+				timeline: [],
+				media: [],
+				interaction: null,
+				sources: [],
+				followUps: []
+			},
 			messages: [
 				...workbench.messages,
 				{
@@ -99,6 +110,13 @@
 						? 'Stream paused by traveler'
 						: `Bridge error (${err?.message ?? 'connect failed to :8080'})`
 			};
+		} finally {
+			if (workbench.isStreaming) {
+				workbench = {
+					...workbench,
+					isStreaming: false
+				};
+			}
 		}
 	}
 
@@ -125,6 +143,13 @@
 				isStreaming: false,
 				statusText: `Approval error (${err?.message ?? 'failed'})`
 			};
+		} finally {
+			if (workbench.isStreaming) {
+				workbench = {
+					...workbench,
+					isStreaming: false
+				};
+			}
 		}
 	}
 

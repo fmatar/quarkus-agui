@@ -286,5 +286,17 @@ class OpsPilotOrchestratorServiceTest {
         List<String> resumedFrames = service.approvePendingAction(approveWithMods).collect().asList().await().indefinitely();
         assertTrue(resumedFrames.stream().anyMatch(f -> f.contains("updateTripItinerary")));
         assertTrue(resumedFrames.getLast().contains("\"status\":\"completed\""));
+
+        // 4. Free-form chat prompt routes to Nomad Concierge with distinct A2A taskIds
+        AgentChatResponse freeFormChat = service.executeChat(new AgentRunRequest(
+                "thread-freeform",
+                "Hello! Plan a weekend in Tokyo with local music",
+                Map.of("nomadTrip", Map.of("activeCity", "Lisbon")),
+                "deterministic"));
+        assertEquals(2, freeFormChat.a2aHandoffs().size());
+        assertNotNull(freeFormChat.a2aHandoffs().get(0).get("taskId"));
+        assertNotNull(freeFormChat.a2aHandoffs().get(1).get("taskId"));
+        assertFalse(freeFormChat.a2aHandoffs().get(0).get("taskId").equals(freeFormChat.a2aHandoffs().get(1).get("taskId")));
+        assertTrue(freeFormChat.reply().contains("Tokyo"));
     }
 }

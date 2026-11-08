@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- fix(showcase): resolve Svelte 5 `each_key_duplicate` runtime crash in `ExecutionTimeline.svelte` when streaming multiple A2A steps, configure `AGUI_A2A_PUBLIC_URL=http://a2a-server:8082` in `SentinelA2aAgentConfiguration` & `docker-compose.yml`, wire `McpGatewayClient` to invoke `mcp-server (:8081)` over HTTP for live Open-Meteo/Wikipedia/iTunes 30s audio previews, and make Nomad Concierge the default persona for free-form chat ([#38](https://github.com/fmatar/quarkus-agui/issues/38))
 - fix(showcase): include `pnpm-workspace.yaml` (`allowBuilds: esbuild: true`) in `frontend/Dockerfile`, add `frontend/.dockerignore`, and use `install -DskipTests` in `Dockerfile.quarkus` so all 4 Docker Compose images build cleanly ([#36](https://github.com/fmatar/quarkus-agui/issues/36))
 
 ### Added

@@ -99,7 +99,7 @@
 					</div>
 				{/if}
 
-				{#each visibleEvents as evt (evt.id)}
+				{#each visibleEvents as evt, idx (`${evt.id ?? evt.type}-${idx}`)}
 					<div class="overflow-hidden rounded-xl border border-[#E4E0D8] bg-[#FAF9F6]">
 						<button
 							type="button"

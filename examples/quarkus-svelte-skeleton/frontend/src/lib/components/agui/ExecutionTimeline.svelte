@@ -18,12 +18,13 @@
 		</div>
 
 		<div class="space-y-1.5">
-			{#each timeline as step (step.id ?? step.title)}
-				{@const isExpanded = expandedId === (step.id ?? step.title)}
+			{#each timeline as step, idx (`${step.id ?? step.title}-${idx}`)}
+				{@const rowKey = `${step.id ?? step.title}-${idx}`}
+				{@const isExpanded = expandedId === rowKey}
 				<div class="rounded-lg border border-[#E4E0D8] bg-white">
 					<button
 						type="button"
-						onclick={() => toggleRow(step.id ?? step.title)}
+						onclick={() => toggleRow(rowKey)}
 						aria-expanded={isExpanded}
 						class="flex w-full flex-wrap items-center justify-between gap-2 px-3 py-2 text-left text-xs transition-colors hover:bg-[#F6F5F2]/60"
 					>
