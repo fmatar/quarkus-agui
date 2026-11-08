@@ -7,9 +7,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import io.quarkus.test.junit.QuarkusTest;
 import java.util.List;
 import org.agui.quarkus.it.adapters.AgUiIntegrationResource;
-import org.agui.quarkus.runtime.adapters.AgUiA2aBridge;
-import org.agui.quarkus.runtime.adapters.AgUiBridge;
-import org.agui.quarkus.runtime.adapters.AgUiMcpBridge;
+import org.agui.quarkus.core.runtime.adapters.AgUiA2aBridge;
+import org.agui.quarkus.core.runtime.adapters.AgUiBridge;
+import org.agui.quarkus.core.runtime.adapters.AgUiMcpBridge;
 import org.junit.jupiter.api.Test;
 
 @QuarkusTest

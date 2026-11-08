@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.agui</groupId>
+        <artifactId>ag-ui-java-parent</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>quarkus-ag-ui-bom</artifactId>
+    <packaging>pom</packaging>
+
+    <name>Quarkus AG-UI - BOM</name>
+    <description>Bill of Materials for Quarkus AG-UI Extensions, Core, and Transport Adapters</description>
+
+    <dependencyManagement>
+        <dependencies>
+            <!-- Pure Java Domain & Protocols -->
+            <dependency>
+                <groupId>org.agui</groupId>
+                <artifactId>ag-ui-core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <!-- Quarkus AG-UI Core (Session & Bridge SPI) -->
+            <dependency>
+                <groupId>org.agui</groupId>
+                <artifactId>quarkus-ag-ui-core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.agui</groupId>
+                <artifactId>quarkus-ag-ui-core-deployment</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <!-- Quarkus AG-UI SSE Transport Adapter -->
+            <dependency>
+                <groupId>org.agui</groupId>
+                <artifactId>quarkus-ag-ui-sse</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.agui</groupId>
+                <artifactId>quarkus-ag-ui-sse-deployment</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <!-- Quarkus AG-UI WebSockets Next Transport Adapter -->
+            <dependency>
+                <groupId>org.agui</groupId>
+                <artifactId>quarkus-ag-ui-websockets</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.agui</groupId>
+                <artifactId>quarkus-ag-ui-websockets-deployment</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <!-- Quarkus AG-UI Umbrella Starter / Aggregator -->
+            <dependency>
+                <groupId>org.agui</groupId>
+                <artifactId>quarkus-ag-ui</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.agui</groupId>
+                <artifactId>quarkus-ag-ui-deployment</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+</project>

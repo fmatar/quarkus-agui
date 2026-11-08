@@ -41,6 +41,7 @@
     </properties>
 
     <modules>
+        <module>quarkus-ag-ui-bom</module>
         <module>ag-ui-core</module>
         <module>quarkus-extension</module>
         <module>examples/quarkus-svelte-skeleton</module>
@@ -125,6 +126,36 @@
             <dependency>
                 <groupId>org.agui</groupId>
                 <artifactId>ag-ui-core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.agui</groupId>
+                <artifactId>quarkus-ag-ui-core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.agui</groupId>
+                <artifactId>quarkus-ag-ui-core-deployment</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.agui</groupId>
+                <artifactId>quarkus-ag-ui-sse</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.agui</groupId>
+                <artifactId>quarkus-ag-ui-sse-deployment</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.agui</groupId>
+                <artifactId>quarkus-ag-ui-websockets</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.agui</groupId>
+                <artifactId>quarkus-ag-ui-websockets-deployment</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

@@ -136,6 +136,20 @@ body {
 	animation: pulse-dot 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
+@media (prefers-reduced-motion: reduce) {
+	*, ::before, ::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+		scroll-behavior: auto !important;
+	}
+	.animate-pulse-dot,
+	.animate-ping {
+		animation: none !important;
+		opacity: 0.8 !important;
+	}
+}
+
 .scrollable-region {
 	overflow-y: auto;
 	scrollbar-gutter: stable;

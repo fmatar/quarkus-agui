@@ -205,7 +205,7 @@
 						type="button"
 						disabled={workbench.isStreaming}
 						onclick={() => runScenarioPrompt(preset.prompt)}
-						class="group flex items-center gap-1.5 rounded-xl bg-slate-900/90 px-3 py-1.5 text-xs font-medium text-slate-300 ring-1 ring-slate-700/60 transition-all hover:bg-slate-800 hover:text-white hover:ring-cyan-500/50 disabled:opacity-40"
+						class="group flex items-center gap-1.5 rounded-xl bg-slate-900/90 px-3 py-1.5 text-xs font-medium text-slate-300 ring-1 ring-slate-700/60 transition-all hover:bg-slate-800 hover:text-white hover:ring-cyan-500/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 disabled:opacity-40"
 					>
 						<span>{preset.label}</span>
 						<ChevronRight class="size-3 text-slate-500 transition-transform group-hover:translate-x-0.5 group-hover:text-cyan-400" />
@@ -217,7 +217,7 @@
 			<button
 				type="button"
 				onclick={() => isInspectorOpen = !isInspectorOpen}
-				class="flex items-center gap-1.5 rounded-xl px-3 py-1.5 font-mono text-xs font-semibold transition-all {isInspectorOpen ? 'bg-cyan-500/20 text-cyan-300 ring-1 ring-cyan-500/40' : 'bg-slate-900 text-slate-400 ring-1 ring-slate-800 hover:text-slate-200'}"
+				class="flex items-center gap-1.5 rounded-xl px-3 py-1.5 font-mono text-xs font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 {isInspectorOpen ? 'bg-cyan-500/20 text-cyan-300 ring-1 ring-cyan-500/40' : 'bg-slate-900 text-slate-400 ring-1 ring-slate-800 hover:text-slate-200'}"
 				title={isInspectorOpen ? 'Collapse Wire Inspector' : 'Expand Wire Inspector'}
 			>
 				<Terminal class="size-3.5" />

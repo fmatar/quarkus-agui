@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- feat(arch): introduce `quarkus-ag-ui-bom` and modular transport sub-extensions (`quarkus-ag-ui-core`, `quarkus-ag-ui-sse`, `quarkus-ag-ui-websockets`) adhering to concentric Clean Architecture ports and adapters (`ADR-003`, [#30](https://github.com/fmatar/quarkus-agui/issues/30))
 - feat(wave4): migrate showcase `backend` to consume `org.agui:quarkus-ag-ui` (`AgUiBridge`, `AgUiMcpBridge`, `AgUiA2aBridge`), verify `< 10ms` serialization overhead, and complete 4-Wave Tri-Protocol evolution ([#9](https://github.com/fmatar/quarkus-agui/issues/9))
 - feat(wave4): implement `quarkus-ag-ui-deployment` (`AgUiProcessor`, GraalVM 25 `ReflectiveClassBuildItem`s, `AdditionalBeanBuildItem`, Dev UI Inspector metadata) and `quarkus-ag-ui-integration-tests` ([#8](https://github.com/fmatar/quarkus-agui/issues/8))
 - feat(wave4): extract `quarkus-ag-ui` runtime module (`AgUiBridge`, `AgUiMcpBridge`, `AgUiA2aBridge`) with SmallRye Mutiny `Multi<AgUiEvent<?>>` and SSE streaming ([#7](https://github.com/fmatar/quarkus-agui/issues/7))

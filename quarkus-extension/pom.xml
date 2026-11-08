@@ -15,6 +15,9 @@
     <name>Quarkus AG-UI Extension Parent</name>
 
     <modules>
+        <module>core</module>
+        <module>sse</module>
+        <module>websockets</module>
         <module>runtime</module>
         <module>deployment</module>
         <module>integration-tests</module>

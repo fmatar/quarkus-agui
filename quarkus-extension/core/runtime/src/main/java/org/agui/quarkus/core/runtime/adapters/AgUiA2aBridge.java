@@ -1,4 +1,4 @@
-package org.agui.quarkus.runtime.adapters;
+package org.agui.quarkus.core.runtime.adapters;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import java.util.List;
@@ -19,8 +19,8 @@ import org.agui.core.domain.AgUiEventType;
 import org.agui.core.domain.StepPayload;
 
 /**
- * Quarkus Runtime Bridge wrapping official A2A Java SDK ({@code org.a2aproject.sdk}) specialist delegations,
- * {@link Task}s, {@link Message}s, and {@link ClientEvent}s into AG-UI {@code STEP_STARTED} and {@code STEP_FINISHED} events.
+ * Core Quarkus Bridge wrapping official A2A Java SDK specialist delegations,
+ * tasks, messages, and client events into AG-UI events.
  */
 @ApplicationScoped
 public class AgUiA2aBridge {
