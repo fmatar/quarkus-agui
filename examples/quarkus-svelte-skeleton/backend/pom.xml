@@ -11,7 +11,7 @@
     </parent>
 
     <artifactId>quarkus-svelte-skeleton-backend</artifactId>
-    <name>AG-UI Showcase - OpsPilot Quarkus Orchestrator (:8080)</name>
+    <name>AG-UI Showcase - Nomad Concierge Quarkus Orchestrator (:8080)</name>
     <description>Quarkus 3.40.1.1 + Java 25 Orchestrator connecting MCP, A2A, LangChain4j, and AG-UI SSE</description>
 
     <dependencies>

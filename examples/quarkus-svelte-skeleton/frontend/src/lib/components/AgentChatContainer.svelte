@@ -11,8 +11,7 @@
 		lockTurnInteraction,
 		parseSseChunk,
 		reduceAgUiEvent,
-		selectTurnOption,
-		updateServiceReplicasInState
+		selectTurnOption
 	} from '$lib/agui-client.js';
 	import ClusterStatePanel from './ClusterStatePanel.svelte';
 	import MessageHistory from './MessageHistory.svelte';
@@ -167,15 +166,6 @@
 		runScenarioPrompt(`Confirmed multi-select itinerary preferences: ${selectedIds.join(', ')}`);
 	}
 
-	function handleAdjustReplicas(serviceName, delta) {
-		const updated = updateServiceReplicasInState(workbench.clusterState, serviceName, delta);
-		workbench = { ...workbench, clusterState: updated };
-		const targetSvc = updated?.services?.find((s) => s.serviceName === serviceName);
-		if (targetSvc) {
-			runScenarioPrompt(`Scale deployment ${serviceName} to ${targetSvc.replicas} replicas`);
-		}
-	}
-
 	function clearInspectorEvents() {
 		workbench = { ...workbench, events: [] };
 	}
@@ -258,7 +248,6 @@
 	<ClusterStatePanel
 		clusterState={workbench.clusterState}
 		isStreaming={workbench.isStreaming}
-		onAdjustReplicas={handleAdjustReplicas}
 		onTriggerSkill={runScenarioPrompt}
 	/>
 

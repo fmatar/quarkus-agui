@@ -12,7 +12,7 @@ import {
 	reduceAgUiEvent,
 	resolveProtocolCallMeta,
 	selectTurnOption,
-	updateServiceReplicasInState
+	updateTripNightsInState
 } from '../src/lib/agui-client.js';
 
 test('parseSseChunk splits multi-frame SSE chunks on double newline and preserves remainder', () => {
@@ -49,12 +49,12 @@ test('reduceAgUiEvent transitions state across RUN_STARTED, STATE_SNAPSHOT, TOOL
 		timestamp: 1002,
 		payload: {
 			clusterState: {
-				cluster: 'quarkus-prod-us-east-1',
-				services: [{ serviceName: 'payment-gateway', status: 'HEALTHY', replicas: 4, cpuPercent: 40 }]
+				uri: 'itinerary://active-trip',
+				nomadTrip: { activeCity: 'Kyoto', country: 'Japan', nights: 4, temperatureC: 18.4 }
 			}
 		}
 	});
-	assert.equal(state.clusterState.services[0].replicas, 4);
+	assert.equal(state.clusterState.nomadTrip.nights, 4);
 
 	state = reduceAgUiEvent(state, {
 		id: 'e2',
@@ -63,14 +63,14 @@ test('reduceAgUiEvent transitions state across RUN_STARTED, STATE_SNAPSHOT, TOOL
 		timestamp: 1005,
 		payload: {
 			callId: 'c1',
-			tool: 'inspectClusterHealth',
+			tool: 'fetchCityWeather',
 			protocol: 'MCP',
-			server: 'quarkus-mcp-cluster-ops (:8081)',
-			args: {}
+			server: 'nomad-mcp-concierge (:8081)',
+			args: { city: 'Kyoto' }
 		}
 	});
 	assert.equal(state.mcpCalls.length, 1);
-	assert.equal(state.mcpCalls[0].tool, 'inspectClusterHealth');
+	assert.equal(state.mcpCalls[0].tool, 'fetchCityWeather');
 
 	state = reduceAgUiEvent(state, {
 		id: 'e3',
@@ -79,8 +79,8 @@ test('reduceAgUiEvent transitions state across RUN_STARTED, STATE_SNAPSHOT, TOOL
 		timestamp: 1010,
 		payload: {
 			callId: 'c1',
-			tool: 'inspectClusterHealth',
-			result: { cluster: 'quarkus-prod-us-east-1' }
+			tool: 'fetchCityWeather',
+			result: { city: 'Kyoto', temperatureC: 18.4, condition: 'Clear Cedar & Autumn Mist' }
 		}
 	});
 	assert.equal(state.mcpCalls[0].status, 'completed');
@@ -92,22 +92,22 @@ test('reduceAgUiEvent transitions state across RUN_STARTED, STATE_SNAPSHOT, TOOL
 		timestamp: 1015,
 		payload: {
 			stepId: 's1',
-			agentName: 'Sentinel-A2A-Auditor',
-			skillId: 'audit-clean-architecture',
-			summary: 'Zero outward violations'
+			agentName: 'Nomad-A2A-Specialist',
+			skillId: 'convert-and-audit-budget',
+			summary: 'Frankfurter FX verified: $3,200 USD = ¥484,480 JPY'
 		}
 	});
 	assert.equal(state.a2aSteps.length, 1);
-	assert.equal(state.a2aSteps[0].agentName, 'Sentinel-A2A-Auditor');
+	assert.equal(state.a2aSteps[0].agentName, 'Nomad-A2A-Specialist');
 
 	state = reduceAgUiEvent(state, {
 		id: 'e5',
 		type: 'TEXT_DELTA',
 		threadId: 'thread-test',
 		timestamp: 1020,
-		payload: { content: 'Cluster is healthy.' }
+		payload: { content: 'Kyoto dossier ready.' }
 	});
-	assert.equal(state.streamBuffer, 'Cluster is healthy.');
+	assert.equal(state.streamBuffer, 'Kyoto dossier ready.');
 
 	state = reduceAgUiEvent(state, {
 		id: 'e6',
@@ -118,7 +118,7 @@ test('reduceAgUiEvent transitions state across RUN_STARTED, STATE_SNAPSHOT, TOOL
 	});
 	assert.equal(state.isStreaming, false);
 	assert.equal(state.messages.at(-1).role, 'assistant');
-	assert.equal(state.messages.at(-1).content, 'Cluster is healthy.');
+	assert.equal(state.messages.at(-1).content, 'Kyoto dossier ready.');
 });
 
 test('SCENARIO_PRESETS exposes five tri-protocol showcase scenarios including HITL approval', () => {
@@ -131,24 +131,35 @@ test('reduceAgUiEvent handles HITL interrupted and cancelled RUN_FINISHED states
 	state = reduceAgUiEvent(state, {
 		id: 'h1',
 		type: 'TOOL_CALL',
-		payload: { callId: 'ch1', tool: 'scaleDeployment', requiresApproval: true, args: { serviceName: 'order-processor', replicas: 7 } }
+		payload: {
+			callId: 'ch1',
+			tool: 'updateTripItinerary',
+			requiresApproval: true,
+			args: { city: 'Kyoto', stopTitle: 'Hoshinoya Arashiyama Pavilion', nights: 5, costUsd: 2150 }
+		}
 	});
 	assert.equal(state.mcpCalls[0].status, 'awaiting_approval');
 	assert.ok(state.pendingApproval);
-	assert.equal(state.pendingApproval.serviceName, 'order-processor');
-	assert.equal(state.pendingApproval.replicas, 7);
-	assert.equal(state.statusText, 'HITL Gate — Awaiting Operator Approval');
+	assert.equal(state.pendingApproval.city, 'Kyoto');
+	assert.equal(state.pendingApproval.nights, 5);
+	assert.equal(state.statusText, 'HITL Gate — Awaiting Traveler Approval');
 
 	state = reduceAgUiEvent(state, {
 		id: 'h2',
 		type: 'RUN_FINISHED',
 		payload: {
 			status: 'interrupted',
-			pendingAction: { toolName: 'scaleDeployment', serviceName: 'order-processor', replicas: 7 }
+			pendingAction: {
+				toolName: 'updateTripItinerary',
+				city: 'Kyoto',
+				stopTitle: 'Hoshinoya Arashiyama Pavilion',
+				nights: 5,
+				costUsd: 2150
+			}
 		}
 	});
 	assert.equal(state.isStreaming, false);
-	assert.equal(state.pendingApproval.replicas, 7);
+	assert.equal(state.pendingApproval.nights, 5);
 
 	state = reduceAgUiEvent(state, {
 		id: 'h3',
@@ -159,7 +170,7 @@ test('reduceAgUiEvent handles HITL interrupted and cancelled RUN_FINISHED states
 	assert.ok(state.messages.at(-1).content.includes('cancelled'));
 });
 
-test('filterInspectorEvents and updateServiceReplicasInState support 3-pane workbench interactions', () => {
+test('filterInspectorEvents and updateTripNightsInState support 3-pane workbench interactions', () => {
 	const sampleEvents = [
 		{ id: '1', type: 'RUN_STARTED' },
 		{ id: '2', type: 'TOOL_CALL' },
@@ -173,9 +184,9 @@ test('filterInspectorEvents and updateServiceReplicasInState support 3-pane work
 	assert.deepEqual(filterInspectorEvents(null, 'ALL'), []);
 
 	const initial = createInitialWorkbenchState();
-	const updated = updateServiceReplicasInState(initial.clusterState, 'payment-gateway', 2);
-	assert.equal(updated.services[0].replicas, 5);
-	assert.equal(updateServiceReplicasInState(null, 'payment-gateway', 1), null);
+	const updated = updateTripNightsInState(initial.clusterState, 2);
+	assert.equal(updated.nomadTrip.nights, 6);
+	assert.equal(updateTripNightsInState(null, 1), null);
 });
 
 test('parseSseChunk and reduceAgUiEvent handle empty, malformed, STATUS, STEP_STARTED, and unknown events', () => {
@@ -198,9 +209,9 @@ test('parseSseChunk and reduceAgUiEvent handle empty, malformed, STATUS, STEP_ST
 	state = reduceAgUiEvent(state, {
 		id: 's2',
 		type: 'STEP_STARTED',
-		payload: { agentName: 'Sentinel-A2A-Auditor', skillId: 'audit-clean-architecture' }
+		payload: { agentName: 'Nomad-A2A-Specialist', skillId: 'convert-and-audit-budget' }
 	});
-	assert.equal(state.statusText, 'A2A Delegation: Sentinel-A2A-Auditor (audit-clean-architecture)');
+	assert.equal(state.statusText, 'A2A Delegation: Nomad-A2A-Specialist (convert-and-audit-budget)');
 
 	state = reduceAgUiEvent(state, {
 		id: 's3',
@@ -274,7 +285,7 @@ test('Nomad AG-UI Component Kit reducer populates timeline callTypes, reasoning,
 			stepId: 'a2a-1',
 			protocol: 'A2A',
 			callType: 'a2a:task',
-			agentName: 'Sentinel-A2A-Auditor',
+			agentName: 'Nomad-A2A-Specialist',
 			skillId: 'convert-and-audit-budget'
 		}
 	});
@@ -285,7 +296,7 @@ test('Nomad AG-UI Component Kit reducer populates timeline callTypes, reasoning,
 			stepId: 'a2a-1',
 			protocol: 'A2A',
 			callType: 'a2a:task',
-			agentName: 'Sentinel-A2A-Auditor',
+			agentName: 'Nomad-A2A-Specialist',
 			skillId: 'convert-and-audit-budget',
 			summary: '$3,200 = ¥484,480 JPY'
 		}

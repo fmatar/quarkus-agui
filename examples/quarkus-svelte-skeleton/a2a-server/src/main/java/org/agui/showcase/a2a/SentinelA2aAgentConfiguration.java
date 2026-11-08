@@ -7,8 +7,6 @@ import java.util.Locale;
 import java.util.Map;
 import org.a2aproject.sdk.server.PublicAgentCard;
 import org.a2aproject.sdk.server.agentexecution.AgentExecutor;
-import org.a2aproject.sdk.server.agentexecution.RequestContext;
-import org.a2aproject.sdk.server.tasks.AgentEmitter;
 import org.a2aproject.sdk.spec.AgentCapabilities;
 import org.a2aproject.sdk.spec.AgentInterface;
 import org.a2aproject.sdk.spec.TextPart;
@@ -16,7 +14,7 @@ import org.a2aproject.sdk.spec.TransportProtocol;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 /**
- * Official A2A Java SDK ({@code org.a2aproject.sdk} 1.4.0.Final) configuration for {@code Sentinel-A2A-Auditor} (:8082).
+ * Official A2A Java SDK ({@code org.a2aproject.sdk} 1.4.0.Final) configuration for {@code Nomad-A2A-Specialist} (:8082).
  * Exposes {@link PublicAgentCard} at {@code GET /.well-known/agent-card.json} and {@link AgentExecutor} over JSON-RPC 2.0 at {@code POST /}.
  */
 @ApplicationScoped
@@ -34,7 +32,7 @@ public class SentinelA2aAgentConfiguration {
         String endpointUrl = publicUrl.filter(s -> !s.isBlank()).orElse("http://localhost:" + httpPort);
         return org.a2aproject.sdk.spec.AgentCard.builder()
                 .name(SpecialistAuditAgentService.AGENT_NAME)
-                .description("Specialist A2A Agent for Clean Architecture Concentric Ring Governance, Security Posture, and Incident Remediation")
+                .description("Specialist A2A Agent for Multi-Currency Frankfurter FX Conversion, Destination Entry Advisories, and Architectural Neighborhood Curation")
                 .version("1.4.0")
                 .url(endpointUrl)
                 .preferredTransport(TransportProtocol.JSONRPC.asString())
@@ -48,30 +46,9 @@ public class SentinelA2aAgentConfiguration {
                         .build())
                 .skills(List.of(
                         org.a2aproject.sdk.spec.AgentSkill.builder()
-                                .id("audit-clean-architecture")
-                                .name("Audit Clean Architecture Boundaries")
-                                .description("Evaluates concentric layer dependencies (Domain <- Application <- Adapters) and DIP compliance")
-                                .tags(List.of("architecture", "archlens", "clean-code"))
-                                .examples(List.of("Audit cluster clean architecture boundaries"))
-                                .build(),
-                        org.a2aproject.sdk.spec.AgentSkill.builder()
-                                .id("assess-security-posture")
-                                .name("Assess Security & Zero-Trust Posture")
-                                .description("Audits mTLS, OIDC token lifecycles, and secret hygiene across cluster workloads")
-                                .tags(List.of("security", "devsecops", "mtls"))
-                                .examples(List.of("Assess cluster zero-trust security posture"))
-                                .build(),
-                        org.a2aproject.sdk.spec.AgentSkill.builder()
-                                .id("plan-incident-remediation")
-                                .name("Plan Incident Auto-Remediation")
-                                .description("Synthesizes horizontal scaling and circuit-breaker remediation blueprints")
-                                .tags(List.of("sre", "remediation", "scaling"))
-                                .examples(List.of("Plan remediation for degraded payment-service"))
-                                .build(),
-                        org.a2aproject.sdk.spec.AgentSkill.builder()
                                 .id("convert-and-audit-budget")
                                 .name("Convert Currency & Audit Travel Budget")
-                                .description("Converts trip budgets via Frankfurter FX API (USD -> JPY/EUR/ISK) and verifies reservation limits")
+                                .description("Converts trip budgets via Frankfurter FX API (USD -> JPY/EUR/ISK/MXN/GBP/CHF) and verifies reservation limits")
                                 .tags(List.of("nomad", "currency", "frankfurter", "budget"))
                                 .examples(List.of("Convert Kyoto trip budget to JPY"))
                                 .build(),
@@ -81,6 +58,13 @@ public class SentinelA2aAgentConfiguration {
                                 .description("Resolves destination country metadata, timezone, and cultural readiness via REST Countries API")
                                 .tags(List.of("nomad", "advisory", "countries"))
                                 .examples(List.of("Verify travel advisory for Lisbon Portugal"))
+                                .build(),
+                        org.a2aproject.sdk.spec.AgentSkill.builder()
+                                .id("curate-neighborhood-cadence")
+                                .name("Curate Neighborhood Architectural & Acoustic Cadence")
+                                .description("Synthesizes a morning-to-evening architectural, craft, and listening-bar sequence for a destination")
+                                .tags(List.of("nomad", "itinerary", "architecture", "music"))
+                                .examples(List.of("Curate neighborhood cadence for Tokyo"))
                                 .build()))
                 .build();
     }
@@ -92,7 +76,7 @@ public class SentinelA2aAgentConfiguration {
             String prompt = context.getUserInput();
             SpecialistAuditAgentService.AuditResult result = auditService.performAudit(
                     resolveSkillId(prompt, context.getMetadata()),
-                    (prompt == null || prompt.isBlank()) ? "Audit architecture" : prompt,
+                    (prompt == null || prompt.isBlank()) ? "Convert and audit budget" : prompt,
                     context.getMetadata());
             emitter.complete(emitter.newAgentMessage(List.of(new TextPart(result.summary())), Map.of()));
         };
@@ -103,24 +87,12 @@ public class SentinelA2aAgentConfiguration {
             return metaSkill.trim();
         }
         String lower = prompt == null ? "" : prompt.toLowerCase(Locale.ROOT);
-        if (lower.contains("[convert-and-audit-budget]")) {
-            return "convert-and-audit-budget";
-        }
-        if (lower.contains("[verify-travel-advisory]")) {
+        if (lower.contains("[verify-travel-advisory]") || lower.contains("advisory") || lower.contains("visa") || lower.contains("country") || lower.contains("timezone")) {
             return "verify-travel-advisory";
         }
-        if (lower.contains("security") || lower.contains("posture") || lower.contains("mtls") || lower.contains("cve")) {
-            return "assess-security-posture";
+        if (lower.contains("[curate-neighborhood-cadence]") || lower.contains("cadence") || lower.contains("neighborhood") || lower.contains("sequence")) {
+            return "curate-neighborhood-cadence";
         }
-        if (lower.contains("remediat") || lower.contains("incident") || lower.contains("scale")) {
-            return "plan-incident-remediation";
-        }
-        if (lower.contains("currency") || lower.contains("budget") || lower.contains("jpy") || lower.contains("eur") || lower.contains("isk") || lower.contains("fx")) {
-            return "convert-and-audit-budget";
-        }
-        if (lower.contains("advisory") || lower.contains("visa") || lower.contains("country") || lower.contains("japan") || lower.contains("portugal") || lower.contains("iceland")) {
-            return "verify-travel-advisory";
-        }
-        return "audit-clean-architecture";
+        return "convert-and-audit-budget";
     }
 }

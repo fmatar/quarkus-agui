@@ -235,7 +235,7 @@ function createEmptyActiveTurn() {
 	};
 }
 
-export function createInitialWorkbenchState(threadId = 'thread-opspilot-1') {
+export function createInitialWorkbenchState(threadId = 'thread-nomad-1') {
 	return {
 		threadId,
 		isStreaming: false,
@@ -244,8 +244,7 @@ export function createInitialWorkbenchState(threadId = 'thread-opspilot-1') {
 		pendingApproval: null,
 		activeTurn: createEmptyActiveTurn(),
 		clusterState: {
-			cluster: 'quarkus-prod-us-east-1',
-			uri: 'cluster://topology',
+			uri: 'itinerary://active-trip',
 			nomadTrip: {
 				uri: 'itinerary://active-trip',
 				activeCity: 'Kyoto',
@@ -264,33 +263,7 @@ export function createInitialWorkbenchState(threadId = 'thread-opspilot-1') {
 					previewUrl:
 						'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/9b/27/76/9b2776c5-65cd-87f1-3f33-ccbccc642285/mzaf_16549365214060917501.plus.aac.p.m4a'
 				}
-			},
-			services: [
-				{
-					serviceName: 'payment-gateway',
-					status: 'DEGRADED',
-					replicas: 3,
-					cpuPercent: 78,
-					memoryMb: 420,
-					region: 'us-east-1'
-				},
-				{
-					serviceName: 'order-processor',
-					status: 'HEALTHY',
-					replicas: 2,
-					cpuPercent: 34,
-					memoryMb: 256,
-					region: 'us-east-1'
-				},
-				{
-					serviceName: 'identity-provider',
-					status: 'HEALTHY',
-					replicas: 2,
-					cpuPercent: 22,
-					memoryMb: 192,
-					region: 'us-west-2'
-				}
-			]
+			}
 		},
 		messages: [
 			{
@@ -523,9 +496,7 @@ export function reduceAgUiEvent(state, event) {
 						city: payload.args?.city ?? 'Kyoto',
 						stopTitle: payload.args?.stopTitle ?? 'Hoshinoya Arashiyama Pavilion',
 						nights: payload.args?.nights ?? 4,
-						costUsd: payload.args?.costUsd ?? 1840,
-						serviceName: payload.args?.serviceName ?? 'payment-gateway',
-						replicas: payload.args?.replicas ?? 6
+						costUsd: payload.args?.costUsd ?? 1840
 					}
 				: state.pendingApproval;
 
@@ -545,7 +516,7 @@ export function reduceAgUiEvent(state, event) {
 
 			return {
 				...state,
-				statusText: requiresApproval ? 'HITL Gate — Awaiting Operator Approval' : `MCP Tool: ${payload.tool}`,
+				statusText: requiresApproval ? 'HITL Gate — Awaiting Traveler Approval' : `MCP Tool: ${payload.tool}`,
 				pendingApproval,
 				mcpCalls: [
 					...state.mcpCalls,
@@ -553,7 +524,7 @@ export function reduceAgUiEvent(state, event) {
 						callId: payload.callId,
 						tool: payload.tool,
 						callType: resolvedCallType,
-						server: payload.server ?? 'quarkus-mcp-cluster-ops (:8081)',
+						server: payload.server ?? 'nomad-mcp-concierge (:8081)',
 						args: payload.args ?? {},
 						status: requiresApproval ? 'awaiting_approval' : 'running',
 						result: null
@@ -603,7 +574,7 @@ export function reduceAgUiEvent(state, event) {
 				id: uniqueStepId,
 				callType: resolvedCallType,
 				title: payload.skillId ?? 'a2a-skill',
-				subtitle: `${payload.agentName ?? 'Sentinel-A2A-Auditor'} (:8082)`,
+				subtitle: `${payload.agentName ?? 'Nomad-A2A-Specialist'} (:8082)`,
 				status: 'running',
 				detail: null
 			};
@@ -646,7 +617,7 @@ export function reduceAgUiEvent(state, event) {
 								: (payload.stepId ?? `a2a-${nextEvents.length}`),
 							callType: resolvedCallType,
 							title: payload.skillId ?? 'a2a-skill',
-							subtitle: `${payload.agentName ?? 'Sentinel-A2A-Auditor'} (:8082)`,
+							subtitle: `${payload.agentName ?? 'Nomad-A2A-Specialist'} (:8082)`,
 							status: 'completed',
 							detail: payload.summary,
 							result: payload.report
@@ -659,7 +630,7 @@ export function reduceAgUiEvent(state, event) {
 					{
 						stepId: payload.stepId,
 						callType: resolvedCallType,
-						agentName: payload.agentName ?? 'Sentinel-A2A-Auditor',
+						agentName: payload.agentName ?? 'Nomad-A2A-Specialist',
 						skillId: payload.skillId,
 						summary: payload.summary,
 						report: payload.report ?? {}
@@ -686,18 +657,20 @@ export function reduceAgUiEvent(state, event) {
 					...state,
 					isStreaming: false,
 					pendingApproval: payload.pendingAction ?? state.pendingApproval ?? {
-						toolName: 'scaleDeployment',
-						serviceName: 'payment-gateway',
-						replicas: 6
+						toolName: 'updateTripItinerary',
+						city: 'Kyoto',
+						stopTitle: 'Hoshinoya Arashiyama Pavilion',
+						nights: 4,
+						costUsd: 1840
 					},
-					statusText: 'HITL Gate — Awaiting Operator Approval',
+					statusText: 'HITL Gate — Awaiting Traveler Approval',
 					events: nextEvents
 				};
 			}
 			const finalReply =
 				state.streamBuffer.trim() ||
 				(payload.status === 'cancelled'
-					? 'Operator rejected high-replica scale action. Run cancelled safely.'
+					? 'Traveler declined sanctuary reservation hold. Run cancelled safely.'
 					: '');
 			const assistantMsg = finalReply
 				? [
@@ -842,20 +815,18 @@ export function filterInspectorEvents(events, filter = 'ALL') {
 }
 
 /**
- * Mutates local replica count in clusterState for bidirectional UI-to-Agent state editing.
+ * Mutates local trip nights count in clusterState for bidirectional UI-to-Agent state editing.
  *
  * @param {any} clusterState
- * @param {string} serviceName
  * @param {number} delta
  */
-export function updateServiceReplicasInState(clusterState, serviceName, delta) {
-	if (!clusterState?.services) return clusterState;
+export function updateTripNightsInState(clusterState, delta) {
+	if (!clusterState?.nomadTrip) return clusterState;
 	return {
 		...clusterState,
-		services: clusterState.services.map((svc) =>
-			svc.serviceName === serviceName
-				? { ...svc, replicas: Math.max(1, (svc.replicas ?? 1) + delta) }
-				: svc
-		)
+		nomadTrip: {
+			...clusterState.nomadTrip,
+			nights: Math.max(1, (clusterState.nomadTrip.nights ?? 4) + delta)
+		}
 	};
 }

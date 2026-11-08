@@ -1,6 +1,5 @@
 package org.agui.showcase.backend;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.smallrye.mutiny.Multi;
@@ -23,6 +22,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.agui.core.domain.AgUiEvent;
 import org.agui.quarkus.core.runtime.adapters.AgUiA2aBridge;
 import org.agui.quarkus.core.runtime.adapters.AgUiBridge;
@@ -30,14 +31,14 @@ import org.agui.quarkus.core.runtime.adapters.AgUiMcpBridge;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 /**
- * OpsPilot Quarkus Orchestrator Service (:8080).
- * Implements full in-place AG-UI Protocol (Core 6 + MCP/A2A + STATE_SNAPSHOT/STATE_DELTA + HITL approvals)
+ * Nomad Travel & Local Culture Concierge Quarkus Orchestrator Service (:8080).
+ * Implements the full AG-UI Protocol (Core 6 + MCP/A2A + STATE_SNAPSHOT/STATE_DELTA + HITL sanctuary approvals)
  * with Dual-Mode execution: live local Ollama LLM streaming (Java 25 Virtual Threads) and deterministic CI mode.
  */
 @ApplicationScoped
 public class OpsPilotOrchestratorService {
 
-    private static final int HITL_REPLICA_THRESHOLD = 5;
+    private static final double HITL_SANCTUARY_THRESHOLD_USD = 1500.0;
     private static final String DEFAULT_OLLAMA_MODEL = "llama3.2:latest";
 
     private final McpGatewayClient mcpClient;
@@ -74,7 +75,7 @@ public class OpsPilotOrchestratorService {
 
     public Map<String, Object> getCatalog() {
         return Map.of(
-                "orchestrator", "OpsPilot-Quarkus-Orchestrator",
+                "orchestrator", "Nomad-Concierge-Orchestrator",
                 "extension", "org.agui:quarkus-ag-ui",
                 "llmMode", resolveMode(null),
                 "defaultOllamaModel", DEFAULT_OLLAMA_MODEL,
@@ -97,55 +98,36 @@ public class OpsPilotOrchestratorService {
 
     public AgentChatResponse executeChat(AgentRunRequest request) {
         String threadId = resolveThreadId(request);
-        String prompt = request != null && request.prompt() != null ? request.prompt() : "Inspect cluster health";
+        String prompt = request != null && request.prompt() != null && !request.prompt().isBlank()
+                ? request.prompt()
+                : "Curate a 4-night cultural and musical escape in Kyoto";
         String lower = prompt.toLowerCase(Locale.ROOT);
         String mode = resolveMode(request != null ? request.mode() : null);
+        String city = detectNomadCity(prompt, request);
+        String genre = detectMusicGenre(lower);
 
         List<Map<String, Object>> mcpCalls = new ArrayList<>();
+        mcpCalls.add(mcpClient.callTool("fetchCityWeather", Map.of("city", city)));
+        mcpCalls.add(mcpClient.callTool("discoverLocalCultureAndMedia", Map.of("destination", city, "genre", genre)));
+
+        if (lower.contains("itinerary") || lower.contains("update")) {
+            int nights = extractNights(lower, 4);
+            mcpCalls.add(mcpClient.callTool("updateTripItinerary", Map.of(
+                    "city", city,
+                    "stopTitle", McpGatewayClient.defaultSanctuaryForCity(city),
+                    "nights", nights,
+                    "costUsd", 1480.0)));
+        }
+
         List<Map<String, Object>> a2aHandoffs = new ArrayList<>();
-
-        if (lower.contains("log")) {
-            mcpCalls.add(mcpClient.callTool("queryServiceLogs", Map.of("serviceName", "payment-gateway")));
-        } else if (lower.contains("scale")) {
-            int replicas = extractReplicas(lower, 4);
-            String svc = "payment-gateway";
-            if (lower.contains("order-processor") || lower.contains("order")) {
-                svc = "order-processor";
-            } else if (lower.contains("identity-provider") || lower.contains("identity")) {
-                svc = "identity-provider";
-            } else if (lower.contains("payment-service") || lower.contains("payment")) {
-                svc = "payment-gateway";
-            }
-            mcpCalls.add(mcpClient.callTool("scaleDeployment", Map.of("serviceName", svc, "replicas", replicas)));
-        } else if (isNomadPrompt(lower)) {
-            String city = detectNomadCity(prompt, request);
-            mcpCalls.add(mcpClient.callTool("fetchCityWeather", Map.of("city", city)));
-            mcpCalls.add(mcpClient.callTool("discoverLocalCultureAndMedia", Map.of("destination", city, "genre", "traditional")));
-        } else {
-            mcpCalls.add(mcpClient.callTool("inspectClusterHealth", Map.of()));
+        a2aHandoffs.add(a2aClient.delegateTask("a2a-fx-" + threadId, "convert-and-audit-budget", prompt));
+        a2aHandoffs.add(a2aClient.delegateTask("a2a-adv-" + threadId, "verify-travel-advisory", prompt));
+        if (lower.contains("cadence") || lower.contains("walk") || lower.contains("neighborhood")) {
+            a2aHandoffs.add(a2aClient.delegateTask("a2a-cad-" + threadId, "curate-neighborhood-cadence", prompt));
         }
 
-        if (containsAny(lower, List.of("security", "posture", "cve"))) {
-            a2aHandoffs.add(a2aClient.delegateTask("a2a-" + threadId, "assess-security-posture", prompt));
-        } else if (containsAny(lower, List.of("remediat", "incident", "scale"))) {
-            a2aHandoffs.add(a2aClient.delegateTask("a2a-" + threadId, "plan-incident-remediation", prompt));
-        } else if (isNomadPrompt(lower)) {
-            a2aHandoffs.add(a2aClient.delegateTask("a2a-fx-" + threadId, "convert-and-audit-budget", prompt));
-            a2aHandoffs.add(a2aClient.delegateTask("a2a-adv-" + threadId, "verify-travel-advisory", prompt));
-        } else {
-            a2aHandoffs.add(a2aClient.delegateTask("a2a-" + threadId, "audit-clean-architecture", prompt));
-        }
-
-        Map<String, Object> toolCall = mcpCalls.getFirst();
         Map<String, Object> handoff = a2aHandoffs.getFirst();
-        String reply = isNomadPrompt(lower)
-                ? buildNomadConciergeMarkdownReply(detectNomadCity(prompt, request), prompt, handoff)
-                : String.format(
-                        "OpsPilot executed MCP tool `%s` on quarkus-mcp-cluster-ops (:8081) and delegated `%s` to %s (:8082). Verdict: %s",
-                        toolCall.get("toolName"),
-                        handoff.get("skillId"),
-                        handoff.get("agentName"),
-                        handoff.get("summary"));
+        String reply = buildNomadConciergeMarkdownReply(city, prompt, handoff);
 
         return new AgentChatResponse(
                 threadId,
@@ -168,7 +150,9 @@ public class OpsPilotOrchestratorService {
 
     private List<String> buildDeterministicFrames(AgentRunRequest request, String mode) {
         String threadId = resolveThreadId(request);
-        String prompt = request != null && request.prompt() != null ? request.prompt() : "Inspect cluster health";
+        String prompt = request != null && request.prompt() != null && !request.prompt().isBlank()
+                ? request.prompt()
+                : "Curate a 4-night cultural and musical escape in Kyoto";
         String lower = prompt.toLowerCase(Locale.ROOT);
         List<String> frames = new ArrayList<>();
 
@@ -186,57 +170,53 @@ public class OpsPilotOrchestratorService {
         }
 
         String city = detectNomadCity(prompt, request);
-        boolean nomadFlow = isNomadPrompt(lower);
+        String promptTemplateName = lower.contains("walk") || lower.contains("music")
+                ? "local-music-and-food-walk"
+                : "weekend-cultural-escape";
 
         frames.add(formatSseEvent(threadId, "STATUS", Map.of(
                 "phase", "reasoning",
                 "durationMs", 1240,
-                "thought", nomadFlow
-                        ? "Synthesizing " + city + " cultural dossier: expanding MCP prompt template, reading traveler://preferences, querying Open-Meteo & iTunes 30s audio preview (:8081), and delegating Frankfurter FX & REST Countries audit to Sentinel-A2A (:8082)."
-                        : "Evaluating cluster telemetry via MCP (:8081) and delegating architectural/security verification to A2A Specialist (:8082).",
+                "thought", "Synthesizing " + city + " cultural dossier: expanding MCP prompt template, reading traveler://preferences, querying Open-Meteo & iTunes 30s audio preview (:8081), and delegating Frankfurter FX & REST Countries audit to Nomad-A2A-Specialist (:8082).",
                 "message", "Reasoning across AG-UI + MCP (:8081) + A2A (:8082) protocols")));
 
-        if (nomadFlow) {
-            String promptCallId = "call-prompt-" + UUID.randomUUID().toString().substring(0, 6);
-            Map<String, Object> promptTpl = mcpClient.getPromptTemplate("weekend-cultural-escape", Map.of("city", city));
-            frames.add(formatSseEvent(threadId, "TOOL_CALL", Map.of(
-                    "callId", promptCallId,
-                    "tool", "weekend-cultural-escape",
-                    "protocol", "MCP",
-                    "callType", "mcp:prompt",
-                    "server", "nomad-mcp-concierge (:8081)",
-                    "args", Map.of("city", city))));
-            frames.add(formatSseEvent(threadId, "TOOL_RESULT", Map.of(
-                    "callId", promptCallId,
-                    "tool", "weekend-cultural-escape",
-                    "protocol", "MCP",
-                    "callType", "mcp:prompt",
-                    "result", promptTpl)));
+        String promptCallId = "call-prompt-" + UUID.randomUUID().toString().substring(0, 6);
+        Map<String, Object> promptTpl = mcpClient.getPromptTemplate(promptTemplateName, Map.of("city", city));
+        frames.add(formatSseEvent(threadId, "TOOL_CALL", Map.of(
+                "callId", promptCallId,
+                "tool", promptTemplateName,
+                "protocol", "MCP",
+                "callType", "mcp:prompt",
+                "server", "nomad-mcp-concierge (:8081)",
+                "args", Map.of("city", city))));
+        frames.add(formatSseEvent(threadId, "TOOL_RESULT", Map.of(
+                "callId", promptCallId,
+                "tool", promptTemplateName,
+                "protocol", "MCP",
+                "callType", "mcp:prompt",
+                "result", promptTpl)));
 
-            String resCallId = "call-res-" + UUID.randomUUID().toString().substring(0, 6);
-            Map<String, Object> prefs = mcpClient.readResource("traveler://preferences");
-            frames.add(formatSseEvent(threadId, "TOOL_CALL", Map.of(
-                    "callId", resCallId,
-                    "tool", "traveler://preferences",
-                    "protocol", "MCP",
-                    "callType", "mcp:resource",
-                    "server", "nomad-mcp-concierge (:8081)",
-                    "args", Map.of("uri", "traveler://preferences"))));
-            frames.add(formatSseEvent(threadId, "TOOL_RESULT", Map.of(
-                    "callId", resCallId,
-                    "tool", "traveler://preferences",
-                    "protocol", "MCP",
-                    "callType", "mcp:resource",
-                    "result", prefs)));
-        }
+        String resCallId = "call-res-" + UUID.randomUUID().toString().substring(0, 6);
+        Map<String, Object> prefs = mcpClient.readResource("traveler://preferences");
+        frames.add(formatSseEvent(threadId, "TOOL_CALL", Map.of(
+                "callId", resCallId,
+                "tool", "traveler://preferences",
+                "protocol", "MCP",
+                "callType", "mcp:resource",
+                "server", "nomad-mcp-concierge (:8081)",
+                "args", Map.of("uri", "traveler://preferences"))));
+        frames.add(formatSseEvent(threadId, "TOOL_RESULT", Map.of(
+                "callId", resCallId,
+                "tool", "traveler://preferences",
+                "protocol", "MCP",
+                "callType", "mcp:resource",
+                "result", prefs)));
 
         AgentChatResponse chat = executeChat(request);
 
         frames.add(formatSseEvent(threadId, "STATUS", Map.of(
                 "phase", "executing_mcp_tool",
-                "message", nomadFlow
-                        ? "Querying live Open-Meteo weather, Wikipedia cultural dossier & Apple iTunes 30s audio preview"
-                        : "Invoking MCP tool on quarkus-mcp-cluster-ops (:8081)")));
+                "message", "Querying live Open-Meteo weather, Wikipedia cultural dossier & Apple iTunes 30s audio preview for " + city)));
 
         for (Map<String, Object> call : chat.mcpCalls()) {
             String callId = "call-" + UUID.randomUUID().toString().substring(0, 8);
@@ -255,53 +235,51 @@ public class OpsPilotOrchestratorService {
                     "result", call.get("result"))));
         }
 
-        if (nomadFlow) {
-            String fnCallId = "call-fn-" + UUID.randomUUID().toString().substring(0, 6);
-            frames.add(formatSseEvent(threadId, "TOOL_CALL", Map.of(
-                    "callId", fnCallId,
-                    "tool", "calculateWalkingCorridor",
-                    "protocol", "LOCAL",
-                    "callType", "tool:function",
-                    "server", "nomad-orchestrator (:8080)",
-                    "args", Map.of("city", city, "stops", 3))));
-            frames.add(formatSseEvent(threadId, "TOOL_RESULT", Map.of(
-                    "callId", fnCallId,
-                    "tool", "calculateWalkingCorridor",
-                    "protocol", "LOCAL",
-                    "callType", "tool:function",
-                    "result", Map.of("distanceKm", 4.2, "walkingMinutes", 52, "scenicRating", "9.8/10"))));
+        String fnCallId = "call-fn-" + UUID.randomUUID().toString().substring(0, 6);
+        frames.add(formatSseEvent(threadId, "TOOL_CALL", Map.of(
+                "callId", fnCallId,
+                "tool", "calculateWalkingCorridor",
+                "protocol", "LOCAL",
+                "callType", "tool:function",
+                "server", "nomad-orchestrator (:8080)",
+                "args", Map.of("city", city, "stops", 3))));
+        frames.add(formatSseEvent(threadId, "TOOL_RESULT", Map.of(
+                "callId", fnCallId,
+                "tool", "calculateWalkingCorridor",
+                "protocol", "LOCAL",
+                "callType", "tool:function",
+                "result", Map.of("distanceKm", 4.2, "walkingMinutes", 52, "scenicRating", "9.8/10"))));
 
-            String uiCallId = "call-ui-" + UUID.randomUUID().toString().substring(0, 6);
-            frames.add(formatSseEvent(threadId, "TOOL_CALL", Map.of(
-                    "callId", uiCallId,
-                    "tool", "renderInteractiveConciergeDeck",
-                    "protocol", "AG-UI",
-                    "callType", "tool:ui",
-                    "server", "agui-surface-renderer",
-                    "args", Map.of("city", city, "components", List.of("MediaGallery", "StructuredResponseBlock")))));
-            frames.add(formatSseEvent(threadId, "TOOL_RESULT", Map.of(
-                    "callId", uiCallId,
-                    "tool", "renderInteractiveConciergeDeck",
-                    "protocol", "AG-UI",
-                    "callType", "tool:ui",
-                    "result", Map.of("rendered", true, "city", city))));
+        String uiCallId = "call-ui-" + UUID.randomUUID().toString().substring(0, 6);
+        frames.add(formatSseEvent(threadId, "TOOL_CALL", Map.of(
+                "callId", uiCallId,
+                "tool", "renderInteractiveConciergeDeck",
+                "protocol", "AG-UI",
+                "callType", "tool:ui",
+                "server", "agui-surface-renderer",
+                "args", Map.of("city", city, "components", List.of("MediaGallery", "StructuredResponseBlock")))));
+        frames.add(formatSseEvent(threadId, "TOOL_RESULT", Map.of(
+                "callId", uiCallId,
+                "tool", "renderInteractiveConciergeDeck",
+                "protocol", "AG-UI",
+                "callType", "tool:ui",
+                "result", Map.of("rendered", true, "city", city))));
 
-            String discStepId = "a2a-disc-" + UUID.randomUUID().toString().substring(0, 6);
-            frames.add(formatSseEvent(threadId, "STEP_STARTED", Map.of(
-                    "stepId", discStepId,
-                    "protocol", "A2A",
-                    "callType", "a2a:discovery",
-                    "agentName", "Sentinel-A2A-Auditor",
-                    "skillId", "/.well-known/agent-card.json")));
-            frames.add(formatSseEvent(threadId, "STEP_FINISHED", Map.of(
-                    "stepId", discStepId,
-                    "protocol", "A2A",
-                    "callType", "a2a:discovery",
-                    "agentName", "Sentinel-A2A-Auditor",
-                    "skillId", "/.well-known/agent-card.json",
-                    "summary", "Discovered A2A AgentCard v1.4.0 at :8082 (5 specialist skills verified)",
-                    "report", a2aClient.getAgentCard())));
-        }
+        String discStepId = "a2a-disc-" + UUID.randomUUID().toString().substring(0, 6);
+        frames.add(formatSseEvent(threadId, "STEP_STARTED", Map.of(
+                "stepId", discStepId,
+                "protocol", "A2A",
+                "callType", "a2a:discovery",
+                "agentName", "Nomad-A2A-Specialist",
+                "skillId", "/.well-known/agent-card.json")));
+        frames.add(formatSseEvent(threadId, "STEP_FINISHED", Map.of(
+                "stepId", discStepId,
+                "protocol", "A2A",
+                "callType", "a2a:discovery",
+                "agentName", "Nomad-A2A-Specialist",
+                "skillId", "/.well-known/agent-card.json",
+                "summary", "Discovered A2A AgentCard v1.4.0 at :8082 (3 travel specialist skills verified)",
+                "report", a2aClient.getAgentCard())));
 
         for (Map<String, Object> handoff : chat.a2aHandoffs()) {
             frames.add(formatSseEvent(threadId, "STEP_STARTED", Map.of(
@@ -319,23 +297,21 @@ public class OpsPilotOrchestratorService {
                     "summary", handoff.get("summary"),
                     "report", handoff.get("report"))));
 
-            if (nomadFlow) {
-                String artStepId = "a2a-art-" + UUID.randomUUID().toString().substring(0, 6);
-                frames.add(formatSseEvent(threadId, "STEP_STARTED", Map.of(
-                        "stepId", artStepId,
-                        "protocol", "A2A",
-                        "callType", "a2a:artifact",
-                        "agentName", handoff.get("agentName"),
-                        "skillId", "artifact:" + handoff.get("skillId"))));
-                frames.add(formatSseEvent(threadId, "STEP_FINISHED", Map.of(
-                        "stepId", artStepId,
-                        "protocol", "A2A",
-                        "callType", "a2a:artifact",
-                        "agentName", handoff.get("agentName"),
-                        "skillId", "artifact:" + handoff.get("skillId"),
-                        "summary", "Signed A2A Dossier Artifact delivered to orchestrator",
-                        "report", handoff.get("report"))));
-            }
+            String artStepId = "a2a-art-" + UUID.randomUUID().toString().substring(0, 6);
+            frames.add(formatSseEvent(threadId, "STEP_STARTED", Map.of(
+                    "stepId", artStepId,
+                    "protocol", "A2A",
+                    "callType", "a2a:artifact",
+                    "agentName", handoff.get("agentName"),
+                    "skillId", "artifact:" + handoff.get("skillId"))));
+            frames.add(formatSseEvent(threadId, "STEP_FINISHED", Map.of(
+                    "stepId", artStepId,
+                    "protocol", "A2A",
+                    "callType", "a2a:artifact",
+                    "agentName", handoff.get("agentName"),
+                    "skillId", "artifact:" + handoff.get("skillId"),
+                    "summary", "Signed A2A Dossier Artifact delivered to orchestrator",
+                    "report", handoff.get("report"))));
         }
 
         Map<String, Object> stateDelta = new LinkedHashMap<>();
@@ -360,7 +336,9 @@ public class OpsPilotOrchestratorService {
 
     private void streamLiveOllamaRun(AgentRunRequest request, String mode, MultiEmitter<? super String> emitter) {
         String threadId = resolveThreadId(request);
-        String prompt = request != null && request.prompt() != null ? request.prompt() : "Inspect cluster health";
+        String prompt = request != null && request.prompt() != null && !request.prompt().isBlank()
+                ? request.prompt()
+                : "Curate a 4-night cultural and musical escape in Kyoto";
         String lower = prompt.toLowerCase(Locale.ROOT);
         String ollamaModel = extractOllamaModel(mode);
 
@@ -382,148 +360,70 @@ public class OpsPilotOrchestratorService {
             }
 
             StringBuilder toolContext = new StringBuilder();
-            boolean nomadFlow = isNomadPrompt(lower);
             String city = detectNomadCity(prompt, request);
+            String genre = detectMusicGenre(lower);
 
-            if (nomadFlow) {
-                emitter.emit(formatSseEvent(threadId, "STATUS", Map.of(
-                        "phase", "executing_mcp_tool",
-                        "message", "Querying live Open-Meteo weather, Wikipedia cultural dossier & Apple iTunes 30s audio preview for " + city)));
+            emitter.emit(formatSseEvent(threadId, "STATUS", Map.of(
+                    "phase", "executing_mcp_tool",
+                    "message", "Querying live Open-Meteo weather, Wikipedia cultural dossier & Apple iTunes 30s audio preview for " + city)));
 
-                for (Map<String, Object> call : List.of(
-                        mcpClient.callTool("fetchCityWeather", Map.of("city", city)),
-                        mcpClient.callTool("discoverLocalCultureAndMedia", Map.of("destination", city, "genre", "traditional")))) {
-                    String callId = "call-" + UUID.randomUUID().toString().substring(0, 8);
-                    emitter.emit(formatSseEvent(threadId, "TOOL_CALL", Map.of(
-                            "callId", callId,
-                            "tool", call.get("toolName"),
-                            "protocol", "MCP",
-                            "callType", "mcp:tool",
-                            "server", call.get("server"),
-                            "args", call.get("arguments"))));
-                    emitter.emit(formatSseEvent(threadId, "TOOL_RESULT", Map.of(
-                            "callId", callId,
-                            "tool", call.get("toolName"),
-                            "protocol", "MCP",
-                            "callType", "mcp:tool",
-                            "result", call.get("result"))));
-                    toolContext.append("\n[MCP `").append(call.get("toolName")).append("`]: ")
-                            .append(objectMapper.writeValueAsString(call.get("result")));
-                }
-
-                for (String skillId : List.of("convert-and-audit-budget", "verify-travel-advisory")) {
-                    String stepId = "a2a-" + skillId.substring(0, 3) + "-" + UUID.randomUUID().toString().substring(0, 6);
-                    emitter.emit(formatSseEvent(threadId, "STEP_STARTED", Map.of(
-                            "stepId", stepId,
-                            "protocol", "A2A",
-                            "callType", "a2a:task",
-                            "agentName", "Sentinel-A2A-Auditor",
-                            "skillId", skillId)));
-                    Map<String, Object> handoff = a2aClient.delegateTask(stepId, skillId, prompt);
-                    emitter.emit(formatSseEvent(threadId, "STEP_FINISHED", Map.of(
-                            "stepId", stepId,
-                            "protocol", "A2A",
-                            "callType", "a2a:task",
-                            "agentName", handoff.get("agentName"),
-                            "skillId", skillId,
-                            "summary", handoff.get("summary"),
-                            "report", handoff.get("report"))));
-                    toolContext.append("\n[A2A `").append(skillId).append("`]: ")
-                            .append(handoff.get("summary"));
-                }
-
-                Map<String, Object> stateDelta = new LinkedHashMap<>();
-                stateDelta.put("clusterState", mcpClient.readClusterState());
-                stateDelta.put("lastTool", "discoverLocalCultureAndMedia");
-                stateDelta.put("lastA2aSkill", "convert-and-audit-budget");
-                stateDelta.put("media", buildTurnMedia(city));
-                stateDelta.put("interaction", buildTurnInteraction(city, lower));
-                stateDelta.put("sources", buildTurnSources(city));
-                stateDelta.put("followUps", buildTurnFollowUps(city));
-                emitter.emit(formatSseEvent(threadId, "STATE_DELTA", stateDelta));
-            } else {
-                boolean shouldInvokeMcp = containsAny(lower, List.of("health", "cluster", "status", "service", "log", "scale", "replica"));
-                boolean shouldInvokeA2a = containsAny(lower, List.of("audit", "arch", "ring", "security", "posture", "cve", "remediat", "incident", "scale"));
-
-                if (shouldInvokeMcp) {
-                    String toolName = "inspectClusterHealth";
-                    Map<String, Object> args = Map.of();
-                    if (lower.contains("log")) {
-                        toolName = "queryServiceLogs";
-                        args = Map.of("serviceName", lower.contains("order") ? "order-processor" : "payment-gateway");
-                    } else if (lower.contains("scale")) {
-                        toolName = "scaleDeployment";
-                        int replicas = extractReplicas(lower, 4);
-                        String svc = "payment-gateway";
-                        if (lower.contains("order-processor") || lower.contains("order")) {
-                            svc = "order-processor";
-                        } else if (lower.contains("identity-provider") || lower.contains("identity")) {
-                            svc = "identity-provider";
-                        } else if (lower.contains("payment-service") || lower.contains("payment")) {
-                            svc = "payment-gateway";
-                        }
-                        args = Map.of("serviceName", svc, "replicas", replicas);
-                    }
-
-                    String callId = "call-" + UUID.randomUUID().toString().substring(0, 8);
-                    emitter.emit(formatSseEvent(threadId, "STATUS", Map.of(
-                            "phase", "executing_mcp_tool",
-                            "message", "Invoking MCP tool `" + toolName + "` on quarkus-mcp-cluster-ops (:8081)")));
-                    emitter.emit(formatSseEvent(threadId, "TOOL_CALL", Map.of(
-                            "callId", callId,
-                            "tool", toolName,
-                            "protocol", "MCP",
-                            "server", "quarkus-mcp-cluster-ops (:8081)",
-                            "args", args)));
-
-                    Map<String, Object> callResult = mcpClient.callTool(toolName, args);
-                    emitter.emit(formatSseEvent(threadId, "TOOL_RESULT", Map.of(
-                            "callId", callId,
-                            "tool", toolName,
-                            "protocol", "MCP",
-                            "result", callResult.get("result"))));
-                    emitter.emit(formatSseEvent(threadId, "STATE_DELTA", Map.of(
-                            "clusterState", mcpClient.readClusterState(),
-                            "lastTool", toolName)));
-                    toolContext.append("\n[MCP Tool Executed (`").append(toolName).append("` on :8081)]: ")
-                            .append(objectMapper.writeValueAsString(callResult.get("result")));
-                }
-
-                if (shouldInvokeA2a) {
-                    String skillId = "audit-clean-architecture";
-                    if (containsAny(lower, List.of("security", "posture", "cve"))) {
-                        skillId = "assess-security-posture";
-                    } else if (containsAny(lower, List.of("remediat", "incident", "scale"))) {
-                        skillId = "plan-incident-remediation";
-                    }
-                    emitter.emit(formatSseEvent(threadId, "STATUS", Map.of(
-                            "phase", "delegating_a2a_task",
-                            "message", "Delegating `" + skillId + "` to Sentinel-A2A-Auditor (:8082)")));
-                    String stepId = "a2a-" + UUID.randomUUID().toString().substring(0, 8);
-                    emitter.emit(formatSseEvent(threadId, "STEP_STARTED", Map.of(
-                            "stepId", stepId,
-                            "protocol", "A2A",
-                            "agentName", "Sentinel-A2A-Auditor",
-                            "skillId", skillId)));
-                    Map<String, Object> handoff = a2aClient.delegateTask(stepId, skillId, prompt);
-                    emitter.emit(formatSseEvent(threadId, "STEP_FINISHED", Map.of(
-                            "stepId", stepId,
-                            "protocol", "A2A",
-                            "agentName", handoff.get("agentName"),
-                            "skillId", skillId,
-                            "summary", handoff.get("summary"),
-                            "report", handoff.get("report"))));
-                    toolContext.append("\n[A2A Specialist (`Sentinel-A2A-Auditor` :8082, skill `").append(skillId).append("`)]: ")
-                            .append(handoff.get("summary")).append(" | Report: ")
-                            .append(objectMapper.writeValueAsString(handoff.get("report")));
-                }
+            for (Map<String, Object> call : List.of(
+                    mcpClient.callTool("fetchCityWeather", Map.of("city", city)),
+                    mcpClient.callTool("discoverLocalCultureAndMedia", Map.of("destination", city, "genre", genre)))) {
+                String callId = "call-" + UUID.randomUUID().toString().substring(0, 8);
+                emitter.emit(formatSseEvent(threadId, "TOOL_CALL", Map.of(
+                        "callId", callId,
+                        "tool", call.get("toolName"),
+                        "protocol", "MCP",
+                        "callType", "mcp:tool",
+                        "server", call.get("server"),
+                        "args", call.get("arguments"))));
+                emitter.emit(formatSseEvent(threadId, "TOOL_RESULT", Map.of(
+                        "callId", callId,
+                        "tool", call.get("toolName"),
+                        "protocol", "MCP",
+                        "callType", "mcp:tool",
+                        "result", call.get("result"))));
+                toolContext.append("\n[MCP `").append(call.get("toolName")).append("`]: ")
+                        .append(objectMapper.writeValueAsString(call.get("result")));
             }
+
+            for (String skillId : List.of("convert-and-audit-budget", "verify-travel-advisory")) {
+                String stepId = "a2a-" + skillId.substring(0, 3) + "-" + UUID.randomUUID().toString().substring(0, 6);
+                emitter.emit(formatSseEvent(threadId, "STEP_STARTED", Map.of(
+                        "stepId", stepId,
+                        "protocol", "A2A",
+                        "callType", "a2a:task",
+                        "agentName", "Nomad-A2A-Specialist",
+                        "skillId", skillId)));
+                Map<String, Object> handoff = a2aClient.delegateTask(stepId, skillId, prompt);
+                emitter.emit(formatSseEvent(threadId, "STEP_FINISHED", Map.of(
+                        "stepId", stepId,
+                        "protocol", "A2A",
+                        "callType", "a2a:task",
+                        "agentName", handoff.get("agentName"),
+                        "skillId", skillId,
+                        "summary", handoff.get("summary"),
+                        "report", handoff.get("report"))));
+                toolContext.append("\n[A2A `").append(skillId).append("`]: ")
+                        .append(handoff.get("summary"));
+            }
+
+            Map<String, Object> stateDelta = new LinkedHashMap<>();
+            stateDelta.put("clusterState", mcpClient.readClusterState());
+            stateDelta.put("lastTool", "discoverLocalCultureAndMedia");
+            stateDelta.put("lastA2aSkill", "convert-and-audit-budget");
+            stateDelta.put("media", buildTurnMedia(city));
+            stateDelta.put("interaction", buildTurnInteraction(city, lower));
+            stateDelta.put("sources", buildTurnSources(city));
+            stateDelta.put("followUps", buildTurnFollowUps(city));
+            emitter.emit(formatSseEvent(threadId, "STATE_DELTA", stateDelta));
 
             emitter.emit(formatSseEvent(threadId, "STATUS", Map.of(
                     "phase", "streaming_llm_tokens",
                     "message", "Streaming live tokens from Ollama (" + ollamaModel + ")")));
 
-            boolean streamedFromOllama = streamTokensFromOllama(threadId, ollamaModel, prompt, toolContext.toString(), nomadFlow, emitter);
+            boolean streamedFromOllama = streamTokensFromOllama(threadId, ollamaModel, prompt, toolContext.toString(), emitter);
             if (!streamedFromOllama) {
                 AgentChatResponse fallback = executeChat(request);
                 List<String> fallbackFrames = new ArrayList<>();
@@ -551,17 +451,12 @@ public class OpsPilotOrchestratorService {
             String model,
             String userPrompt,
             String toolContext,
-            boolean nomadFlow,
             MultiEmitter<? super String> emitter) {
         try {
-            String systemPrompt = nomadFlow
-                    ? "You are Nomad, an authoritative, refined AI Travel, Architecture, Weather, FX & Local Culture Concierge. "
-                            + "Ground your response in the live Open-Meteo weather, Wikipedia cultural summary, Apple iTunes 30-second local music preview, "
-                            + "Frankfurter FX conversion, and REST Countries travel advisory provided in the context. "
-                            + "Format your response with a clean Markdown heading and concise bullet points covering atmospheric architecture, local listening/music culture, and practical weather/currency insights."
-                    : "You are OpsPilot, a concise Quarkus SRE & Clean Architecture AI Agent speaking the AG-UI protocol. "
-                            + "Current cluster state: " + objectMapper.writeValueAsString(mcpClient.readClusterState()) + ". "
-                            + "Keep responses clear, direct, and under 4 sentences.";
+            String systemPrompt = "You are Nomad, an authoritative, refined AI Travel, Architecture, Weather, FX & Local Culture Concierge. "
+                    + "Ground your response in the live Open-Meteo weather, Wikipedia cultural summary, Apple iTunes 30-second local music preview, "
+                    + "Frankfurter FX conversion, and REST Countries travel advisory provided in the context. "
+                    + "Format your response with a clean Markdown heading and concise bullet points covering atmospheric architecture, local listening/music culture, and practical weather/currency insights.";
 
             String augmentedUserPrompt = toolContext.isEmpty()
                     ? userPrompt
@@ -612,80 +507,38 @@ public class OpsPilotOrchestratorService {
 
     private boolean checkAndRecordHitlInterrupt(String threadId, String prompt, String lower, List<String> frames) {
         if (lower.startsWith("/hitl") || lower.contains("reserve") || lower.contains("book ")) {
-            String city = detectNomadCity(lower);
-            String stopTitle = switch (city.toLowerCase(Locale.ROOT)) {
-                case "lisbon" -> "Palácio Belmonte Alfama Suite";
-                case "reykjavik" -> "The Retreat at Blue Lagoon Moss Villa";
-                default -> "Hoshinoya Arashiyama Riverside Pavilion";
-            };
-            int nights = 4;
+            String city = detectNomadCity(prompt, null);
+            String stopTitle = McpGatewayClient.defaultSanctuaryForCity(city);
+            int nights = extractNights(lower, 4);
             double costUsd = switch (city.toLowerCase(Locale.ROOT)) {
                 case "lisbon" -> 1760.0;
                 case "reykjavik" -> 2240.0;
                 default -> 1840.0;
             };
-            String callId = "call-hitl-" + UUID.randomUUID().toString().substring(0, 6);
-            Map<String, Object> pendingAction = new LinkedHashMap<>();
-            pendingAction.put("callId", callId);
-            pendingAction.put("toolName", "updateTripItinerary");
-            pendingAction.put("city", city);
-            pendingAction.put("stopTitle", stopTitle);
-            pendingAction.put("nights", nights);
-            pendingAction.put("costUsd", costUsd);
-            pendingAction.put("prompt", prompt);
-            pendingApprovals.put(threadId, pendingAction);
-
-            frames.add(formatSseEvent(threadId, "STATUS", Map.of(
-                    "phase", "awaiting_human_approval",
-                    "message", String.format(Locale.ROOT,
-                            "HITL Gate: Holding %s in %s (%d nights, $%.0f USD > $1,500 limit) requires traveler authorization",
-                            stopTitle, city, nights, costUsd))));
-            frames.add(formatSseEvent(threadId, "TOOL_CALL", Map.of(
-                    "callId", callId,
-                    "tool", "updateTripItinerary",
-                    "protocol", "MCP",
-                    "callType", "hitl:approval",
-                    "server", "nomad-mcp-concierge (:8081)",
-                    "args", Map.of("city", city, "stopTitle", stopTitle, "nights", nights, "costUsd", costUsd),
-                    "requiresApproval", true)));
-            frames.add(formatSseEvent(threadId, "RUN_FINISHED", Map.of(
-                    "threadId", threadId,
-                    "status", "interrupted",
-                    "approvalRequired", true,
-                    "pendingAction", pendingAction)));
-            return true;
-        }
-        if (lower.contains("scale")) {
-            int requestedReplicas = extractReplicas(lower, 4);
-            String svc = "payment-gateway";
-            if (lower.contains("order-processor") || lower.contains("order")) {
-                svc = "order-processor";
-            } else if (lower.contains("identity-provider") || lower.contains("identity")) {
-                svc = "identity-provider";
-            } else if (lower.contains("payment-service") || lower.contains("payment")) {
-                svc = "payment-gateway";
-            }
-            if (requestedReplicas > HITL_REPLICA_THRESHOLD) {
+            if (costUsd > HITL_SANCTUARY_THRESHOLD_USD) {
                 String callId = "call-hitl-" + UUID.randomUUID().toString().substring(0, 6);
-                Map<String, Object> pendingAction = Map.of(
-                        "callId", callId,
-                        "toolName", "scaleDeployment",
-                        "serviceName", svc,
-                        "replicas", requestedReplicas,
-                        "prompt", prompt);
+                Map<String, Object> pendingAction = new LinkedHashMap<>();
+                pendingAction.put("callId", callId);
+                pendingAction.put("toolName", "updateTripItinerary");
+                pendingAction.put("city", city);
+                pendingAction.put("stopTitle", stopTitle);
+                pendingAction.put("nights", nights);
+                pendingAction.put("costUsd", costUsd);
+                pendingAction.put("prompt", prompt);
                 pendingApprovals.put(threadId, pendingAction);
 
                 frames.add(formatSseEvent(threadId, "STATUS", Map.of(
                         "phase", "awaiting_human_approval",
-                        "message", String.format("HITL Gate: Scaling %s to %d replicas (>%d) requires operator approval",
-                                svc, requestedReplicas, HITL_REPLICA_THRESHOLD))));
+                        "message", String.format(Locale.ROOT,
+                                "HITL Gate: Holding %s in %s (%d nights, $%.0f USD > $%.0f limit) requires traveler authorization",
+                                stopTitle, city, nights, costUsd, HITL_SANCTUARY_THRESHOLD_USD))));
                 frames.add(formatSseEvent(threadId, "TOOL_CALL", Map.of(
                         "callId", callId,
-                        "tool", "scaleDeployment",
+                        "tool", "updateTripItinerary",
                         "protocol", "MCP",
                         "callType", "hitl:approval",
-                        "server", "quarkus-mcp-cluster-ops (:8081)",
-                        "args", Map.of("serviceName", svc, "replicas", requestedReplicas),
+                        "server", "nomad-mcp-concierge (:8081)",
+                        "args", Map.of("city", city, "stopTitle", stopTitle, "nights", nights, "costUsd", costUsd),
                         "requiresApproval", true)));
                 frames.add(formatSseEvent(threadId, "RUN_FINISHED", Map.of(
                         "threadId", threadId,
@@ -710,96 +563,40 @@ public class OpsPilotOrchestratorService {
         if (approval == null || !approval.approved() || pending == null) {
             frames.add(formatSseEvent(threadId, "STATUS", Map.of(
                     "phase", "hitl_rejected",
-                    "message", "Operator rejected pending HITL action")));
+                    "message", "Traveler declined pending sanctuary reservation hold")));
             frames.add(formatSseEvent(threadId, "RUN_FINISHED", Map.of(
                     "threadId", threadId,
                     "status", "cancelled")));
             return Multi.createFrom().iterable(frames);
         }
 
-        String toolName = String.valueOf(pending.getOrDefault("toolName", "scaleDeployment"));
         String callId = String.valueOf(pending.getOrDefault("callId", "call-hitl"));
         Map<String, Object> mods = approval.modifiedArgs() != null ? approval.modifiedArgs() : Map.of();
 
-        if ("updateTripItinerary".equals(toolName)) {
-            String city = String.valueOf(mods.getOrDefault("city", pending.getOrDefault("city", "Kyoto")));
-            String stopTitle = String.valueOf(mods.getOrDefault("stopTitle", pending.getOrDefault("stopTitle", "Hoshinoya Arashiyama")));
-            int nights = mods.get("nights") instanceof Number n ? n.intValue()
-                    : (pending.get("nights") instanceof Number pn ? pn.intValue() : 4);
-            double costUsd = mods.get("costUsd") instanceof Number n ? n.doubleValue()
-                    : (pending.get("costUsd") instanceof Number pn ? pn.doubleValue() : 1840.0);
+        String city = String.valueOf(mods.getOrDefault("city", pending.getOrDefault("city", "Kyoto")));
+        String stopTitle = String.valueOf(mods.getOrDefault("stopTitle", pending.getOrDefault("stopTitle", McpGatewayClient.defaultSanctuaryForCity(city))));
+        int nights = mods.get("nights") instanceof Number n ? n.intValue()
+                : (pending.get("nights") instanceof Number pn ? pn.intValue() : 4);
+        double costUsd = mods.get("costUsd") instanceof Number n ? n.doubleValue()
+                : (pending.get("costUsd") instanceof Number pn ? pn.doubleValue() : 1840.0);
 
-            Map<String, Object> result = mcpClient.callTool("updateTripItinerary", Map.of(
-                    "city", city,
-                    "stopTitle", stopTitle,
-                    "nights", nights,
-                    "costUsd", costUsd));
-            Map<String, Object> handoff = a2aClient.delegateTask(
-                    "a2a-" + threadId,
-                    "convert-and-audit-budget",
-                    "Confirm reservation budget for " + city);
-
-            frames.add(formatSseEvent(threadId, "TOOL_RESULT", Map.of(
-                    "callId", callId,
-                    "tool", "updateTripItinerary",
-                    "protocol", "MCP",
-                    "callType", "mcp:tool",
-                    "approvedByOperator", true,
-                    "result", result.get("result"))));
-            frames.add(formatSseEvent(threadId, "STEP_STARTED", Map.of(
-                    "stepId", handoff.get("taskId"),
-                    "protocol", "A2A",
-                    "callType", "a2a:task",
-                    "agentName", handoff.get("agentName"),
-                    "skillId", handoff.get("skillId"))));
-            frames.add(formatSseEvent(threadId, "STEP_FINISHED", Map.of(
-                    "stepId", handoff.get("taskId"),
-                    "protocol", "A2A",
-                    "callType", "a2a:task",
-                    "agentName", handoff.get("agentName"),
-                    "skillId", handoff.get("skillId"),
-                    "summary", handoff.get("summary"),
-                    "report", handoff.get("report"))));
-            frames.add(formatSseEvent(threadId, "STATE_DELTA", Map.of(
-                    "clusterState", mcpClient.readClusterState(),
-                    "hitlApproved", true,
-                    "reason", approval.reason() == null ? "Confirmed by Traveler" : approval.reason(),
-                    "followUps", buildTurnFollowUps(city))));
-
-            String reply = String.format(Locale.ROOT,
-                    "Reservation confirmed (%s). Locked **%s** in **%s** for **%d nights** ($%.0f USD) via MCP (`:8081`) and audited FX settlement with `%s` (`:8082`).",
-                    approval.reason() == null ? "Traveler Approved" : approval.reason(),
-                    stopTitle,
-                    city,
-                    nights,
-                    costUsd,
-                    handoff.get("agentName"));
-            appendTextDeltaFrames(frames, threadId, reply);
-            frames.add(formatSseEvent(threadId, "RUN_FINISHED", Map.of(
-                    "threadId", threadId,
-                    "status", "completed")));
-            return Multi.createFrom().iterable(frames);
-        }
-
-        String svc = String.valueOf(pending.getOrDefault("serviceName", "payment-gateway"));
-        int replicas = pending.get("replicas") instanceof Number n ? n.intValue() : 8;
-
-        Map<String, Object> result = mcpClient.callTool("scaleDeployment", Map.of(
-                "serviceName", svc,
-                "replicas", replicas));
+        Map<String, Object> result = mcpClient.callTool("updateTripItinerary", Map.of(
+                "city", city,
+                "stopTitle", stopTitle,
+                "nights", nights,
+                "costUsd", costUsd));
         Map<String, Object> handoff = a2aClient.delegateTask(
                 "a2a-" + threadId,
-                "plan-incident-remediation",
-                String.valueOf(pending.getOrDefault("prompt", "Approved scale")));
+                "convert-and-audit-budget",
+                "Confirm reservation budget for " + city);
 
         frames.add(formatSseEvent(threadId, "TOOL_RESULT", Map.of(
                 "callId", callId,
-                "tool", "scaleDeployment",
+                "tool", "updateTripItinerary",
                 "protocol", "MCP",
                 "callType", "mcp:tool",
                 "approvedByOperator", true,
                 "result", result.get("result"))));
-
         frames.add(formatSseEvent(threadId, "STEP_STARTED", Map.of(
                 "stepId", handoff.get("taskId"),
                 "protocol", "A2A",
@@ -814,40 +611,25 @@ public class OpsPilotOrchestratorService {
                 "skillId", handoff.get("skillId"),
                 "summary", handoff.get("summary"),
                 "report", handoff.get("report"))));
-
         frames.add(formatSseEvent(threadId, "STATE_DELTA", Map.of(
                 "clusterState", mcpClient.readClusterState(),
                 "hitlApproved", true,
-                "reason", approval.reason() == null ? "Approved" : approval.reason())));
+                "reason", approval.reason() == null ? "Confirmed by Traveler" : approval.reason(),
+                "followUps", buildTurnFollowUps(city))));
 
-        String reply = String.format(
-                "HITL Approval confirmed (%s). Scaled `%s` to %d replicas via MCP (:8081) and verified remediation with %s (:8082).",
-                approval.reason() == null ? "Operator" : approval.reason(),
-                svc,
-                replicas,
+        String reply = String.format(Locale.ROOT,
+                "Reservation confirmed (%s). Locked **%s** in **%s** for **%d nights** ($%.0f USD) via MCP (`:8081`) and audited FX settlement with `%s` (`:8082`).",
+                approval.reason() == null ? "Traveler Approved" : approval.reason(),
+                stopTitle,
+                city,
+                nights,
+                costUsd,
                 handoff.get("agentName"));
         appendTextDeltaFrames(frames, threadId, reply);
-
         frames.add(formatSseEvent(threadId, "RUN_FINISHED", Map.of(
                 "threadId", threadId,
                 "status", "completed")));
-
         return Multi.createFrom().iterable(frames);
-    }
-
-    private boolean isSreClusterPrompt(String lower) {
-        return containsAny(lower, List.of(
-                "cluster", "replica", "scale", "payment-gateway", "order-processor",
-                "identity-provider", "payment-service", "log", "cve", "posture",
-                "security", "remediat", "incident", "inspect system", "clean architecture", "ring"));
-    }
-
-    private boolean isNomadPrompt(String lower) {
-        return !isSreClusterPrompt(lower);
-    }
-
-    private String detectNomadCity(String lower) {
-        return detectNomadCity(lower, null);
     }
 
     private String detectNomadCity(String prompt, AgentRunRequest request) {
@@ -872,7 +654,7 @@ public class OpsPilotOrchestratorService {
                 return candidate;
             }
         }
-        java.util.regex.Matcher m = java.util.regex.Pattern.compile(
+        Matcher m = Pattern.compile(
                 "\\b(?:in|to|for|visit|explore|around|about)\\s+([A-Z][a-zA-Z]+(?:\\s+[A-Z][a-zA-Z]+)?)\\b")
                 .matcher(raw);
         while (m.find()) {
@@ -897,6 +679,36 @@ public class OpsPilotOrchestratorService {
             return currentCity.trim();
         }
         return "Kyoto";
+    }
+
+    private String detectMusicGenre(String lower) {
+        if (lower.contains("fado")) {
+            return "fado";
+        }
+        if (lower.contains("jazz") || lower.contains("vinyl") || lower.contains("kissaten")) {
+            return "jazz";
+        }
+        if (lower.contains("ambient") || lower.contains("nordic") || lower.contains("strings")) {
+            return "ambient";
+        }
+        return "traditional";
+    }
+
+    private int extractNights(String text, int fallback) {
+        if (text == null) {
+            return fallback;
+        }
+        Matcher m = Pattern.compile("\\b(\\d+)\\s*[- ]?nights?\\b", Pattern.CASE_INSENSITIVE).matcher(text);
+        if (m.find()) {
+            try {
+                int val = Integer.parseInt(m.group(1));
+                if (val > 0 && val <= 30) {
+                    return val;
+                }
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        return fallback;
     }
 
     @SuppressWarnings("unchecked")
@@ -1105,28 +917,5 @@ public class OpsPilotOrchestratorService {
             }
         }
         return DEFAULT_OLLAMA_MODEL;
-    }
-
-    private boolean containsAny(String text, List<String> keywords) {
-        return keywords.stream().anyMatch(text::contains);
-    }
-
-    private int extractReplicas(String text, int fallback) {
-        if (text == null) {
-            return fallback;
-        }
-        // Match patterns like "to 8 replicas", "to 8", "8 replicas"
-        java.util.regex.Matcher m = java.util.regex.Pattern.compile("\\b(?:to\\s+)?(\\d+)\\s*(?:replicas?|pods?)?\\b", java.util.regex.Pattern.CASE_INSENSITIVE).matcher(text);
-        int candidate = fallback;
-        while (m.find()) {
-            try {
-                int val = Integer.parseInt(m.group(1));
-                if (val > 0 && val <= 50) {
-                    candidate = val;
-                }
-            } catch (NumberFormatException ignored) {
-            }
-        }
-        return candidate;
     }
 }

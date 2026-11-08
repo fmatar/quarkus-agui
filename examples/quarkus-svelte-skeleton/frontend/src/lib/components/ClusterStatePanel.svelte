@@ -3,15 +3,13 @@
 		CloudSun,
 		Compass,
 		Coins,
-		Minus,
 		Music,
-		Plus,
 		Server,
 		ShieldCheck
 	} from '@lucide/svelte';
 	import { NOMAD_DESTINATIONS } from '$lib/agui-client.js';
 
-	let { clusterState, isStreaming = false, onAdjustReplicas, onTriggerSkill } = $props();
+	let { clusterState, isStreaming = false, onTriggerSkill } = $props();
 
 	let nomadTrip = $derived(
 		clusterState?.nomadTrip ?? {

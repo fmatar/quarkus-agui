@@ -12,7 +12,7 @@
 
     <artifactId>quarkus-svelte-skeleton-mcp-server</artifactId>
     <name>AG-UI Showcase - Quarkus MCP Server (:8081)</name>
-    <description>Quarkus 3.40.1.1 + Java 25 Model Context Protocol (MCP) Server for Cluster Telemetry &amp; Scaling</description>
+    <description>Quarkus 3.40.1.1 + Java 25 Model Context Protocol (MCP) Server for Nomad Travel Weather, Culture &amp; Itinerary</description>
 
     <dependencies>
         <dependency>

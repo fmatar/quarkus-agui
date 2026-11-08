@@ -1,5 +1,6 @@
 package org.agui.showcase.mcp;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkiverse.mcp.server.Prompt;
@@ -20,40 +21,68 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.time.Instant;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
 
+/**
+ * Quarkus MCP Server (:8081) for the Nomad Travel, Weather, Local Culture & Itinerary Concierge.
+ * Exposes MCP Tools (@Tool), Resources (@Resource), and Prompt Templates (@Prompt)
+ * backed by Open-Meteo Geocoding & Forecast APIs, Wikipedia REST API v1, and Apple iTunes Search API.
+ */
 @ApplicationScoped
 public class ClusterTelemetryService {
 
-    public static final String SERVER_NAME = "cluster-telemetry-mcp";
+    public static final String SERVER_NAME = "nomad-mcp-concierge";
 
-    private final Map<String, ServiceStatus> services = new ConcurrentHashMap<>();
-    private final List<LogEntry> logs = new ArrayList<>();
     private final Map<String, Object> activeTrip = new ConcurrentHashMap<>();
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final HttpClient httpClient = HttpClient.newBuilder()
-        .connectTimeout(Duration.ofMillis(1500))
-        .build();
+            .connectTimeout(Duration.ofMillis(1500))
+            .build();
 
     String openMeteoBaseUrl = "https://api.open-meteo.com";
     String openMeteoGeoBaseUrl = "https://geocoding-api.open-meteo.com";
     String wikipediaBaseUrl = "https://en.wikipedia.org";
     String itunesBaseUrl = "https://itunes.apple.com";
-    java.util.function.Function<String, String> httpFetcher = this::fetchUrlViaHttp;
+    Function<String, String> httpFetcher = this::fetchUrlViaHttp;
+
+    @PostConstruct
+    void init() {
+        resetState();
+    }
+
+    public void resetState() {
+        activeTrip.clear();
+        activeTrip.put("uri", "itinerary://active-trip");
+        activeTrip.put("activeCity", "Kyoto");
+        activeTrip.put("country", "Japan");
+        activeTrip.put("currency", "JPY");
+        activeTrip.put("exchangeRate", 151.40);
+        activeTrip.put("temperatureC", 18.4);
+        activeTrip.put("weatherCondition", "Clear Cedar & Autumn Mist");
+        activeTrip.put("nights", 4);
+        activeTrip.put("stopTitle", "Hoshinoya Arashiyama Pavilion");
+        activeTrip.put("budgetUsd", 3200.0);
+        activeTrip.put("allocatedUsd", 1680.0);
+        activeTrip.put("soundtrack", Map.of(
+            "trackName", "Four Seasons in Kyoto (Koto & Shakuhachi)",
+            "artistName", "Chikatoyo Tsujimoto",
+            "previewUrl", "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/9b/27/76/9b2776c5-65cd-87f1-3f33-ccbccc642285/mzaf_16549365214060917501.plus.aac.p.m4a",
+            "durationSeconds", 30
+        ));
+    }
 
     private String fetchUrlViaHttp(String url) {
         try {
             HttpRequest req = HttpRequest.newBuilder(URI.create(url))
-                .timeout(Duration.ofMillis(1500))
-                .header("User-Agent", "Nomad-Quarkus-AGUI/1.0")
-                .GET()
-                .build();
+                    .timeout(Duration.ofMillis(1500))
+                    .header("User-Agent", "Nomad-Quarkus-AGUI/1.0")
+                    .GET()
+                    .build();
             HttpResponse<String> res = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
             return res.statusCode() == 200 ? res.body() : null;
         } catch (Exception ignored) {
@@ -61,101 +90,30 @@ public class ClusterTelemetryService {
         }
     }
 
-    public ClusterTelemetryService() {
-        resetState();
-    }
-
-    @PostConstruct
-    public final void resetState() {
-        services.clear();
-        services.put("api-gateway", new ServiceStatus("api-gateway", "HEALTHY", 3, 42.5, 310.0));
-        services.put("payment-service", new ServiceStatus("payment-service", "DEGRADED", 2, 89.4, 720.0));
-        services.put("auth-service", new ServiceStatus("auth-service", "HEALTHY", 3, 35.0, 260.0));
-
-        logs.clear();
-        logs.add(new LogEntry("2026-10-21T19:00:01Z", "payment-service", "ERROR", "Connection pool exhausted: p99 latency exceeded 1450ms"));
-        logs.add(new LogEntry("2026-10-21T19:00:05Z", "payment-service", "ERROR", "Retry budget depleted on upstream settlement gateway"));
-        logs.add(new LogEntry("2026-10-21T19:00:09Z", "payment-service", "WARN", "CPU throttling detected on replica payment-service-pod-2 (89.4%)"));
-        logs.add(new LogEntry("2026-10-21T19:00:12Z", "api-gateway", "INFO", "SSE stream routing healthy across 3 active replicas"));
-        logs.add(new LogEntry("2026-10-21T19:00:15Z", "auth-service", "INFO", "OIDC token verification cache hit ratio at 98.2%"));
-
-        activeTrip.clear();
-        activeTrip.put("uri", "itinerary://active-trip");
-        activeTrip.put("activeCity", "Kyoto");
-        activeTrip.put("country", "Japan");
-        activeTrip.put("currency", "JPY");
-        activeTrip.put("nights", 4);
-        activeTrip.put("stopTitle", "Hoshinoya Arashiyama Pavilion");
-        activeTrip.put("budgetUsd", 3200.0);
-        activeTrip.put("allocatedUsd", 1680.0);
-    }
-
-    @Tool(description = "Inspect cluster health, pod replicas, CPU, and memory across services")
-    public Map<String, Object> inspectClusterHealth(
-            @ToolArg(description = "Target AWS region", defaultValue = "us-east-1") String region) {
-        String resolvedRegion = (region == null || region.isBlank()) ? "us-east-1" : region.trim();
-        List<ServiceStatus> ordered = List.of(
-            services.get("api-gateway"),
-            services.get("payment-service"),
-            services.get("auth-service")
-        );
-        boolean anyDegraded = ordered.stream().anyMatch(s -> !"HEALTHY".equals(s.status()));
-        Map<String, Object> snapshot = new LinkedHashMap<>();
-        snapshot.put("region", resolvedRegion);
-        snapshot.put("overallStatus", anyDegraded ? "DEGRADED" : "HEALTHY");
-        snapshot.put("services", ordered);
-        snapshot.put("updatedAt", Instant.now().toString());
-        return snapshot;
-    }
-
-    @Tool(description = "Query recent structured logs by service name and severity")
-    public List<LogEntry> queryServiceLogs(
-            @ToolArg(description = "Microservice name", defaultValue = "payment-service") String serviceName,
-            @ToolArg(description = "Log severity filter", defaultValue = "ALL") String severity,
-            @ToolArg(description = "Maximum number of log entries", defaultValue = "5") int limit) {
-        String targetService = (serviceName == null || serviceName.isBlank()) ? "payment-service" : serviceName.trim();
-        String targetSeverity = (severity == null || severity.isBlank()) ? "ALL" : severity.trim().toUpperCase();
-        int clampedLimit = Math.max(1, Math.min(limit, 50));
-
-        return logs.stream()
-            .filter(entry -> entry.serviceName().equalsIgnoreCase(targetService))
-            .filter(entry -> "ALL".equals(targetSeverity) || entry.severity().equalsIgnoreCase(targetSeverity))
-            .limit(clampedLimit)
-            .toList();
-    }
-
-    @Tool(description = "Scale service deployment replica count between 1 and 20")
-    public ServiceStatus scaleDeployment(
-            @ToolArg(description = "Microservice name") String serviceName,
-            @ToolArg(description = "Target replica count (1..20)") int targetReplicas) {
-        if (serviceName == null || serviceName.isBlank() || !services.containsKey(serviceName.trim())) {
-            throw new IllegalArgumentException("Unknown service: " + serviceName);
-        }
-        if (targetReplicas < 1 || targetReplicas > 20) {
-            throw new IllegalArgumentException("targetReplicas must be between 1 and 20");
-        }
-        String key = serviceName.trim();
-        ServiceStatus current = services.get(key);
-        double scaledCpu = Math.round(Math.max(18.0, (current.cpuPercent() * current.replicas()) / targetReplicas) * 10.0) / 10.0;
-        String newStatus = scaledCpu < 75.0 ? "HEALTHY" : "DEGRADED";
-        ServiceStatus updated = new ServiceStatus(key, newStatus, targetReplicas, scaledCpu, current.memoryMb());
-        services.put(key, updated);
-        return updated;
-    }
-
-    @Resource(uri = "cluster://topology", description = "Live cluster topology and replica health snapshot", mimeType = "application/json")
-    public TextResourceContents clusterTopologyResource() {
-        return TextResourceContents.create("cluster://topology", getTopologySnapshot().toString());
-    }
-
-    @Resource(uri = "itinerary://active-trip", description = "Active Nomad multi-city cultural itinerary and budget state", mimeType = "application/json")
+    @Resource(uri = "itinerary://active-trip", description = "Active Nomad traveler itinerary, destination weather, and sanctuary allocation")
     public TextResourceContents activeTripResource() {
-        return TextResourceContents.create("itinerary://active-trip", getActiveTripSnapshot().toString());
+        try {
+            return new TextResourceContents(
+                "itinerary://active-trip",
+                objectMapper.writeValueAsString(getActiveTripSnapshot()),
+                "application/json"
+            );
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Failed to serialize active trip resource", e);
+        }
     }
 
-    @Resource(uri = "traveler://preferences", description = "Traveler aesthetic, pace, and dietary preferences", mimeType = "application/json")
+    @Resource(uri = "traveler://preferences", description = "Traveler architectural, culinary, and acoustic preferences")
     public TextResourceContents travelerPreferencesResource() {
-        return TextResourceContents.create("traveler://preferences", getTravelerPreferences().toString());
+        try {
+            return new TextResourceContents(
+                "traveler://preferences",
+                objectMapper.writeValueAsString(getTravelerPreferences()),
+                "application/json"
+            );
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Failed to serialize traveler preferences resource", e);
+        }
     }
 
     @Prompt(name = "weekend-cultural-escape", description = "Synthesize a 3-day architectural, culinary, and musical itinerary for a target city")
@@ -260,7 +218,6 @@ public class ClusterTelemetryService {
                 }
             }
         } catch (Exception ignored) {
-            // Deterministic offline/CI fallback
         }
         Map<String, Object> weather = new LinkedHashMap<>();
         weather.put("city", resolvedCity);
@@ -271,6 +228,10 @@ public class ClusterTelemetryService {
         weather.put("windSpeedKph", windKph);
         weather.put("condition", condition);
         weather.put("source", source);
+        activeTrip.put("activeCity", resolvedCity);
+        activeTrip.put("country", resolvedCountry);
+        activeTrip.put("temperatureC", tempC);
+        activeTrip.put("weatherCondition", condition);
         return weather;
     }
 
@@ -328,12 +289,12 @@ public class ClusterTelemetryService {
         String trackName = switch (lowerCity) {
             case "lisbon" -> "Canção do Mar (Acoustic Fado Session)";
             case "reykjavik" -> "Hoppípolla — Nordic Strings";
-            default -> "Haru no Umi (Spring Sea — Koto & Shakuhachi)";
+            default -> "Four Seasons in Kyoto (Koto & Shakuhachi)";
         };
         String artistName = switch (lowerCity) {
             case "lisbon" -> "Alfama Guitarra Ensemble";
             case "reykjavik" -> "Reykjavik Chamber Collective";
-            default -> "Kyoto Koto Consort";
+            default -> "Chikatoyo Tsujimoto";
         };
         String previewUrl = "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/9b/27/76/9b2776c5-65cd-87f1-3f33-ccbccc642285/mzaf_16549365214060917501.plus.aac.p.m4a";
         String artworkUrl = imageUrl;
@@ -384,6 +345,9 @@ public class ClusterTelemetryService {
         audioTrack.put("artworkUrl", artworkUrl);
         audioTrack.put("durationSeconds", 30);
 
+        activeTrip.put("activeCity", resolvedCity);
+        activeTrip.put("soundtrack", audioTrack);
+
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("destination", resolvedCity);
         payload.put("genre", resolvedGenre);
@@ -411,7 +375,6 @@ public class ClusterTelemetryService {
         activeTrip.put("stopTitle", resolvedStop);
         activeTrip.put("nights", clampedNights);
         activeTrip.put("allocatedUsd", safeCost);
-        activeTrip.put("updatedAt", Instant.now().toString());
         return getActiveTripSnapshot();
     }
 
@@ -420,13 +383,13 @@ public class ClusterTelemetryService {
     }
 
     public Map<String, Object> getTravelerPreferences() {
-        Map<String, Object> prefs = new LinkedHashMap<>();
-        prefs.put("uri", "traveler://preferences");
-        prefs.put("style", "Architectural Minimalist & Slow Cultural Immersion");
-        prefs.put("pace", "Unrushed (2 curated stops per day)");
-        prefs.put("interests", List.of("Craft Architecture", "Vinyl & Local Acoustics", "Seasonal Tasting Menus"));
-        prefs.put("homeCurrency", "USD");
-        return prefs;
+        return Map.of(
+            "uri", "traveler://preferences",
+            "style", "Architectural Minimalist & Slow Cultural Immersion",
+            "pace", "Unrushed (2 curated stops per day)",
+            "audioPreference", "Authentic regional acoustic & chamber traditions (30s iTunes preview)",
+            "homeCurrency", "USD"
+        );
     }
 
     public List<Map<String, Object>> listPrompts() {
@@ -444,16 +407,16 @@ public class ClusterTelemetryService {
         );
     }
 
-    public Map<String, Object> renderPrompt(String name, String city) {
-        String resolvedCity = normalizeCity(city);
-        PromptMessage msg = "local-music-and-food-walk".equalsIgnoreCase(name)
-            ? localMusicAndFoodWalkPrompt(resolvedCity)
-            : weekendCulturalEscapePrompt(resolvedCity);
-        String text = msg.content() instanceof TextContent tc ? tc.text() : msg.content().toString();
+    public Map<String, Object> renderPrompt(String promptName, String city) {
+        String resolvedName = (promptName == null || promptName.isBlank()) ? "weekend-cultural-escape" : promptName.trim();
+        PromptMessage msg = "local-music-and-food-walk".equals(resolvedName)
+            ? localMusicAndFoodWalkPrompt(city)
+            : weekendCulturalEscapePrompt(city);
+        TextContent content = (TextContent) msg.content();
         return Map.of(
-            "name", name == null ? "weekend-cultural-escape" : name,
-            "city", resolvedCity,
-            "prompt", text
+            "promptName", resolvedName,
+            "role", msg.role(),
+            "prompt", content.text()
         );
     }
 
@@ -474,29 +437,8 @@ public class ClusterTelemetryService {
         return city.trim();
     }
 
-    public Map<String, Object> getTopologySnapshot() {
-        Map<String, Object> res = new LinkedHashMap<>(inspectClusterHealth("us-east-1"));
-        res.put("uri", "cluster://topology");
-        return res;
-    }
-
     public List<Map<String, Object>> listTools() {
         return List.of(
-            Map.of(
-                "name", "inspectClusterHealth",
-                "description", "Inspect cluster health, pod replicas, CPU, and memory across services",
-                "parameters", List.of("region")
-            ),
-            Map.of(
-                "name", "queryServiceLogs",
-                "description", "Query recent structured logs by service name and severity",
-                "parameters", List.of("serviceName", "severity", "limit")
-            ),
-            Map.of(
-                "name", "scaleDeployment",
-                "description", "Scale service deployment replica count between 1 and 20",
-                "parameters", List.of("serviceName", "targetReplicas")
-            ),
             Map.of(
                 "name", "fetchCityWeather",
                 "description", "Fetch live Open-Meteo weather forecast and temperature for a travel destination",
@@ -522,18 +464,6 @@ public class ClusterTelemetryService {
 
         try {
             Object output = switch (toolName) {
-                case "inspectClusterHealth" -> inspectClusterHealth(String.valueOf(args.getOrDefault("region", "us-east-1")));
-                case "queryServiceLogs" -> {
-                    String svc = String.valueOf(args.getOrDefault("serviceName", "payment-service"));
-                    String sev = String.valueOf(args.getOrDefault("severity", "ERROR"));
-                    int lim = args.get("limit") instanceof Number n ? n.intValue() : 5;
-                    yield queryServiceLogs(svc, sev, lim);
-                }
-                case "scaleDeployment" -> {
-                    String svc = String.valueOf(args.getOrDefault("serviceName", "payment-service"));
-                    int replicas = args.get("targetReplicas") instanceof Number n ? n.intValue() : 4;
-                    yield scaleDeployment(svc, replicas);
-                }
                 case "fetchCityWeather" -> fetchCityWeather(String.valueOf(args.getOrDefault("city", "Kyoto")));
                 case "discoverLocalCultureAndMedia" -> discoverLocalCultureAndMedia(
                     String.valueOf(args.getOrDefault("destination", "Kyoto")),

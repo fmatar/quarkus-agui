@@ -39,12 +39,6 @@ public class McpServerResource {
     }
 
     @GET
-    @Path("/resources/topology")
-    public Map<String, Object> getTopology() {
-        return telemetryService.getTopologySnapshot();
-    }
-
-    @GET
     @Path("/resources/itinerary")
     public Map<String, Object> getItinerary() {
         return telemetryService.getActiveTripSnapshot();

@@ -2,8 +2,11 @@ package org.agui.showcase.backend;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.a2aproject.sdk.A2A;
 import org.a2aproject.sdk.client.Client;
 import org.a2aproject.sdk.client.ClientEvent;
@@ -14,9 +17,9 @@ import org.agui.quarkus.core.runtime.adapters.AgUiA2aBridge;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 /**
- * Official A2A Java SDK ({@code org.a2aproject.sdk} 1.4.0.Final) Gateway Client for OpsPilot Orchestrator (:8080 -> :8082).
+ * Official A2A Java SDK ({@code org.a2aproject.sdk} 1.4.0.Final) Gateway Client for the Nomad Concierge Orchestrator (:8080 -> :8082).
  * Uses {@link A2A#getAgentCard(String)} and {@link Client#builder(AgentCard)} with {@link JSONRPCTransport}
- * to discover {@code /.well-known/agent-card.json} and invoke {@code Sentinel-A2A-Auditor} over JSON-RPC 2.0.
+ * to discover {@code /.well-known/agent-card.json} and invoke {@code Nomad-A2A-Specialist} over JSON-RPC 2.0.
  */
 @ApplicationScoped
 public class A2aGatewayClient {
@@ -28,72 +31,25 @@ public class A2aGatewayClient {
 
     public Map<String, Object> getAgentCard() {
         return Map.of(
-                "name", "Sentinel-A2A-Auditor",
-                "description", "Autonomous A2A Specialist Agent for Clean Architecture governance, DevSecOps posture auditing, and SRE remediation planning.",
+                "name", "Nomad-A2A-Specialist",
+                "description", "Autonomous A2A Travel Specialist Agent for Frankfurter ECB multi-currency budget auditing, REST Countries destination advisories, and architectural neighborhood cadence curation.",
                 "endpoint", a2aBaseUrl,
                 "version", "1.4.0",
                 "protocol", "A2A-1.4-JSONRPC",
                 "skills", List.of(
-                        Map.of("id", "audit-clean-architecture", "name", "Clean Architecture Concentric Ring Audit"),
-                        Map.of("id", "assess-security-posture", "name", "DevSecOps & Runtime Security Posture Assessment"),
-                        Map.of("id", "plan-incident-remediation", "name", "SRE Incident Remediation Planner"),
                         Map.of("id", "convert-and-audit-budget", "name", "Frankfurter Multi-Currency & Budget Audit"),
-                        Map.of("id", "verify-travel-advisory", "name", "REST Countries Destination & Cultural Advisory")));
+                        Map.of("id", "verify-travel-advisory", "name", "REST Countries Destination & Cultural Advisory"),
+                        Map.of("id", "curate-neighborhood-cadence", "name", "Neighborhood Architectural & Acoustic Cadence Curation")));
     }
 
     public Map<String, Object> delegateTask(String taskId, String skillId, String prompt) {
-        String resolvedSkill = (skillId == null || skillId.isBlank()) ? "audit-clean-architecture" : skillId;
-        String lowerPrompt = prompt == null ? "" : prompt.toLowerCase(java.util.Locale.ROOT);
-        String targetService = "payment-gateway";
-        if (lowerPrompt.contains("identity-provider") || lowerPrompt.contains("identity")) {
-            targetService = "identity-provider";
-        } else if (lowerPrompt.contains("order-processor") || lowerPrompt.contains("order")) {
-            targetService = "order-processor";
-        } else if (lowerPrompt.contains("payment-service") || lowerPrompt.contains("payment")) {
-            targetService = "payment-gateway";
-        }
-
-        int targetReplicas = 4;
-        java.util.regex.Matcher rm = java.util.regex.Pattern.compile(
-                "\\b(?:to\\s+)?(\\d+)\\s*(?:replicas?|pods?)?\\b",
-                java.util.regex.Pattern.CASE_INSENSITIVE).matcher(lowerPrompt);
-        while (rm.find()) {
-            try {
-                int parsed = Integer.parseInt(rm.group(1));
-                if (parsed > 0 && parsed <= 50) {
-                    targetReplicas = parsed;
-                }
-            } catch (NumberFormatException ignored) {
-            }
-        }
-
-        final String finalTargetService = targetService;
-        final int finalTargetReplicas = targetReplicas;
+        String resolvedSkill = (skillId == null || skillId.isBlank()) ? "convert-and-audit-budget" : skillId;
         final String city = resolveNomadCityFromPrompt(prompt);
         final String country = resolveCountryForCity(city);
         final String currency = resolveCurrencyForCountry(country);
         final double fxRate = resolveDefaultRateForCurrency(currency);
 
         Map<String, Object> report = switch (resolvedSkill) {
-            case "audit-clean-architecture" -> Map.of(
-                    "ringCompliance", "CONFORMING",
-                    "outwardViolations", 0,
-                    "layersVerified", List.of("domain (L0)", "application (L1)", "adapters (L2)"),
-                    "verdict", "Zero outward dependency inversions detected across AG-UI concentric rings.");
-            case "assess-security-posture" -> Map.of(
-                    "tlsMode", "mTLS-strict",
-                    "cveCount", 0,
-                    "graalvmNativeReady", true,
-                    "verdict", "Zero critical CVEs; GraalVM 25 native reflection boundary locked.");
-            case "plan-incident-remediation" -> Map.of(
-                    "targetService", finalTargetService,
-                    "recommendedReplicas", finalTargetReplicas,
-                    "hitlThreshold", 5,
-                    "verdict", String.format(
-                            "Scale %s to %d replicas (%s).",
-                            finalTargetService,
-                            finalTargetReplicas,
-                            finalTargetReplicas <= 5 ? "auto-approved" : "requires HITL approval"));
             case "convert-and-audit-budget" -> Map.of(
                     "city", city,
                     "baseCurrency", "USD",
@@ -103,7 +59,7 @@ public class A2aGatewayClient {
                     "convertedTotal", Math.round(3200.0 * fxRate),
                     "hitlThresholdUsd", 1500.0,
                     "verdict", String.format(
-                            java.util.Locale.ROOT,
+                            Locale.ROOT,
                             "Frankfurter FX verified for %s: $3,200 USD = %,.0f %s (1 USD = %.2f %s). Sanctuary holds >$1,500 require HITL confirmation.",
                             city, 3200.0 * fxRate, currency, fxRate, currency));
             case "verify-travel-advisory" -> Map.of(
@@ -113,6 +69,14 @@ public class A2aGatewayClient {
                     "verdict", String.format(
                             "REST Countries & Advisory verified for %s (%s): visa-free entry active, local cultural venues open.",
                             city, country));
+            case "curate-neighborhood-cadence" -> Map.of(
+                    "city", city,
+                    "country", country,
+                    "cadence", "Unrushed (2 curated architectural & acoustic stops per day)",
+                    "walkingCorridorKm", 4.2,
+                    "verdict", String.format(
+                            "Curated 2-stop daily architectural & evening listening cadence for %s (%s) across walkable historic districts.",
+                            city, country));
             default -> throw new IllegalArgumentException("Unsupported A2A skill: " + resolvedSkill);
         };
 
@@ -120,7 +84,7 @@ public class A2aGatewayClient {
 
         return Map.of(
                 "taskId", taskId,
-                "agentName", "Sentinel-A2A-Auditor",
+                "agentName", "Nomad-A2A-Specialist",
                 "skillId", resolvedSkill,
                 "status", "COMPLETED",
                 "summary", summary,
@@ -147,7 +111,7 @@ public class A2aGatewayClient {
 
     static String resolveNomadCityFromPrompt(String prompt) {
         String raw = prompt == null ? "" : prompt.replaceFirst("^/[a-z]+\\s*", "").trim();
-        String lower = raw.toLowerCase(java.util.Locale.ROOT);
+        String lower = raw.toLowerCase(Locale.ROOT);
         if (lower.contains("lisbon") || lower.contains("portugal") || lower.contains("fado") || lower.contains("alfama")) {
             return "Lisbon";
         }
@@ -163,11 +127,11 @@ public class A2aGatewayClient {
                 "Copenhagen", "Stockholm", "Oslo", "Prague", "Athens", "Istanbul", "Marrakech", "Cairo",
                 "Seoul", "Bangkok", "Singapore", "Taipei", "Sydney", "Melbourne", "New York", "Oaxaca",
                 "Mexico City", "Buenos Aires")) {
-            if (lower.contains(candidate.toLowerCase(java.util.Locale.ROOT))) {
+            if (lower.contains(candidate.toLowerCase(Locale.ROOT))) {
                 return candidate;
             }
         }
-        java.util.regex.Matcher m = java.util.regex.Pattern.compile(
+        Matcher m = Pattern.compile(
                 "\\b(?:in|to|for|visit|explore|around|about)\\s+([A-Z][a-zA-Z]+(?:\\s+[A-Z][a-zA-Z]+)?)\\b")
                 .matcher(raw);
         if (m.find()) {
@@ -177,7 +141,7 @@ public class A2aGatewayClient {
     }
 
     static String resolveCountryForCity(String city) {
-        return switch (city.toLowerCase(java.util.Locale.ROOT)) {
+        return switch (city.toLowerCase(Locale.ROOT)) {
             case "lisbon", "porto" -> "Portugal";
             case "reykjavik" -> "Iceland";
             case "tokyo", "kyoto", "osaka" -> "Japan";
@@ -231,7 +195,7 @@ public class A2aGatewayClient {
     }
 
     static double resolveDefaultRateForCurrency(String currency) {
-        return switch (currency.toUpperCase(java.util.Locale.ROOT)) {
+        return switch (currency.toUpperCase(Locale.ROOT)) {
             case "EUR" -> 0.92;
             case "ISK" -> 137.80;
             case "GBP" -> 0.79;

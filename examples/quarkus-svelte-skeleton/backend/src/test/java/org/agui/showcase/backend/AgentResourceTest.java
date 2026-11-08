@@ -20,8 +20,8 @@ class AgentResourceTest {
                 .then()
                 .statusCode(200)
                 .body("llmMode", equalTo("deterministic"))
-                .body("mcpTools.size()", equalTo(6))
-                .body("a2aAgent.name", equalTo("Sentinel-A2A-Auditor"));
+                .body("mcpTools.size()", equalTo(3))
+                .body("a2aAgent.name", equalTo("Nomad-A2A-Specialist"));
     }
 
     @Test
@@ -30,8 +30,8 @@ class AgentResourceTest {
                 .contentType("application/json")
                 .body(Map.of(
                         "threadId", "thread-http-1",
-                        "prompt", "Inspect cluster health and audit architecture",
-                        "state", Map.of("region", "us-east-1"),
+                        "prompt", "Curate a 4-night architectural and koto music escape in Kyoto",
+                        "state", Map.of("city", "Kyoto"),
                         "mode", "deterministic"))
                 .when()
                 .post("/api/agent/chat")
@@ -49,7 +49,7 @@ class AgentResourceTest {
                 .contentType("application/json")
                 .body(Map.of(
                         "threadId", "thread-sse-http",
-                        "prompt", "Inspect system architecture",
+                        "prompt", "Explore Lisbon Fado and azulejo architecture",
                         "state", Map.of(),
                         "mode", "deterministic"))
                 .when()
@@ -71,7 +71,7 @@ class AgentResourceTest {
                 .contentType("application/json")
                 .body(Map.of(
                         "threadId", "thread-hitl-http",
-                        "prompt", "Scale deployment payment-gateway to 8 replicas",
+                        "prompt", "Reserve Hoshinoya Arashiyama Pavilion in Kyoto for 4 nights ($1840)",
                         "state", Map.of(),
                         "mode", "deterministic"))
                 .when()
@@ -85,7 +85,7 @@ class AgentResourceTest {
                 .body(Map.of(
                         "threadId", "thread-hitl-http",
                         "approved", true,
-                        "reason", "Approved for peak traffic"))
+                        "reason", "Confirmed by Traveler"))
                 .when()
                 .post("/api/agent/approve")
                 .then()
