@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- feat(showcase): add `docker-compose.yml`, multi-stage `Dockerfile.quarkus`, `frontend/Dockerfile`, and `run-showcase.sh` launcher for one-command execution of the 4-service Nomad Tri-Protocol showcase ([#34](https://github.com/fmatar/quarkus-agui/issues/34))
 - feat(showcase): implement Nomad AI Travel, Weather, Currency & Local Culture Concierge (Open-Meteo, Wikipedia REST, Apple iTunes 30s audio preview, Frankfurter FX, REST Countries), 10-type protocol call taxonomy (`callType`), modular Svelte 5 Runes AG-UI Component Kit (`src/lib/components/agui/*`), and commercial minimalist UI (`ADR-004`, [#32](https://github.com/fmatar/quarkus-agui/issues/32))
 - feat(arch): introduce `quarkus-ag-ui-bom` and modular transport sub-extensions (`quarkus-ag-ui-core`, `quarkus-ag-ui-sse`, `quarkus-ag-ui-websockets`) adhering to concentric Clean Architecture ports and adapters (`ADR-003`, [#30](https://github.com/fmatar/quarkus-agui/issues/30))
 - feat(wave4): migrate showcase `backend` to consume `org.agui:quarkus-ag-ui` (`AgUiBridge`, `AgUiMcpBridge`, `AgUiA2aBridge`), verify `< 10ms` serialization overhead, and complete 4-Wave Tri-Protocol evolution ([#9](https://github.com/fmatar/quarkus-agui/issues/9))

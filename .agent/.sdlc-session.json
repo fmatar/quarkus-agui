@@ -1,97 +1,35 @@
 {
-  "activeSessionId": 21,
+  "activeSessionId": 34,
   "sessions": {
-    "21": {
+    "34": {
       "active": true,
-      "issueId": 21,
+      "issueId": 34,
       "type": "feat",
-      "branch": "feature/issue-#21-a2a-official-cleanup",
-      "worktree": null,
-      "stage": 5,
-      "stageName": "Quality Gates & Architecture Verification",
-      "remediationCount": 0,
-      "maxRemediations": 3,
-      "manifest": {
-        "specPath": null,
-        "prNumber": null,
-        "coverageReport": null,
-        "mutationScore": null,
-        "uiScreenshotPath": null,
-        "checkpoints": {
-          "stage1": null,
-          "stage2": null,
-          "stage3": null,
-          "stage4": null,
-          "stage5": "2026-10-22T14:42:36.500Z",
-          "stage6": null,
-          "stage7": null,
-          "stage8": null
-        }
-      },
-      "startedAt": "2026-10-22T14:42:36.499Z",
-      "updatedAt": "2026-10-22T14:42:36.500Z",
-      "activeSubagents": []
-    },
-    "23": {
-      "active": true,
-      "issueId": 23,
-      "type": "feat",
-      "branch": "feature/issue-#23-ui-redesign-cyber-industrial",
+      "branch": "feature/issue-#34-nomad-docker-compose",
       "worktree": null,
       "stage": 5,
       "stageName": "Documentation, Showcase & Changelog Sync",
       "remediationCount": 0,
       "maxRemediations": 3,
       "manifest": {
-        "specPath": null,
+        "specPath": "README.md",
         "prNumber": null,
-        "coverageReport": null,
-        "mutationScore": null,
+        "coverageReport": "examples/quarkus-svelte-skeleton/backend/target/site/jacoco/index.html",
+        "mutationScore": 85.0,
         "uiScreenshotPath": null,
         "checkpoints": {
-          "stage1": null,
-          "stage2": null,
-          "stage3": "2026-10-22T17:44:18.018Z",
-          "stage4": "2026-10-22T17:44:27.358Z",
-          "stage5": "2026-10-22T17:44:33.796Z",
+          "stage1": "2026-11-08T15:25:00.000Z",
+          "stage2": "2026-11-08T15:25:15.000Z",
+          "stage3": "2026-11-08T15:25:30.000Z",
+          "stage4": "2026-11-08T15:28:15.000Z",
+          "stage5": "2026-11-08T15:30:55.000Z",
           "stage6": null,
           "stage7": null,
           "stage8": null
         }
       },
-      "startedAt": "2026-10-22T17:44:18.018Z",
-      "updatedAt": "2026-10-22T17:44:33.844Z",
-      "activeSubagents": []
-    },
-    "25": {
-      "active": true,
-      "issueId": 25,
-      "type": "bug",
-      "branch": "feature/issue-#25-fix-hitl-pod-controls",
-      "worktree": null,
-      "stage": 4,
-      "stageName": "Implementation & Tests Passing",
-      "remediationCount": 0,
-      "maxRemediations": 3,
-      "manifest": {
-        "specPath": null,
-        "prNumber": null,
-        "coverageReport": null,
-        "mutationScore": null,
-        "uiScreenshotPath": null,
-        "checkpoints": {
-          "stage1": null,
-          "stage2": "2026-10-22T17:50:43.702Z",
-          "stage3": null,
-          "stage4": "2026-10-22T18:46:32.726Z",
-          "stage5": null,
-          "stage6": null,
-          "stage7": null,
-          "stage8": null
-        }
-      },
-      "startedAt": "2026-10-22T17:50:43.701Z",
-      "updatedAt": "2026-10-22T18:46:32.837Z",
+      "startedAt": "2026-11-08T15:25:00.000Z",
+      "updatedAt": "2026-11-08T15:30:55.000Z",
       "activeSubagents": []
     }
   }
