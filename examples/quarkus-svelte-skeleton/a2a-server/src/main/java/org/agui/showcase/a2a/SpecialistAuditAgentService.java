@@ -17,12 +17,13 @@ import java.util.Map;
 import java.util.function.Function;
 
 /**
- * Domain service providing audit analysis, currency conversion, and destination advisory findings.
+ * Nomad A2A Specialist Agent (:8082) providing live Frankfurter ECB currency conversion,
+ * REST Countries v3.1 destination advisories, and curated architectural/acoustic neighborhood sequences.
  */
 @ApplicationScoped
 public class SpecialistAuditAgentService {
 
-    public static final String AGENT_NAME = "Sentinel-A2A-Auditor";
+    public static final String AGENT_NAME = "Nomad-A2A-Specialist";
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final HttpClient httpClient = HttpClient.newBuilder()
@@ -51,49 +52,22 @@ public class SpecialistAuditAgentService {
 
     public AuditResult performAudit(String skillId, String prompt, Map<String, Object> context) {
         if (prompt == null || prompt.isBlank()) {
-            throw new IllegalArgumentException("Audit prompt must not be blank");
+            throw new IllegalArgumentException("Concierge prompt must not be blank");
         }
-        String skill = (skillId == null || skillId.isBlank()) ? "audit-clean-architecture" : skillId.trim();
+        String skill = (skillId == null || skillId.isBlank()) ? "convert-and-audit-budget" : skillId.trim();
         Map<String, Object> ctx = context == null ? Map.of() : context;
-        String targetService = String.valueOf(ctx.getOrDefault("serviceName", "payment-service"));
 
         return switch (skill) {
-            case "assess-security-posture" -> new AuditResult(
-                    "Zero-trust mTLS and OIDC token validation verified across cluster.",
-                    "art-sec-1",
-                    "Zero-Trust Security Audit",
-                    Map.of(
-                            "mtlsEnabled", true,
-                            "zeroPlaintextSecrets", true,
-                            "cvesDetected", 0,
-                            "recommendation", "Maintain strict mTLS peer authentication on " + targetService));
-            case "plan-incident-remediation" -> new AuditResult(
-                    "Remediation plan synthesized for " + targetService + ": scale replicas and enable adaptive concurrency limit.",
-                    "art-rem-1",
-                    "Incident Remediation Blueprint",
-                    Map.of(
-                            "serviceName", targetService,
-                            "recommendedReplicas", ctx.getOrDefault("recommendedReplicas", 6),
-                            "requiresHitlApprovalAboveReplicas", 5,
-                            "action", "scaleDeployment"));
-            case "convert-and-audit-budget" -> performCurrencyAndBudgetAudit(prompt, ctx);
             case "verify-travel-advisory" -> performTravelAdvisoryAudit(prompt, ctx);
-            default -> new AuditResult(
-                    "Archlens concentric layer verification passed for " + targetService + " with zero outward dependency leaks.",
-                    "art-arch-1",
-                    "Clean Architecture Concentric Ring Report",
-                    Map.of(
-                            "serviceName", targetService,
-                            "concentricRings", List.of("domain", "application", "adapters"),
-                            "outwardViolations", 0,
-                            "dipCompliant", true));
+            case "curate-neighborhood-cadence" -> performNeighborhoodCadenceCuration(prompt, ctx);
+            default -> performCurrencyAndBudgetAudit(prompt, ctx);
         };
     }
 
     private AuditResult performCurrencyAndBudgetAudit(String prompt, Map<String, Object> ctx) {
         String city = String.valueOf(ctx.getOrDefault("city", detectCity(prompt)));
         String targetCurrency = String.valueOf(ctx.getOrDefault("currency", defaultCurrencyForCity(city)));
-        double budgetUsd = ctx.get("budgetUsd") instanceof Number n ? n.doubleValue() : 2400.0;
+        double budgetUsd = ctx.get("budgetUsd") instanceof Number n ? n.doubleValue() : 3200.0;
         double rate = defaultRateForCurrency(targetCurrency);
         String source = "frankfurter-fallback";
         try {
@@ -178,6 +152,27 @@ public class SpecialistAuditAgentService {
                 "Destination advisory verified for %s (%s, %s): transit & cultural venues open, local timezone %s.",
                 city, country, region, timezone);
         return new AuditResult(summary, "art-adv-1", "Destination Entry & Cultural Advisory Dossier", data);
+    }
+
+    private AuditResult performNeighborhoodCadenceCuration(String prompt, Map<String, Object> ctx) {
+        String city = String.valueOf(ctx.getOrDefault("city", detectCity(prompt)));
+        String country = defaultCountryForCity(city);
+        List<String> stops = switch (city.toLowerCase(Locale.ROOT)) {
+            case "lisbon" -> List.of("Morning: Chiado Azulejo Atelier", "Afternoon: Santa Luzia Miradouro", "Evening: Alfama Acoustic Fado Tavern");
+            case "reykjavik" -> List.of("Morning: Harpa Basalt Concert Hall", "Afternoon: Sky Lagoon Geothermal Ritual", "Evening: Nordic Chamber Strings Lounge");
+            case "tokyo" -> List.of("Morning: Nezu Museum Bamboo Courtyard", "Afternoon: Aoyama Tadao Ando Galleries", "Evening: Shibuya Vinyl Kissaten");
+            default -> List.of("Morning: " + city + " Historic Sanctuary Walk", "Afternoon: Local Craft & Ceramic Atelier", "Evening: Intimate Acoustic & Culinary Tasting");
+        };
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("city", city);
+        data.put("country", country);
+        data.put("pace", "Unrushed (3 curated stops)");
+        data.put("stops", stops);
+
+        String summary = String.format(Locale.ROOT,
+                "Curated 3-stop architectural and acoustic neighborhood sequence for %s (%s): %s.",
+                city, country, String.join(" -> ", stops));
+        return new AuditResult(summary, "art-cadence-1", "Neighborhood Architectural & Acoustic Cadence", data);
     }
 
     private String detectCity(String prompt) {

@@ -13,7 +13,10 @@
 
 | 📥 Backlog | 📋 Ready | ⚡ In Progress | 🔍 In Review | ✅ Done |
 | :--- | :--- | :--- | :--- | :--- |
-|  |  |  | [#38 fix(showcase): resolve Svelte duplicate-key crash on A2A steps, wire live MCP/A2A container endpoints, and support free-form Nomad chat](https://github.com/fmatar/quarkus-agui/issues/38) | [#36 fix(showcase): resolve pnpm esbuild ignored-builds error in frontend/Dockerfile and multi-stage Quarkus reactor build](https://github.com/fmatar/quarkus-agui/issues/36) |
+|  |  |  |  | [#42 refactor(showcase): purge all legacy SRE/cluster/microservice code and tests across mcp-server, a2a-server, backend, and frontend](https://github.com/fmatar/quarkus-agui/issues/42) |
+|  |  |  |  | [#40 feat(showcase): remove cluster health legacy prompts, add global Open-Meteo geocoding, and streamline Nomad UI](https://github.com/fmatar/quarkus-agui/issues/40) |
+|  |  |  |  | [#38 fix(showcase): resolve Svelte duplicate-key crash on A2A steps, wire live MCP/A2A container endpoints, and support free-form Nomad chat](https://github.com/fmatar/quarkus-agui/issues/38) |
+|  |  |  |  | [#36 fix(showcase): resolve pnpm esbuild ignored-builds error in frontend/Dockerfile and multi-stage Quarkus reactor build](https://github.com/fmatar/quarkus-agui/issues/36) |
 |  |  |  |  | [#34 feat(showcase): add Docker Compose stack, Dockerfiles, and single-command launcher for Nomad Concierge](https://github.com/fmatar/quarkus-agui/issues/34) |
 |  |  |  |  | [#32 feat(showcase): Nomad AI Travel & Culture Concierge with modular Svelte 5 AG-UI Component Kit and commercial minimalist UI](https://github.com/fmatar/quarkus-agui/issues/32) |
 |  |  |  |  | [#30 feat(arch): refactor extensions with BOM and concentric Clean Architecture (Core, SSE, WebSockets)](https://github.com/fmatar/quarkus-agui/issues/30) |
@@ -33,7 +36,9 @@
 
 | Issue | Status | Priority | Component | Quality Gate | Spec Link |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| [#38 fix(showcase): resolve Svelte duplicate-key crash on A2A steps, wire live MCP/A2A container endpoints, and support free-form Nomad chat](https://github.com/fmatar/quarkus-agui/issues/38) | `status:in-review` | P0 - Critical | Showcase | `Passed` | [ADR-004](docs/adr/ADR-004-nomad-concierge-and-svelte5-agui-component-kit.md) |
+| [#42 refactor(showcase): purge all legacy SRE/cluster/microservice code and tests across mcp-server, a2a-server, backend, and frontend](https://github.com/fmatar/quarkus-agui/issues/42) | `status:done` | P0 - Critical | Showcase | `Passed` | [ADR-004](docs/adr/ADR-004-nomad-concierge-and-svelte5-agui-component-kit.md) |
+| [#40 feat(showcase): remove cluster health legacy prompts, add global Open-Meteo geocoding, and streamline Nomad UI](https://github.com/fmatar/quarkus-agui/issues/40) | `status:done` | P0 - Critical | Showcase | `Passed` | [ADR-004](docs/adr/ADR-004-nomad-concierge-and-svelte5-agui-component-kit.md) |
+| [#38 fix(showcase): resolve Svelte duplicate-key crash on A2A steps, wire live MCP/A2A container endpoints, and support free-form Nomad chat](https://github.com/fmatar/quarkus-agui/issues/38) | `status:done` | P0 - Critical | Showcase | `Passed` | [ADR-004](docs/adr/ADR-004-nomad-concierge-and-svelte5-agui-component-kit.md) |
 | [#36 fix(showcase): resolve pnpm esbuild ignored-builds error in frontend/Dockerfile and multi-stage Quarkus reactor build](https://github.com/fmatar/quarkus-agui/issues/36) | `status:done` | P0 - Critical | DevOps | `Passed` | [README.md](README.md) |
 | [#34 feat(showcase): add Docker Compose stack, Dockerfiles, and single-command launcher for Nomad Concierge](https://github.com/fmatar/quarkus-agui/issues/34) | `status:done` | P1 - High | DevOps | `Passed` | [README.md](README.md) |
 | [#32 feat(showcase): Nomad AI Travel & Culture Concierge with modular Svelte 5 AG-UI Component Kit and commercial minimalist UI](https://github.com/fmatar/quarkus-agui/issues/32) | `status:done` | P0 - Critical | Showcase | `Passed` | [ADR-004](docs/adr/ADR-004-nomad-concierge-and-svelte5-agui-component-kit.md) |

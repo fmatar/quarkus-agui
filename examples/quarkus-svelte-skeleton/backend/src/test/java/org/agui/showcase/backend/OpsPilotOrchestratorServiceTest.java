@@ -3,6 +3,7 @@ package org.agui.showcase.backend;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.sun.net.httpserver.HttpServer;
@@ -18,21 +19,23 @@ import org.junit.jupiter.api.Test;
 
 class OpsPilotOrchestratorServiceTest {
 
+    private McpGatewayClient mcpClient;
+    private A2aGatewayClient a2aClient;
     private OpsPilotOrchestratorService service;
     private HttpServer mockOllamaServer;
     private int statusToReturn = 200;
 
     @BeforeEach
     void setUp() throws IOException {
-        McpGatewayClient mcpClient = new McpGatewayClient();
-        A2aGatewayClient a2aClient = new A2aGatewayClient();
+        mcpClient = new McpGatewayClient();
+        a2aClient = new A2aGatewayClient();
         service = new OpsPilotOrchestratorService(mcpClient, a2aClient);
 
         mockOllamaServer = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         mockOllamaServer.createContext("/api/chat", exchange -> {
             byte[] body = ("{\"message\":{\"content\":\"Hello \"}}\n"
                     + "\n"
-                    + "{\"message\":{\"content\":\"from Ollama!\"}}\n"
+                    + "{\"message\":{\"content\":\"from Nomad Ollama!\"}}\n"
                     + "{\"done\":true}\n").getBytes(StandardCharsets.UTF_8);
             exchange.sendResponseHeaders(statusToReturn, body.length);
             try (OutputStream os = exchange.getResponseBody()) {
@@ -51,95 +54,85 @@ class OpsPilotOrchestratorServiceTest {
     }
 
     @Test
-    void catalogReturnsMcpToolsA2aAgentCardAndClusterState() {
+    void catalogReturnsMcpToolsA2aAgentCardAndTripState() {
         Map<String, Object> catalog = service.getCatalog();
         assertEquals("deterministic", catalog.get("llmMode"));
         assertEquals("org.agui:quarkus-ag-ui", catalog.get("extension"));
+        assertEquals("Nomad-Concierge-Orchestrator", catalog.get("orchestrator"));
         assertEquals("llama3.2:latest", catalog.get("defaultOllamaModel"));
         assertNotNull(service.agUiBridge());
         assertNotNull(service.agUiMcpBridge());
         assertNotNull(service.agUiA2aBridge());
+
         List<?> mcpTools = (List<?>) catalog.get("mcpTools");
         assertNotNull(mcpTools);
-        assertEquals(6, mcpTools.size());
+        assertEquals(3, mcpTools.size());
 
         Map<?, ?> a2aAgent = (Map<?, ?>) catalog.get("a2aAgent");
         assertNotNull(a2aAgent);
-        assertEquals("Sentinel-A2A-Auditor", a2aAgent.get("name"));
+        assertEquals("Nomad-A2A-Specialist", a2aAgent.get("name"));
 
         Map<?, ?> clusterState = (Map<?, ?>) catalog.get("clusterState");
         assertNotNull(clusterState);
-        assertEquals("quarkus-prod-us-east-1", clusterState.get("cluster"));
+        assertEquals("itinerary://active-trip", clusterState.get("uri"));
+        assertNotNull(clusterState.get("nomadTrip"));
     }
 
     @Test
-    void executeChatRunsMcpHealthAndA2aArchitectureAuditAndHandlesNullRequest() {
+    void executeChatRunsMcpWeatherCultureAndA2aBudgetAdvisoryAndHandlesNullRequest() {
         AgentChatResponse nullRes = service.executeChat(null);
         assertEquals("thread-default", nullRes.threadId());
         assertEquals("COMPLETED", nullRes.status());
 
         AgentRunRequest req = new AgentRunRequest(
                 "thread-1",
-                "Inspect cluster health and audit clean architecture",
-                Map.of("environment", "prod"),
+                "Curate a 4-night architectural and koto music escape in Kyoto",
+                Map.of("city", "Kyoto"),
                 "deterministic");
 
         AgentChatResponse res = service.executeChat(req);
         assertEquals("thread-1", res.threadId());
         assertEquals("COMPLETED", res.status());
         assertFalse(res.mcpCalls().isEmpty());
-        assertEquals("inspectClusterHealth", res.mcpCalls().getFirst().get("toolName"));
+        assertEquals("fetchCityWeather", res.mcpCalls().getFirst().get("toolName"));
         assertFalse(res.a2aHandoffs().isEmpty());
-        assertEquals("audit-clean-architecture", res.a2aHandoffs().getFirst().get("skillId"));
-        assertTrue(res.reply().contains("Sentinel-A2A-Auditor"));
+        assertEquals("convert-and-audit-budget", res.a2aHandoffs().getFirst().get("skillId"));
+        assertTrue(res.reply().contains("Kyoto"));
     }
 
     @Test
-    void executeChatHandlesLogQueryAndSecurityAudit() {
+    void executeChatHandlesItineraryUpdatesAndNeighborhoodCadence() {
         AgentRunRequest req = new AgentRunRequest(
-                "thread-logs",
-                "Query service logs for payment-gateway and assess security posture",
+                "thread-walk",
+                "Update our 5-night itinerary and neighborhood walking cadence in Lisbon with Fado music",
                 Map.of(),
                 "deterministic");
 
         AgentChatResponse res = service.executeChat(req);
         assertEquals("COMPLETED", res.status());
-        assertTrue(res.mcpCalls().stream().anyMatch(c -> "queryServiceLogs".equals(c.get("toolName"))));
-        assertTrue(res.a2aHandoffs().stream().anyMatch(h -> "assess-security-posture".equals(h.get("skillId"))));
+        assertTrue(res.mcpCalls().stream().anyMatch(c -> "updateTripItinerary".equals(c.get("toolName"))));
+        assertTrue(res.a2aHandoffs().stream().anyMatch(h -> "curate-neighborhood-cadence".equals(h.get("skillId"))));
+        assertTrue(res.reply().contains("Lisbon"));
     }
 
     @Test
-    void executeChatScalesDeploymentWithinSafeThreshold() {
-        AgentRunRequest req = new AgentRunRequest(
-                "thread-scale",
-                "Scale deployment order-processor to 4 replicas and plan incident remediation",
-                Map.of(),
-                "deterministic");
+    void mcpAndA2aClientsHandlePromptTemplatesResourcesAndUnsupportedOperations() {
+        Map<String, Object> walkTpl = mcpClient.getPromptTemplate("local-music-and-food-walk", Map.of("city", "Lisbon", "genre", "fado"));
+        assertEquals("local-music-and-food-walk", walkTpl.get("promptName"));
+        assertTrue(String.valueOf(walkTpl.get("expandedPrompt")).contains("Lisbon"));
 
-        AgentChatResponse res = service.executeChat(req);
-        assertEquals("COMPLETED", res.status());
-        assertTrue(res.mcpCalls().stream().anyMatch(c -> "scaleDeployment".equals(c.get("toolName"))));
-        assertTrue(res.a2aHandoffs().stream().anyMatch(h -> "plan-incident-remediation".equals(h.get("skillId"))));
-        Map<String, Object> handoff = res.a2aHandoffs().getFirst();
-        assertEquals("order-processor", ((Map<?, ?>) handoff.get("report")).get("targetService"));
+        Map<String, Object> activeTripRes = mcpClient.readResource("itinerary://active-trip");
+        assertEquals("itinerary://active-trip", activeTripRes.get("uri"));
 
-        AgentRunRequest idReq = new AgentRunRequest(
-                "thread-scale-id",
-                "Scale deployment identity-provider to 5 replicas",
-                Map.of(),
-                "deterministic");
-        AgentChatResponse idRes = service.executeChat(idReq);
-        assertEquals("COMPLETED", idRes.status());
-        Map<String, Object> idHandoff = idRes.a2aHandoffs().getFirst();
-        assertEquals("identity-provider", ((Map<?, ?>) idHandoff.get("report")).get("targetService"));
-        assertEquals(5, ((Map<?, ?>) idHandoff.get("report")).get("recommendedReplicas"));
+        assertThrows(IllegalArgumentException.class, () -> mcpClient.callTool("unknownTool", Map.of()));
+        assertThrows(IllegalArgumentException.class, () -> a2aClient.delegateTask("t-err", "unknown-skill", "Kyoto"));
     }
 
     @Test
     void streamRunEmitsFormattedSseFramesInDeterministicOrder() {
         AgentRunRequest req = new AgentRunRequest(
                 "thread-sse-1",
-                "Inspect cluster health and audit architecture",
+                "Explore Reykjavik basalt architecture and aurora sky",
                 Map.of(),
                 "deterministic");
 
@@ -157,14 +150,14 @@ class OpsPilotOrchestratorServiceTest {
     }
 
     @Test
-    void scalingAboveFiveReplicasTriggersHitlInterruptAndApprovalResumesRun() {
-        AgentRunRequest highScaleReq = new AgentRunRequest(
+    void sanctuaryBookingAboveThresholdTriggersHitlInterruptAndApprovalResumesRun() {
+        AgentRunRequest hitlBookingReq = new AgentRunRequest(
                 "thread-hitl-1",
-                "Scale deployment payment-gateway to 8 replicas",
-                Map.of("operator", "sre-lead"),
+                "Reserve Hoshinoya Arashiyama Pavilion in Kyoto for 4 nights ($1840)",
+                Map.of("city", "Kyoto"),
                 "deterministic");
 
-        List<String> interruptedFrames = service.streamRun(highScaleReq).collect().asList().await().indefinitely();
+        List<String> interruptedFrames = service.streamRun(hitlBookingReq).collect().asList().await().indefinitely();
         assertTrue(interruptedFrames.getLast().contains("\"status\":\"interrupted\""));
         assertTrue(interruptedFrames.getLast().contains("\"approvalRequired\":true"));
 
@@ -174,7 +167,7 @@ class OpsPilotOrchestratorServiceTest {
         assertTrue(approvedFrames.stream().anyMatch(f -> f.contains("\"type\":\"STATE_DELTA\"")));
         assertTrue(approvedFrames.getLast().contains("\"status\":\"completed\""));
 
-        AgentApprovalRequest rejectReq = new AgentApprovalRequest("thread-none", false, "Rejected");
+        AgentApprovalRequest rejectReq = new AgentApprovalRequest("thread-none", false, "Declined by traveler");
         List<String> rejectedFrames = service.approvePendingAction(rejectReq).collect().asList().await().indefinitely();
         assertTrue(rejectedFrames.getLast().contains("\"status\":\"cancelled\""));
 
@@ -184,10 +177,10 @@ class OpsPilotOrchestratorServiceTest {
 
     @Test
     void streamRunLiveOllamaModeStreamsRealNdjsonAndCoversAllBranches() {
-        // 1. Live Ollama with scale + security
+        // 1. Live Ollama with Lisbon Fado & FX
         AgentRunRequest liveReq = new AgentRunRequest(
                 "thread-ollama-1",
-                "Scale deployment order-processor to 3 replicas and assess security posture",
+                "Curate an evening Fado and azulejo walk in Lisbon",
                 Map.of(),
                 "ollama:llama3.2:latest");
 
@@ -199,31 +192,21 @@ class OpsPilotOrchestratorServiceTest {
         assertTrue(frames.stream().anyMatch(f -> f.contains("\"type\":\"TEXT_DELTA\"")));
         assertTrue(frames.getLast().contains("\"status\":\"completed\""));
 
-        // 2. Live Ollama with logs + architecture audit
-        AgentRunRequest logsAuditReq = new AgentRunRequest(
-                "thread-ollama-logs",
-                "Check order log entries and audit ring architecture",
-                Map.of(),
-                "live");
-        List<String> logFrames = service.streamRun(logsAuditReq).collect().asList().await().indefinitely();
-        assertTrue(logFrames.stream().anyMatch(f -> f.contains("queryServiceLogs")));
-        assertTrue(logFrames.stream().anyMatch(f -> f.contains("audit-clean-architecture")));
-
-        // 3. Live Ollama conversational prompt (no MCP or A2A keywords) + HTTP 500 fallback
+        // 2. Live Ollama with HTTP 500 fallback
         statusToReturn = 500;
-        AgentRunRequest chatOnlyReq = new AgentRunRequest(
+        AgentRunRequest fallbackReq = new AgentRunRequest(
                 "",
-                "Hello there friend",
+                "Explore jazz listening bars in Tokyo",
                 null,
                 "ollama:");
-        List<String> fallbackFrames = service.streamRun(chatOnlyReq).collect().asList().await().indefinitely();
+        List<String> fallbackFrames = service.streamRun(fallbackReq).collect().asList().await().indefinitely();
         assertTrue(fallbackFrames.stream().anyMatch(f -> f.contains("\"type\":\"TEXT_DELTA\"")));
         assertTrue(fallbackFrames.getLast().contains("\"status\":\"completed\""));
 
-        // 4. Live Ollama HITL interrupt (>5 replicas)
+        // 3. Live Ollama HITL sanctuary reservation interrupt
         AgentRunRequest liveHitl = new AgentRunRequest(
                 "thread-ollama-hitl",
-                "Scale deployment payment-gateway to 9 replicas",
+                "Reserve The Retreat at Blue Lagoon Moss Villa in Reykjavik for 4 nights",
                 Map.of(),
                 "ollama");
         List<String> hitlFrames = service.streamRun(liveHitl).collect().asList().await().indefinitely();
@@ -255,7 +238,7 @@ class OpsPilotOrchestratorServiceTest {
         assertTrue(kyotoFrames.stream().anyMatch(f -> f.contains("\"sources\":")));
         assertTrue(kyotoFrames.stream().anyMatch(f -> f.contains("\"followUps\":")));
 
-        // 2. /lisbon and /reykjavik and /choices and /media slash commands
+        // 2. /lisbon and /reykjavik and /choices slash commands
         List<String> lisbonFrames = service.streamRun(new AgentRunRequest(
                 "thread-lisbon", "/lisbon Fado & coastal walk", Map.of(), "deterministic")).collect().asList().await().indefinitely();
         assertTrue(lisbonFrames.stream().anyMatch(f -> f.contains("Lisbon")));

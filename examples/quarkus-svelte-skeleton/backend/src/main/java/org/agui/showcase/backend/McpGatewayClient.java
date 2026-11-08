@@ -9,7 +9,6 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -19,14 +18,14 @@ import java.util.function.BiFunction;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 /**
- * MCP Gateway Client for OpsPilot & Nomad Concierge Orchestrator (:8080 -> :8081).
- * Exposes MCP tools (inspectClusterHealth, queryServiceLogs, scaleDeployment, fetchCityWeather,
- * discoverLocalCultureAndMedia, updateTripItinerary), resources, and prompt templates.
+ * MCP Gateway Client for the Nomad Travel & Local Culture Concierge Orchestrator (:8080 -> :8081).
+ * Exposes MCP tools ({@code fetchCityWeather}, {@code discoverLocalCultureAndMedia},
+ * {@code updateTripItinerary}), resources ({@code itinerary://active-trip}, {@code traveler://preferences}),
+ * and prompt templates ({@code weekend-cultural-escape}, {@code local-music-and-food-walk}).
  */
 @ApplicationScoped
 public class McpGatewayClient {
 
-    private final Map<String, Map<String, Object>> services = new ConcurrentHashMap<>();
     private final Map<String, Object> nomadTrip = new ConcurrentHashMap<>();
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final HttpClient httpClient = HttpClient.newBuilder()
@@ -43,29 +42,6 @@ public class McpGatewayClient {
     }
 
     public final void resetState() {
-        services.clear();
-        services.put("payment-gateway", new LinkedHashMap<>(Map.of(
-                "serviceName", "payment-gateway",
-                "replicas", 3,
-                "cpuPercent", 78,
-                "memoryMb", 420,
-                "status", "DEGRADED",
-                "region", "us-east-1")));
-        services.put("order-processor", new LinkedHashMap<>(Map.of(
-                "serviceName", "order-processor",
-                "replicas", 2,
-                "cpuPercent", 34,
-                "memoryMb", 256,
-                "status", "HEALTHY",
-                "region", "us-east-1")));
-        services.put("identity-provider", new LinkedHashMap<>(Map.of(
-                "serviceName", "identity-provider",
-                "replicas", 2,
-                "cpuPercent", 22,
-                "memoryMb", 192,
-                "status", "HEALTHY",
-                "region", "us-west-2")));
-
         nomadTrip.clear();
         nomadTrip.put("uri", "itinerary://active-trip");
         nomadTrip.put("activeCity", "Kyoto");
@@ -87,21 +63,9 @@ public class McpGatewayClient {
     public List<Map<String, Object>> listTools() {
         return List.of(
                 Map.of(
-                        "name", "inspectClusterHealth",
-                        "server", "quarkus-mcp-cluster-ops (:8081)",
-                        "description", "Inspects live health, replica count, CPU, and memory across cluster services."),
-                Map.of(
-                        "name", "queryServiceLogs",
-                        "server", "quarkus-mcp-cluster-ops (:8081)",
-                        "description", "Queries recent structured log entries for a target microservice."),
-                Map.of(
-                        "name", "scaleDeployment",
-                        "server", "quarkus-mcp-cluster-ops (:8081)",
-                        "description", "Scales a deployment to the requested replica count."),
-                Map.of(
                         "name", "fetchCityWeather",
                         "server", "nomad-mcp-concierge (:8081)",
-                        "description", "Fetches live Open-Meteo weather forecast and temperature for a travel destination."),
+                        "description", "Fetches live Open-Meteo weather forecast and temperature for any global travel destination."),
                 Map.of(
                         "name", "discoverLocalCultureAndMedia",
                         "server", "nomad-mcp-concierge (:8081)",
@@ -112,29 +76,11 @@ public class McpGatewayClient {
                         "description", "Updates or reserves a cultural sanctuary or stop in the active trip itinerary."));
     }
 
-    private static final List<String> CANONICAL_SERVICE_ORDER = List.of(
-            "payment-gateway",
-            "order-processor",
-            "identity-provider");
-
     public Map<String, Object> readClusterState() {
-        List<Map<String, Object>> ordered = new ArrayList<>();
-        for (String svcName : CANONICAL_SERVICE_ORDER) {
-            Map<String, Object> svc = services.get(svcName);
-            if (svc != null) {
-                ordered.add(svc);
-            }
-        }
-        for (Map.Entry<String, Map<String, Object>> entry : services.entrySet()) {
-            if (!CANONICAL_SERVICE_ORDER.contains(entry.getKey())) {
-                ordered.add(entry.getValue());
-            }
-        }
         return Map.of(
-                "uri", "cluster://topology",
-                "cluster", "quarkus-prod-us-east-1",
-                "services", List.copyOf(ordered),
-                "nomadTrip", new LinkedHashMap<>(nomadTrip));
+                "uri", "itinerary://active-trip",
+                "nomadTrip", new LinkedHashMap<>(nomadTrip),
+                "preferences", readResource("traveler://preferences"));
     }
 
     public Map<String, Object> readResource(String uri) {
@@ -149,9 +95,18 @@ public class McpGatewayClient {
     }
 
     public Map<String, Object> getPromptTemplate(String promptName, Map<String, Object> args) {
+        String resolvedName = (promptName == null || promptName.isBlank()) ? "weekend-cultural-escape" : promptName;
         String city = String.valueOf(args != null ? args.getOrDefault("city", "Kyoto") : "Kyoto");
+        if ("local-music-and-food-walk".equals(resolvedName)) {
+            String genre = String.valueOf(args != null ? args.getOrDefault("genre", "traditional") : "traditional");
+            return Map.of(
+                    "promptName", "local-music-and-food-walk",
+                    "arguments", Map.of("city", city, "genre", genre),
+                    "expandedPrompt", "Curate an evening neighborhood walk in " + city
+                            + " pairing regional culinary craftsmanship with intimate " + genre + " music venues.");
+        }
         return Map.of(
-                "promptName", promptName == null ? "weekend-cultural-escape" : promptName,
+                "promptName", resolvedName,
                 "arguments", Map.of("city", city),
                 "expandedPrompt", "Synthesize a 3-day architectural, culinary, and local music itinerary for " + city
                         + " with Open-Meteo telemetry, Wikipedia cultural context, and a 30s iTunes soundtrack preview.");
@@ -160,38 +115,6 @@ public class McpGatewayClient {
     public Map<String, Object> callTool(String toolName, Map<String, Object> arguments) {
         Map<String, Object> args = arguments == null ? Map.of() : arguments;
         return switch (toolName) {
-            case "inspectClusterHealth" -> Map.of(
-                    "toolName", "inspectClusterHealth",
-                    "server", "quarkus-mcp-cluster-ops (:8081)",
-                    "arguments", args,
-                    "result", readClusterState());
-            case "queryServiceLogs" -> {
-                String svc = String.valueOf(args.getOrDefault("serviceName", "payment-gateway"));
-                yield Map.of(
-                        "toolName", "queryServiceLogs",
-                        "server", "quarkus-mcp-cluster-ops (:8081)",
-                        "arguments", Map.of("serviceName", svc),
-                        "result", List.of(
-                                Map.of("level", "WARN", "service", svc, "message", "p99 latency spike (310ms) on /v1/charge"),
-                                Map.of("level", "INFO", "service", svc, "message", "Connection pool utilization at 84%")));
-            }
-            case "scaleDeployment" -> {
-                String svc = String.valueOf(args.getOrDefault("serviceName", "payment-gateway"));
-                int replicas = args.get("replicas") instanceof Number n ? n.intValue() : 4;
-                Map<String, Object> updated = new LinkedHashMap<>(services.getOrDefault(svc, Map.of()));
-                updated.put("serviceName", svc);
-                updated.put("replicas", replicas);
-                updated.put("cpuPercent", Math.max(18, 78 / Math.max(1, replicas / 2)));
-                updated.put("memoryMb", 256);
-                updated.put("status", "HEALTHY");
-                updated.put("region", updated.getOrDefault("region", "us-east-1"));
-                services.put(svc, updated);
-                yield Map.of(
-                        "toolName", "scaleDeployment",
-                        "server", "quarkus-mcp-cluster-ops (:8081)",
-                        "arguments", Map.of("serviceName", svc, "replicas", replicas),
-                        "result", updated);
-            }
             case "fetchCityWeather" -> {
                 String city = normalizeCity(String.valueOf(args.getOrDefault("city", "Kyoto")));
                 double tempC = switch (city.toLowerCase(Locale.ROOT)) {
@@ -266,10 +189,15 @@ public class McpGatewayClient {
             }
             case "updateTripItinerary" -> {
                 String city = normalizeCity(String.valueOf(args.getOrDefault("city", "Kyoto")));
-                String stopTitle = String.valueOf(args.getOrDefault("stopTitle", city + " Architectural Sanctuary"));
+                String stopTitle = String.valueOf(args.getOrDefault("stopTitle", defaultSanctuaryForCity(city)));
                 int nights = args.get("nights") instanceof Number n ? n.intValue() : 4;
                 double costUsd = args.get("costUsd") instanceof Number n ? n.doubleValue() : 1680.0;
+                String country = A2aGatewayClient.resolveCountryForCity(city);
+                String currency = A2aGatewayClient.resolveCurrencyForCountry(country);
                 nomadTrip.put("activeCity", city);
+                nomadTrip.put("country", country);
+                nomadTrip.put("currency", currency);
+                nomadTrip.put("exchangeRate", A2aGatewayClient.resolveDefaultRateForCurrency(currency));
                 nomadTrip.put("stopTitle", stopTitle);
                 nomadTrip.put("nights", nights);
                 nomadTrip.put("allocatedUsd", costUsd);
@@ -332,19 +260,24 @@ public class McpGatewayClient {
                             "artistName", "Reykjavik Chamber Collective",
                             "previewUrl", "https://www.w3schools.com/html/horse.mp3",
                             "durationSeconds", 30));
-            default -> Map.of(
-                    "destination", city,
-                    "country", "Japan",
-                    "currency", "JPY",
-                    "exchangeRate", 151.40,
-                    "genre", genre,
-                    "culturalSummary", city + " weaves architectural sanctuaries, neighborhood culinary craft, and local acoustic traditions.",
-                    "heroImageUrl", "https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?auto=format&fit=crop&w=1000&q=80",
-                    "audioTrack", Map.of(
-                            "trackName", "Haru no Umi (Spring Sea — Koto & Shakuhachi)",
-                            "artistName", "Kyoto Koto Consort",
-                            "previewUrl", "https://www.w3schools.com/html/horse.mp3",
-                            "durationSeconds", 30));
+            default -> {
+                String country = A2aGatewayClient.resolveCountryForCity(city);
+                String currency = A2aGatewayClient.resolveCurrencyForCountry(country);
+                double rate = A2aGatewayClient.resolveDefaultRateForCurrency(currency);
+                yield Map.of(
+                        "destination", city,
+                        "country", country,
+                        "currency", currency,
+                        "exchangeRate", rate,
+                        "genre", genre,
+                        "culturalSummary", city + " weaves architectural sanctuaries, neighborhood culinary craft, and local acoustic traditions.",
+                        "heroImageUrl", "https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?auto=format&fit=crop&w=1000&q=80",
+                        "audioTrack", Map.of(
+                                "trackName", "Haru no Umi (Spring Sea — Koto & Shakuhachi)",
+                                "artistName", "Kyoto Koto Consort",
+                                "previewUrl", "https://www.w3schools.com/html/horse.mp3",
+                                "durationSeconds", 30));
+            }
         };
     }
 
@@ -366,7 +299,7 @@ public class McpGatewayClient {
         return Character.toUpperCase(trimmed.charAt(0)) + trimmed.substring(1);
     }
 
-    private String defaultSanctuaryForCity(String city) {
+    static String defaultSanctuaryForCity(String city) {
         return switch (city.toLowerCase(Locale.ROOT)) {
             case "kyoto" -> "Hoshinoya Arashiyama Pavilion";
             case "lisbon" -> "Palácio Belmonte Alfama Suite";

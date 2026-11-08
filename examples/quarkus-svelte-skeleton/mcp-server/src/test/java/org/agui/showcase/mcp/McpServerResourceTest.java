@@ -8,54 +8,46 @@ import java.util.Map;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.notNullValue;
 
 @QuarkusTest
 class McpServerResourceTest {
 
     @Test
-    void listToolsReturnsSixRegisteredMcpTools() {
+    void listToolsReturnsThreeRegisteredNomadMcpTools() {
         given()
             .when().get("/api/mcp/tools")
             .then()
             .statusCode(200)
-            .body("serverName", equalTo("cluster-telemetry-mcp"))
-            .body("tools.size()", equalTo(6));
+            .body("serverName", equalTo("nomad-mcp-concierge"))
+            .body("tools.size()", equalTo(3));
     }
 
     @Test
-    void callToolEndpointExecutesInspectClusterHealthAndScaleDeployment() {
+    void callToolEndpointExecutesFetchCityWeatherAndUpdateTripItinerary() {
         given()
             .contentType(ContentType.JSON)
-            .body(Map.of("tool", "inspectClusterHealth", "arguments", Map.of("region", "us-east-1")))
+            .body(Map.of("tool", "fetchCityWeather", "arguments", Map.of("city", "Kyoto")))
             .when().post("/api/mcp/tools/call")
             .then()
             .statusCode(200)
             .body("isError", equalTo(false))
-            .body("tool", equalTo("inspectClusterHealth"))
-            .body("result.region", equalTo("us-east-1"));
+            .body("tool", equalTo("fetchCityWeather"))
+            .body("result.city", equalTo("Kyoto"));
 
         given()
             .contentType(ContentType.JSON)
-            .body(Map.of("tool", "scaleDeployment", "arguments", Map.of("serviceName", "payment-service", "targetReplicas", 5)))
+            .body(Map.of("tool", "updateTripItinerary", "arguments", Map.of("city", "Lisbon", "stopTitle", "Palácio Belmonte", "nights", 4, "costUsd", 1760)))
             .when().post("/api/mcp/tools/call")
             .then()
             .statusCode(200)
             .body("isError", equalTo(false))
-            .body("result.replicas", equalTo(5));
+            .body("result.activeCity", equalTo("Lisbon"))
+            .body("result.nights", equalTo(4));
     }
 
     @Test
-    void topologyAndNomadResourcesAndPromptsReturnSnapshots() {
-        given()
-            .when().get("/api/mcp/resources/topology")
-            .then()
-            .statusCode(200)
-            .body("uri", equalTo("cluster://topology"))
-            .body("services.size()", greaterThanOrEqualTo(3))
-            .body("updatedAt", notNullValue());
-
+    void nomadResourcesAndPromptsReturnSnapshots() {
         given()
             .when().get("/api/mcp/resources/itinerary")
             .then()

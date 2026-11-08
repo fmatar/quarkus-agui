@@ -13,7 +13,7 @@ import org.agui.core.adapters.AgUiSseFormatter;
 import org.jboss.resteasy.reactive.RestStreamElementType;
 
 /**
- * REST & SSE Endpoint for the OpsPilot Quarkus Orchestrator (:8080).
+ * REST & SSE Endpoint for the Nomad Travel Concierge Quarkus Orchestrator (:8080).
  */
 @Path("/api/agent")
 @Consumes(MediaType.APPLICATION_JSON)
