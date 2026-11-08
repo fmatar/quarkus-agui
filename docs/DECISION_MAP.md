@@ -16,26 +16,28 @@ flowchart TD
   INV_06["INV-06: Portable GraalVM 25 Native Footprint: Native executable compiled with quarkus-ag-ui (-Dnative local GraalVM 25 or Mandrel JDK 25 container fallback) must maintain < 50MB RSS baseline memory footprint."]
   INV_07["INV-07: Zero-Configuration Extension Defaults: Importing quarkus-ag-ui auto-configures Jackson, RESTEasy Reactive text/event-stream SSE bindings, and LangChain4j/MCP/A2A bridges under Apache License 2.0."]
   INV_08["INV-08: Modern Frontend & Toolchain Standards: Java 25 + Quarkus 3.40.1.1 via ./mvnw on backend; pnpm + Svelte 5 Runes + @skeletonlabs/skeleton-svelte + @lucide/svelte (zero deprecated modules) on frontend."]
-  CAP_01["CAP-01: Wave 1 — Quarkus MCP Server (:8081) & Quarkus A2A Server (:8082)"]
+  CAP_01["CAP-01: AG-UI Core Event Schema & Payload Records (ag-ui-core)"]
   SPEC_01["SPEC-01 (docs/specs/cap-01-mcp-a2a-servers.md)"]
-  CAP_02["CAP-02: Wave 1 — OpsPilot Orchestrator (:8080) & SvelteKit/Skeleton Baseline UI (:5173)"]
+  CAP_02["CAP-02: AG-UI SSE Frame Formatter & Flow.Publisher Reactive Adapters (ag-ui-core)"]
   SPEC_02["SPEC-02 (docs/specs/cap-02-orchestrator-svelte-baseline.md)"]
-  CAP_03["CAP-03: Wave 2 — Full In-Place AG-UI Protocol Engine in Showcase Backend (:8080)"]
+  CAP_03["CAP-03: Quarkus AG-UI Runtime & LangChain4j TokenStream/Tool Bridge (quarkus-ag-ui-runtime)"]
   SPEC_03["SPEC-03 (docs/specs/cap-03-inplace-agui-backend.md)"]
-  CAP_04["CAP-04: Wave 2 — Full AG-UI SvelteKit + Skeleton UI Workbench (:5173)"]
+  CAP_04["CAP-04: Quarkus AG-UI Deployment Processor, GraalVM Reflection & Dev UI Inspector (quarkus-ag-ui-deployment)"]
   SPEC_04["SPEC-04 (docs/specs/cap-04-svelte-agui-workbench.md)"]
-  CAP_05["CAP-05: Wave 3 — Extract Plain Java 25 Zero-Dependency Library (ag-ui-core)"]
+  CAP_05["CAP-05: Quarkus AG-UI Extension JVM & GraalVM Native Integration Test Suite (quarkus-ag-ui-integration-tests)"]
   SPEC_05["SPEC-05 (docs/specs/cap-05-extract-agui-core.md)"]
-  CAP_06["CAP-06: Wave 4 — Extract Quarkus AG-UI Runtime & Bridges (quarkus-ag-ui)"]
+  CAP_06["CAP-06: Reference Quarkus + LangChain4j Agent Backend (examples/quarkus-svelte-skeleton)"]
   SPEC_06["SPEC-06 (docs/specs/cap-06-extract-quarkus-runtime.md)"]
-  CAP_07["CAP-07: Wave 4 — Quarkus AG-UI Deployment Processor, GraalVM 25 Reflection & Dev UI"]
+  CAP_07["CAP-07: Reference SvelteKit + Skeleton UI Streaming Client (examples/quarkus-svelte-skeleton)"]
   SPEC_07["SPEC-07 (docs/specs/cap-07-extract-quarkus-deployment-it.md)"]
-  CAP_08["CAP-08: Wave 4 — Migrate Showcase to quarkus-ag-ui Extension, Benchmarks & Native Verification"]
+  CAP_08["CAP-08: Full-Stack E2E Verification, Performance Benchmarks & Developer Showcase"]
   SPEC_08["SPEC-08 (docs/specs/cap-08-migrate-showcase-e2e-benchmarks.md)"]
   ADR_001["ADR-001: Multi-Module Maven & SvelteKit Clean Architecture for AG-UI Protocol"]
   _1["Ticket #1 (feature/issue-#1-product-genesis)"]
   ADR_002["ADR-002: Example-First Tri-Protocol (AG-UI + MCP + A2A) Evolution on Java 25, Quarkus 3.40.1.1 & pnpm"]
-  _2["Ticket #2"]
+  _2["Ticket #2 (feature/issue-#2-mcp-a2a-servers-and-adr-002)"]
+  ADR_003["ADR-003: Multi-Extension BOM and Concentric Transport Architecture (Core, SSE, WebSockets)"]
+  _30["Ticket #30"]
   CAP_01 -->|specified_by| SPEC_01
   CAP_02 -->|specified_by| SPEC_02
   CAP_01 -->|depends_on| CAP_02
@@ -66,6 +68,9 @@ flowchart TD
   CAP_06 -.->|ADR Drift| ADR_002
   CAP_07 -.->|ADR Drift| ADR_002
   CAP_08 -.->|ADR Drift| ADR_002
+  _30 -->|triggered_drift_adr| ADR_003
+  CAP_06 -.->|ADR Drift| ADR_003
+  CAP_07 -.->|ADR Drift| ADR_003
   CAP_01 -->|realized_by| CAP_02
   CAP_01 -->|realized_by| CAP_03
   CAP_02 -->|realized_by| CAP_03
@@ -90,6 +95,7 @@ flowchart TD
   CAP_06 -->|realized_by| ADR_002
   CAP_07 -->|realized_by| ADR_002
   CAP_08 -->|realized_by| ADR_002
+  _30 -.->|ADR Drift| ADR_003
 ```
 
 ---
@@ -100,6 +106,7 @@ flowchart TD
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **ADR-001** | Multi-Module Maven & SvelteKit Clean Architecture for AG-UI Protocol | `technical` | `accepted` | #1 | CAP-01, CAP-03, CAP-04, CAP-07 |
 | **ADR-002** | Example-First Tri-Protocol (AG-UI + MCP + A2A) Evolution on Java 25, Quarkus 3.40.1.1 & pnpm | `product` | `accepted` | #2 | CAP-01, CAP-02, CAP-03, CAP-04, CAP-05, CAP-06, CAP-07, CAP-08 |
+| **ADR-003** | Multi-Extension BOM and Concentric Transport Architecture (Core, SSE, WebSockets) | `technical` | `accepted` | #30 | CAP-06, CAP-07 |
 
 ---
 
@@ -107,11 +114,11 @@ flowchart TD
 
 | Capability ID | Description | Current Status |
 | :--- | :--- | :--- |
-| **CAP-01** | Wave 1 — Quarkus MCP Server (`:8081`) & Quarkus A2A Server (`:8082`) | `IMPLEMENTED` |
-| **CAP-02** | Wave 1 — OpsPilot Orchestrator (`:8080`) & SvelteKit/Skeleton Baseline UI (`:5173`) | `IMPLEMENTED` |
-| **CAP-03** | Wave 2 — Full In-Place AG-UI Protocol Engine in Showcase Backend (`:8080`) | `IMPLEMENTED` |
-| **CAP-04** | Wave 2 — Full AG-UI SvelteKit + Skeleton UI Workbench (`:5173`) | `IMPLEMENTED` |
-| **CAP-05** | Wave 3 — Extract Plain Java 25 Zero-Dependency Library (`ag-ui-core`) | `IMPLEMENTED` |
-| **CAP-06** | Wave 4 — Extract Quarkus AG-UI Runtime & Bridges (`quarkus-ag-ui`) | `IMPLEMENTED` |
-| **CAP-07** | Wave 4 — Quarkus AG-UI Deployment Processor, GraalVM 25 Reflection & Dev UI | `IMPLEMENTED` |
-| **CAP-08** | Wave 4 — Migrate Showcase to `quarkus-ag-ui` Extension, Benchmarks & Native Verification | `IMPLEMENTED` |
+| **CAP-01** | AG-UI Core Event Schema & Payload Records (ag-ui-core) | `PLANNED` |
+| **CAP-02** | AG-UI SSE Frame Formatter & Flow.Publisher Reactive Adapters (ag-ui-core) | `PLANNED` |
+| **CAP-03** | Quarkus AG-UI Runtime & LangChain4j TokenStream/Tool Bridge (quarkus-ag-ui-runtime) | `PLANNED` |
+| **CAP-04** | Quarkus AG-UI Deployment Processor, GraalVM Reflection & Dev UI Inspector (quarkus-ag-ui-deployment) | `PLANNED` |
+| **CAP-05** | Quarkus AG-UI Extension JVM & GraalVM Native Integration Test Suite (quarkus-ag-ui-integration-tests) | `PLANNED` |
+| **CAP-06** | Reference Quarkus + LangChain4j Agent Backend (examples/quarkus-svelte-skeleton) | `PLANNED` |
+| **CAP-07** | Reference SvelteKit + Skeleton UI Streaming Client (examples/quarkus-svelte-skeleton) | `PLANNED` |
+| **CAP-08** | Full-Stack E2E Verification, Performance Benchmarks & Developer Showcase | `PLANNED` |
