@@ -110,7 +110,7 @@ public class McpGatewayClient implements AutoCloseable {
                 .build();
         activeMcpClient = DefaultMcpClient.builder()
                 .key("nomad-mcp-concierge")
-                .protocolVersion("2025-03-26")
+                .protocolVersion("2025-11-25")
                 .initializationTimeout(mcpTimeout)
                 .transport(transport)
                 .toolExecutionTimeout(mcpTimeout)
@@ -121,6 +121,18 @@ public class McpGatewayClient implements AutoCloseable {
                 .build();
         activeMcpEndpoint = targetEndpoint;
         return activeMcpClient;
+    }
+
+    private <T> T executeMcp(java.util.function.Function<McpClient, T> op) {
+        try {
+            return op.apply(getOrCreateMcpClient());
+        } catch (RuntimeException ex) {
+            if (ex.getMessage() != null && ex.getMessage().contains("initialize")) {
+                close();
+                return op.apply(getOrCreateMcpClient());
+            }
+            throw ex;
+        }
     }
 
     @Override
@@ -201,7 +213,7 @@ public class McpGatewayClient implements AutoCloseable {
 
     private Map<String, Object> readRemoteMcpResource(String uri) {
         try {
-            McpReadResourceResult res = getOrCreateMcpClient().readResource(uri);
+            McpReadResourceResult res = executeMcp(client -> client.readResource(uri));
             if (res != null && res.contents() != null) {
                 for (McpResourceContents content : res.contents()) {
                     if (content instanceof McpTextResourceContents textContent && textContent.text() != null) {
@@ -315,7 +327,7 @@ public class McpGatewayClient implements AutoCloseable {
                     "error", "Required prompt argument 'city' must be supplied (no default assumed).");
         }
         try {
-            McpGetPromptResult promptResult = getOrCreateMcpClient().getPrompt(resolvedName, Map.of("city", city));
+            McpGetPromptResult promptResult = executeMcp(client -> client.getPrompt(resolvedName, Map.of("city", city)));
             String expanded = promptResult != null && promptResult.messages() != null && !promptResult.messages().isEmpty()
                     ? String.valueOf(promptResult.messages().getFirst().content())
                     : "Curate a travel itinerary in " + city;
@@ -345,7 +357,7 @@ public class McpGatewayClient implements AutoCloseable {
                     .name(toolName)
                     .arguments(argsJson)
                     .build();
-            ToolExecutionResult execResult = getOrCreateMcpClient().executeTool(request);
+            ToolExecutionResult execResult = executeMcp(client -> client.executeTool(request));
             Map<String, Object> parsedResult = parseToolResultText(execResult.resultText());
             boolean isError = execResult.isError()
                     || Boolean.TRUE.equals(parsedResult.get("isError"))
@@ -440,7 +452,10 @@ public class McpGatewayClient implements AutoCloseable {
         boolean mcpPingOk = false;
         String pingErr = null;
         try {
-            getOrCreateMcpClient().checkHealth();
+            executeMcp(client -> {
+                client.checkHealth();
+                return Boolean.TRUE;
+            });
             mcpPingOk = true;
         } catch (Exception ex) {
             pingErr = ex.getMessage();

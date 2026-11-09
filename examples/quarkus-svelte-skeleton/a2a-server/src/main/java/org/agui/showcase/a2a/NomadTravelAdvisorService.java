@@ -51,6 +51,7 @@ public class NomadTravelAdvisorService {
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final HttpClient httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofMillis(1800))
+            .followRedirects(HttpClient.Redirect.NORMAL)
             .build();
 
     String frankfurterBaseUrl = "https://api.frankfurter.dev";

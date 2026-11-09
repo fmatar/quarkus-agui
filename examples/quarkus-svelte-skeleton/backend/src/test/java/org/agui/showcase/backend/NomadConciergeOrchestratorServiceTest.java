@@ -43,6 +43,7 @@ class NomadConciergeOrchestratorServiceTest {
     private static volatile boolean simulateCultureDown = false;
     private static volatile boolean simulateFxDown = false;
     private static volatile boolean simulateEmptyResource = false;
+    private static volatile boolean simulateStaleMcpSessionOnce = false;
     private static volatile String lastSyncedPreferencesBody = "";
 
     private McpGatewayClient mcpClient;
@@ -72,9 +73,23 @@ class NomadConciergeOrchestratorServiceTest {
                 exchange.close();
                 return;
             }
+            if (!"initialize".equals(method)) {
+                String sessionHdr = exchange.getRequestHeaders().getFirst("Mcp-Session-Id");
+                if (simulateStaleMcpSessionOnce || !"session-test-1".equals(sessionHdr)) {
+                    simulateStaleMcpSessionOnce = false;
+                    Map<String, Object> errEnv = new LinkedHashMap<>();
+                    errEnv.put("jsonrpc", "2.0");
+                    errEnv.put("id", MAPPER.convertValue(idNode, Object.class));
+                    errEnv.put("error", Map.of(
+                            "code", -32601,
+                            "message", "The first message from the client must be \"initialize\": " + method));
+                    writeJson(exchange, 200, errEnv);
+                    return;
+                }
+            }
             Map<String, Object> resultObj = switch (method) {
                 case "initialize" -> Map.of(
-                        "protocolVersion", "2025-03-26",
+                        "protocolVersion", "2025-11-25",
                         "capabilities", Map.of(
                                 "tools", Map.of("listChanged", false),
                                 "resources", Map.of("listChanged", false),
@@ -221,6 +236,7 @@ class NomadConciergeOrchestratorServiceTest {
         simulateCultureDown = false;
         simulateFxDown = false;
         simulateEmptyResource = false;
+        simulateStaleMcpSessionOnce = false;
 
         mcpClient = new McpGatewayClient();
         mcpClient.mcpBaseUrl = baseUrl;
@@ -746,7 +762,8 @@ class NomadConciergeOrchestratorServiceTest {
 
     @Test
     void mcpAndA2aGatewaysUpdateSideEffectsAndSurfaceAllUpstreamErrorsHonestly() {
-        // 1. MCP tool side-effects on nomadTrip
+        // 1. MCP tool side-effects on nomadTrip + stale session transparent re-initialization
+        simulateStaleMcpSessionOnce = true;
         Map<String, Object> weather = mcpClient.callTool("fetchCityWeather", Map.of("city", "Kyoto"));
         assertEquals("OK", weather.get("status"));
         assertEquals(false, weather.get("isError"));

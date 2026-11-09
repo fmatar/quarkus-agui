@@ -91,6 +91,20 @@ class NomadTravelAdvisorServiceTest {
                 os.write(bytes);
             }
         });
+        server.createContext("/deprecated", exchange -> {
+            byte[] bytes = ("{\"success\":false,\"data\":null,\"errors\":[{\"message\":"
+                    + "\"This API version has been deprecated. Please visit https://restcountries.com/docs/countries/legacy-api-deprecation to migrate to our new version (v5).\"}]}")
+                    .getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(400, bytes.length);
+            try (OutputStream os = exchange.getResponseBody()) {
+                os.write(bytes);
+            }
+        });
+        server.createContext("/redirect", exchange -> {
+            exchange.getResponseHeaders().add("Location", "http://127.0.0.1:" + server.getAddress().getPort() + "/deprecated");
+            exchange.sendResponseHeaders(301, -1);
+            exchange.close();
+        });
         server.start();
         int port = server.getAddress().getPort();
         try {
@@ -100,6 +114,12 @@ class NomadTravelAdvisorServiceTest {
             assertTrue(ok.isHttpOk());
             assertEquals(200, ok.statusCode());
             assertTrue(ok.latencyMs() >= 1L);
+
+            NomadTravelAdvisorService.UpstreamHttpResult redirectedDeprecation =
+                    service.probeUrlViaHttp("http://127.0.0.1:" + port + "/redirect");
+            assertEquals(400, redirectedDeprecation.statusCode());
+            assertTrue(service.inspectUpstreamError(redirectedDeprecation, "restcountries.com")
+                    .contains("This API version has been deprecated"));
 
             NomadTravelAdvisorService.UpstreamHttpResult err =
                     service.probeUrlViaHttp("http://127.0.0.1:" + port + "/err");
