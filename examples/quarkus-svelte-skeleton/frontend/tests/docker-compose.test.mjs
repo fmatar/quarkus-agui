@@ -73,6 +73,8 @@ test('Quinoa SPA static adapter, Jib container extensions, -Pnative profile, and
 
 	const launcherContent = fs.readFileSync(launcherScript, 'utf8');
 	assert.match(launcherContent, /quarkus\.container-image\.build=true/);
+	assert.match(launcherContent, /-pl :quarkus-ag-ui-deployment,:quarkus-ag-ui-bom -am/);
+	assert.doesNotMatch(launcherContent, /quarkus-extension\/common/);
 	assert.match(launcherContent, /--docker-native/);
 	assert.match(launcherContent, /http:\/\/localhost:8080/);
 });

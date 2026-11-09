@@ -7,7 +7,7 @@ MODE="${1:---docker}"
 
 if [[ "${MODE}" == "--docker" ]]; then
   echo "📦 Building Quarkus AG-UI extensions & Jib layered containers (with Quinoa SPA bundled)..."
-  (cd "${ROOT_DIR}" && ./mvnw clean install -DskipTests -pl ag-ui-core,quarkus-extension/common,quarkus-extension/common-deployment,quarkus-extension/sse,quarkus-extension/sse-deployment,quarkus-extension/websockets,quarkus-extension/websockets-deployment,quarkus-extension/runtime,quarkus-extension/deployment,quarkus-ag-ui-bom)
+  (cd "${ROOT_DIR}" && ./mvnw clean install -DskipTests -pl :quarkus-ag-ui-deployment,:quarkus-ag-ui-bom -am)
   (cd "${ROOT_DIR}" && ./mvnw -f examples/quarkus-svelte-skeleton/pom.xml clean package -Dquarkus.container-image.build=true -DskipTests)
 
   echo "🚀 Starting Nomad Tri-Protocol Showcase via Docker Compose (Jib + Quinoa)..."
@@ -17,7 +17,7 @@ if [[ "${MODE}" == "--docker" ]]; then
   docker compose -f "${SCRIPT_DIR}/docker-compose.yml" up --remove-orphans
 elif [[ "${MODE}" == "--docker-native" ]]; then
   echo "📦 Building Quarkus AG-UI extensions & GraalVM/Mandrel Native Jib containers (-Pnative)..."
-  (cd "${ROOT_DIR}" && ./mvnw clean install -DskipTests -pl ag-ui-core,quarkus-extension/common,quarkus-extension/common-deployment,quarkus-extension/sse,quarkus-extension/sse-deployment,quarkus-extension/websockets,quarkus-extension/websockets-deployment,quarkus-extension/runtime,quarkus-extension/deployment,quarkus-ag-ui-bom)
+  (cd "${ROOT_DIR}" && ./mvnw clean install -DskipTests -pl :quarkus-ag-ui-deployment,:quarkus-ag-ui-bom -am)
   (cd "${ROOT_DIR}" && ./mvnw -f examples/quarkus-svelte-skeleton/pom.xml clean package -Pnative -Dquarkus.container-image.build=true -DskipTests)
 
   echo "🚀 Starting Nomad Tri-Protocol Native Showcase via Docker Compose..."
@@ -27,7 +27,7 @@ elif [[ "${MODE}" == "--docker-native" ]]; then
   docker compose -f "${SCRIPT_DIR}/docker-compose.yml" up --remove-orphans
 elif [[ "${MODE}" == "--local" ]]; then
   echo "🔧 Building Quarkus AG-UI extensions locally..."
-  (cd "${ROOT_DIR}" && ./mvnw clean install -DskipTests -pl ag-ui-core,quarkus-extension/common,quarkus-extension/common-deployment,quarkus-extension/sse,quarkus-extension/sse-deployment,quarkus-extension/websockets,quarkus-extension/websockets-deployment,quarkus-extension/runtime,quarkus-extension/deployment,quarkus-ag-ui-bom)
+  (cd "${ROOT_DIR}" && ./mvnw clean install -DskipTests -pl :quarkus-ag-ui-deployment,:quarkus-ag-ui-bom -am)
 
   trap 'echo "Stopping local showcase processes..."; kill 0' INT TERM EXIT
 
