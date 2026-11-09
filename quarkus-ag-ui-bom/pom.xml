@@ -62,6 +62,18 @@
                 <version>${project.version}</version>
             </dependency>
 
+            <!-- Quarkus AG-UI LangChain4j Reactive ChatEvent Adapter -->
+            <dependency>
+                <groupId>org.agui</groupId>
+                <artifactId>quarkus-ag-ui-langchain4j</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.agui</groupId>
+                <artifactId>quarkus-ag-ui-langchain4j-deployment</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
             <!-- Quarkus AG-UI Umbrella Starter / Aggregator -->
             <dependency>
                 <groupId>org.agui</groupId>
