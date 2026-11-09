@@ -56,7 +56,7 @@ class McpServerResourceTest {
                 .then()
                 .statusCode(200)
                 .body("serverName", equalTo("nomad-mcp-concierge"))
-                .body("tools", hasSize(3));
+                .body("tools", hasSize(6));
 
         given()
                 .when().get("/api/mcp/health")
@@ -65,6 +65,14 @@ class McpServerResourceTest {
                 .body("server", equalTo("nomad-mcp-concierge"))
                 .body("status", equalTo("UP"))
                 .body("upstreams", notNullValue());
+
+        given()
+                .when().get("/q/health/ready")
+                .then()
+                .statusCode(200)
+                .body("status", equalTo("UP"))
+                .body("checks[0].name", equalTo("nomad-mcp-upstreams"))
+                .body("checks[0].status", equalTo("UP"));
     }
 
     @Test
