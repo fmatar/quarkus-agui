@@ -1,5 +1,5 @@
 <script>
-	import { Check, ChevronDown, ChevronRight, Loader2, ShieldAlert } from '@lucide/svelte';
+	import { AlertTriangle, Check, ChevronDown, ChevronRight, Loader2, ShieldAlert } from '@lucide/svelte';
 	import gsap from 'gsap';
 	import ProtocolCallBadge from './ProtocolCallBadge.svelte';
 
@@ -70,9 +70,10 @@
 				{#each timeline as step, idx (`${step.id ?? step.title}-${idx}`)}
 					{@const rowKey = `${step.id ?? step.title}-${idx}`}
 					{@const isExpanded = expandedId === rowKey}
+					{@const isStepError = step.status === 'error' || step.isError}
 					<div
 						data-spine-row
-						class="rounded-lg border border-[#E4E0D8] bg-white {isExpanded ? 'lg:col-span-2' : ''}"
+						class="rounded-lg border {isStepError ? 'border-[#C84B31]/50 bg-[#FBEEE9]/45 lg:col-span-2' : 'border-[#E4E0D8] bg-white'} {isExpanded ? 'lg:col-span-2' : ''}"
 					>
 						<button
 							type="button"
@@ -84,7 +85,7 @@
 								<ProtocolCallBadge callType={step.callType} showCode={false} />
 								<span class="truncate font-mono text-xs font-medium text-[#141413]">{step.title}</span>
 								{#if step.detail}
-									<span class="hidden truncate text-xs text-[#575551] xl:inline">— {step.detail}</span>
+									<span class="truncate text-xs {isStepError ? 'font-medium text-[#9E331D]' : 'hidden text-[#575551] xl:inline'}">— {step.detail}</span>
 								{/if}
 							</div>
 
@@ -98,6 +99,11 @@
 									<span class="inline-flex items-center gap-1 text-[11px] font-medium text-[#C84B31]">
 										<ShieldAlert class="size-3" />
 										<span>Awaiting Approval</span>
+									</span>
+								{:else if isStepError}
+									<span class="inline-flex items-center gap-1 rounded bg-[#C84B31] px-1.5 py-0.5 text-[10px] font-bold text-white">
+										<AlertTriangle class="size-3" />
+										<span>Service Error</span>
 									</span>
 								{:else}
 									<span class="inline-flex items-center gap-1 text-[11px] font-medium text-[#1F6E50]">

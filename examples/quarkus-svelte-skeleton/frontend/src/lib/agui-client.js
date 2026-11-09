@@ -9,103 +9,95 @@ export const NOMAD_DESTINATIONS = [
 		city: 'Beirut',
 		country: 'Lebanon',
 		currency: 'LBP',
-		exchangeRate: 89500,
-		temperatureC: 24.0,
-		condition: 'Mediterranean Coastal Sun & Sea Breeze',
+		region: 'Levant',
 		tagline: 'Levantine Limestone Arcades, Sursock Modernism & Oud Acoustics',
-		prompt: 'Plan a 4-night Beirut architectural, Levantine culinary & Oud music itinerary'
+		prompt: 'I want to plan a trip to Beirut, Lebanon'
 	},
 	{
 		id: 'kyoto',
 		city: 'Kyoto',
 		country: 'Japan',
 		currency: 'JPY',
-		exchangeRate: 151.4,
-		temperatureC: 18.4,
-		condition: 'Clear Cedar & Autumn Mist',
+		region: 'East Asia',
 		tagline: 'Arashiyama Moss Gardens, Gion Machiya & Koto Acoustics',
-		prompt: 'Curate a 4-night Kyoto architectural, culinary & Koto music itinerary'
+		prompt: 'I want to plan a trip to Kyoto, Japan'
 	},
 	{
 		id: 'lisbon',
 		city: 'Lisbon',
 		country: 'Portugal',
 		currency: 'EUR',
-		exchangeRate: 0.92,
-		temperatureC: 22.1,
-		condition: 'Atlantic Breeze & Golden Sun',
+		region: 'Atlantic',
 		tagline: 'Alfama Azulejo Terraces, Miradouros & Acoustic Fado',
-		prompt: 'Plan a 4-night Lisbon Fado, azulejo atelier & coastal itinerary'
+		prompt: 'I want to plan a trip to Lisbon, Portugal'
 	},
 	{
 		id: 'reykjavik',
 		city: 'Reykjavik',
 		country: 'Iceland',
 		currency: 'ISK',
-		exchangeRate: 137.8,
-		temperatureC: 6.2,
-		condition: 'Crisp Sub-Arctic Aurora Sky',
+		region: 'Sub-Arctic',
 		tagline: 'Harpa Basalt Geometry, Geothermal Lagoons & Nordic Strings',
-		prompt: 'Design a 4-night Reykjavik aurora, geothermal & chamber music escape'
+		prompt: 'I want to plan a trip to Reykjavik, Iceland'
 	}
 ];
 
 export const SLASH_COMMANDS = [
 	{
 		command: '/beirut',
-		label: 'Beirut Modernism & Oud Dossier',
-		description: 'Mediterranean weather, Levantine landmarks, 30s Fairuz/Oud preview & LBP FX audit',
-		protocol: 'MCP + A2A',
-		prompt: 'Plan a 4-night Beirut architectural, Levantine culinary & Oud music itinerary'
+		label: 'Beirut Trip (Interactive Slot Fill)',
+		description: 'Start planning Beirut — Nomad asks for duration, budget & focus first',
+		protocol: 'Slot Elicitation',
+		prompt: 'I want to plan a trip to Beirut, Lebanon'
 	},
 	{
 		command: '/kyoto',
-		label: 'Kyoto Cultural & Koto Dossier',
-		description: 'Open-Meteo weather, Wikipedia landmarks, 30s Koto preview & JPY FX audit',
+		label: 'Kyoto Complete Dossier',
+		description: 'Full 4-night Kyoto architecture & koto music run with $2,400 USD',
 		protocol: 'MCP + A2A',
-		prompt: 'Curate a 4-night Kyoto architectural, culinary & Koto music itinerary'
+		prompt: 'Plan a 4-night architecture and koto music trip in Kyoto with $2,400 USD'
 	},
 	{
 		command: '/lisbon',
-		label: 'Lisbon Fado & Azulejo Walk',
-		description: 'Atlantic weather, Alfama Fado 30s audio preview & EUR budget conversion',
+		label: 'Lisbon Complete Dossier',
+		description: 'Full 5-night Lisbon Fado, azulejo & culinary run with €2,200 EUR',
 		protocol: 'MCP + A2A',
-		prompt: 'Plan a 4-night Lisbon Fado, azulejo atelier & coastal itinerary'
+		prompt: 'Plan a 5-night Fado, azulejo and culinary trip in Lisbon with €2,200 EUR'
 	},
 	{
 		command: '/reykjavik',
-		label: 'Reykjavik Aurora & Nordic Strings',
-		description: 'Sub-Arctic weather, Harpa acoustics 30s preview & ISK budget audit',
+		label: 'Reykjavik Complete Dossier',
+		description: 'Full 4-night Reykjavik architecture, nature & music run with $2,800 USD',
 		protocol: 'MCP + A2A',
-		prompt: 'Design a 4-night Reykjavik aurora, geothermal & chamber music escape'
+		prompt: 'Plan a 4-night architecture, nature and music trip in Reykjavik with $2,800 USD'
 	},
 	{
 		command: '/media',
 		label: 'Destination Photography & Audio Preview',
 		description: 'Fetch Wikipedia landmark photography & 30s Apple iTunes local soundtrack',
-		protocol: 'AG-UI Media',
-		prompt: 'Showcase Kyoto landmark photography and 30s local Koto audio preview'
+		protocol: 'MCP Media',
+		prompt: 'Play local Fado music from Lisbon'
 	},
 	{
 		command: '/choices',
 		label: 'Interactive Multi-Select Choices',
 		description: 'Compare and select multiple neighborhood experiences',
 		protocol: 'AG-UI ChoiceGroup',
-		prompt: 'Compare multi_select neighborhood experiences in Kyoto'
+		prompt: 'Give me 4 multi_select evening options in Beirut to pick from'
 	},
 	{
 		command: '/mcp',
-		label: 'Live Weather & Cultural Media',
-		description: 'Query Open-Meteo forecast, Wikipedia REST API & iTunes soundtrack',
+		label: 'Live Weather Check',
+		description: 'Query live Open-Meteo geocoding & forecast via quarkus-mcp-server',
 		protocol: 'MCP',
-		prompt: 'Inspect Kyoto weather, active itinerary and cultural media'
+		prompt: 'What is the weather in Oaxaca right now?'
 	},
 	{
 		command: '/a2a',
-		label: 'Currency & Travel Advisory Audit',
-		description: 'Run Frankfurter ECB FX conversion & REST Countries advisory check',
+		label: 'Travel Advisory Verification',
+		description: 'Run live A2A REST Countries advisory check (surfaces upstream deprecations honestly)',
 		protocol: 'A2A',
-		prompt: 'Convert Kyoto budget to JPY and verify Japan travel advisory'
+		prompt: 'Check the travel advisory for Beirut'
 	},
 	{
 		command: '/hitl',
@@ -118,28 +110,28 @@ export const SLASH_COMMANDS = [
 
 export const SCENARIO_PRESETS = [
 	{
+		id: 'nomad-paris-slots',
+		label: 'Paris (Slot Fill)',
+		protocol: 'Zero Defaults',
+		prompt: 'I want a trip in Paris'
+	},
+	{
 		id: 'nomad-kyoto',
-		label: 'Kyoto',
+		label: 'Kyoto Full Run',
 		protocol: 'MCP + A2A',
-		prompt: 'Curate a 4-night Kyoto architectural, culinary & Koto music itinerary'
+		prompt: 'Plan a 4-night architecture and koto music trip in Kyoto with $2,400 USD'
 	},
 	{
 		id: 'nomad-lisbon',
-		label: 'Lisbon',
+		label: 'Lisbon Full Run',
 		protocol: 'MCP + A2A',
-		prompt: 'Plan a 4-night Lisbon Fado, azulejo atelier & coastal itinerary'
+		prompt: 'Plan a 5-night Fado, azulejo and culinary trip in Lisbon with €2,200 EUR'
 	},
 	{
-		id: 'nomad-reykjavik',
-		label: 'Reykjavik',
-		protocol: 'MCP + A2A',
-		prompt: 'Design a 4-night Reykjavik aurora, geothermal & chamber music escape'
-	},
-	{
-		id: 'nomad-choices',
-		label: 'Tokyo',
-		protocol: 'MCP + A2A',
-		prompt: 'Plan a 4-night Tokyo modernist architecture, vinyl kissaten & culinary itinerary'
+		id: 'nomad-advisory',
+		label: 'Check Advisory',
+		protocol: 'A2A Health',
+		prompt: 'Check the travel advisory for Beirut'
 	},
 	{
 		id: 'nomad-hitl',
@@ -291,49 +283,52 @@ function createEmptyActiveTurn() {
 }
 
 export function createInitialWorkbenchState(threadId = 'thread-nomad-1') {
+	const initialDossier = {
+		uri: 'itinerary://active-trip',
+		nomadTrip: {
+			uri: 'itinerary://active-trip',
+			activeCity: null,
+			country: null,
+			currency: null,
+			exchangeRate: null,
+			temperatureC: null,
+			weatherCondition: null,
+			nights: null,
+			stopTitle: null,
+			budgetUsd: null,
+			allocatedUsd: null,
+			homeCurrency: null,
+			soundtrack: null
+		},
+		preferences: {
+			uri: 'traveler://preferences',
+			travelerName: null,
+			style: null,
+			dietary: null,
+			musicTaste: null,
+			pace: null,
+			homeCurrency: null
+		}
+	};
 	return {
 		threadId,
 		transportMode: 'ws',
 		wsConnected: false,
 		memoryTurns: 0,
 		isStreaming: false,
-		statusText: 'Ready — Nomad Concierge & Tri-Protocol Studio',
+		statusText: 'Ready — Nomad Travel Concierge (Zero Assumed Defaults)',
 		streamBuffer: '',
 		pendingApproval: null,
 		activeTurn: createEmptyActiveTurn(),
-		clusterState: {
-			uri: 'itinerary://active-trip',
-			nomadTrip: {
-				uri: 'itinerary://active-trip',
-				activeCity: null,
-				country: null,
-				currency: null,
-				exchangeRate: null,
-				temperatureC: null,
-				weatherCondition: null,
-				nights: 4,
-				stopTitle: null,
-				budgetUsd: 3200,
-				allocatedUsd: 0,
-				homeCurrency: 'USD',
-				soundtrack: null
-			},
-			preferences: {
-				uri: 'traveler://preferences',
-				style: 'Architectural Minimalist & Slow Cultural Immersion',
-				dietary: 'Seasonal Local Terroir',
-				musicTaste: 'Analog Vinyl & Regional Acoustic',
-				pace: 'Unrushed (2 curated stops per day)',
-				homeCurrency: 'USD'
-			}
-		},
+		tripDossierState: initialDossier,
+		clusterState: initialDossier,
 		messages: [
 			{
 				id: 'msg-welcome',
 				role: 'assistant',
 				status: 'completed',
 				content:
-					'### Welcome to Nomad — Cultural, Architectural & Acoustic Concierge\n\nWhich city or cultural landscape would you like to explore?\n\nSelect a starter destination from the **Destination Picker** on the right, or type **any city in the world** below (e.g., *Beirut*, *Kyoto*, *Lisbon*, *Reykjavik*, *Marrakech*, *Tokyo*, *Oaxaca*) to synthesize a live Tri-Protocol dossier combining:\n- **Live Weather & Terroir (`MCP`)** via Open-Meteo geocoding & forecast telemetry\n- **Architectural Context & 30s Regional Audio (`MCP`)** via Wikipedia REST v1 & Apple iTunes Search\n- **Currency & Travel Advisory Audit (`A2A`)** via Frankfurter ECB FX & REST Countries v3.1\n- **Cultural Field Notes RAG & Specialist Council (`LangChain4j + AG-UI`)**',
+					'### Welcome to Nomad — Conversational Travel & Local Culture Concierge\n\nTell me **where you want to travel**, ask a focused question (live weather, currency conversion, regional music, or travel advisories), or pick a destination below.\n\n- **Zero Assumed Defaults**: When planning a trip, Nomad never assumes 3 or 4 days or a preset budget—it asks for **duration**, **budget & currency**, and **travel focus** first.\n- **Native `quarkus-mcp` (`:8081/mcp`) + Official `A2A` (`:8082`)**: Live Open-Meteo weather, Wikipedia & iTunes 30s audio, and Frankfurter ECB FX.\n- **Honest Service Health**: Upstream API failures or deprecations (such as `restcountries.com/v3.1`) are surfaced transparently in the Top-Bar Health Pill, Execution Spine, and chat.',
 				reasoning: null,
 				timeline: [],
 				mcpCalls: [],
@@ -342,7 +337,7 @@ export function createInitialWorkbenchState(threadId = 'thread-nomad-1') {
 				interaction: {
 					id: 'welcome-city-picker',
 					mode: 'single_select',
-					prompt: 'Choose a destination to initialize your live Trip Dossier:',
+					prompt: 'Choose a destination to start planning (Nomad will ask for your trip details next):',
 					selectedValues: [],
 					submitted: false,
 					options: [
@@ -351,37 +346,37 @@ export function createInitialWorkbenchState(threadId = 'thread-nomad-1') {
 							label: 'Beirut, Lebanon',
 							description: 'Levantine limestone arcades, Sursock modernism, coastal terroir & Oud acoustics',
 							badge: 'LBP • Mediterranean',
-							prompt: 'Plan a 4-night Beirut architectural, Levantine culinary & Oud music itinerary'
+							prompt: 'I want to plan a trip to Beirut, Lebanon'
 						},
 						{
 							id: 'pick-kyoto',
 							label: 'Kyoto, Japan',
 							description: 'Arashiyama cedar pavilions, Gion machiya joinery, kaiseki & Koto strings',
 							badge: 'JPY • East Asia',
-							prompt: 'Curate a 4-night Kyoto architectural, culinary & Koto music itinerary'
+							prompt: 'I want to plan a trip to Kyoto, Japan'
 						},
 						{
 							id: 'pick-lisbon',
 							label: 'Lisbon, Portugal',
 							description: 'Alfama azulejo terraces, Siza Vieira concrete geometry & acoustic Fado',
 							badge: 'EUR • Atlantic',
-							prompt: 'Plan a 4-night Lisbon Fado, azulejo atelier & coastal itinerary'
+							prompt: 'I want to plan a trip to Lisbon, Portugal'
 						},
 						{
 							id: 'pick-reykjavik',
 							label: 'Reykjavik, Iceland',
 							description: 'Harpa basalt facades, geothermal lagoons & Nordic chamber strings',
 							badge: 'ISK • Sub-Arctic',
-							prompt: 'Design a 4-night Reykjavik aurora, geothermal & chamber music escape'
+							prompt: 'I want to plan a trip to Reykjavik, Iceland'
 						}
 					]
 				},
 				sources: [],
 				followUps: [
-					'Plan a 4-night architectural, culinary and music trip in Beirut',
-					'Curate a 4-night Kyoto architectural & Koto music escape',
-					'Compare 4 neighborhood culinary & music experiences in Lisbon',
-					'Design a 4-night Tokyo modernist architecture & vinyl kissaten itinerary'
+					'I want a trip in Paris',
+					'What is the weather in Beirut right now?',
+					'Check the travel advisory for Beirut',
+					'Plan a 4-night architecture and koto music trip in Kyoto with $2,400 USD'
 				]
 			}
 		],
@@ -443,16 +438,18 @@ export function reduceAgUiEvent(state, event) {
 	switch (event.type) {
 		case 'WS_CONNECTED': {
 			const incomingTurns = payload.memoryTurns ?? state.memoryTurns ?? 0;
-			const hasExistingCity = Boolean(state.clusterState?.nomadTrip?.activeCity);
+			const currentDossier = state.tripDossierState ?? state.clusterState;
+			const hasExistingCity = Boolean(currentDossier?.nomadTrip?.activeCity);
+			const incomingDossier = payload.tripDossierState ?? payload.clusterState ?? currentDossier;
+			const resolvedDossier =
+				incomingTurns > 0 || hasExistingCity ? incomingDossier : currentDossier;
 			return {
 				...state,
 				wsConnected: true,
 				transportMode: 'ws',
 				memoryTurns: incomingTurns,
-				clusterState:
-					incomingTurns > 0 || hasExistingCity
-						? (payload.clusterState ?? state.clusterState)
-						: state.clusterState,
+				tripDossierState: resolvedDossier,
+				clusterState: resolvedDossier,
 				statusText: 'WebSocket Full-Duplex Connected (/api/agent/ws)',
 				events: nextEvents
 			};
@@ -467,7 +464,7 @@ export function reduceAgUiEvent(state, event) {
 				mcpCalls: [],
 				a2aSteps: [],
 				activeTurn: createEmptyActiveTurn(),
-				statusText: `Run started (${payload.llmMode ?? payload.status ?? 'deterministic'})`,
+				statusText: `Run started (${payload.llmMode ?? payload.status ?? 'ollama:llama3.2:latest'})`,
 				events: nextEvents
 			};
 
@@ -477,6 +474,7 @@ export function reduceAgUiEvent(state, event) {
 				const initial = createInitialWorkbenchState(state.threadId);
 				return {
 					...state,
+					tripDossierState: initial.tripDossierState,
 					clusterState: initial.clusterState,
 					memoryTurns: 0,
 					isStreaming: false,
@@ -488,10 +486,11 @@ export function reduceAgUiEvent(state, event) {
 					events: nextEvents
 				};
 			}
+			const currentDossier = state.tripDossierState ?? state.clusterState;
+			const incomingCluster = payload.tripDossierState ?? payload.clusterState ?? currentDossier;
 			if (payload.status === 'params_updated') {
-				const hasExistingCity = Boolean(state.clusterState?.nomadTrip?.activeCity);
+				const hasExistingCity = Boolean(currentDossier?.nomadTrip?.activeCity);
 				const incomingTurns = payload.memoryTurns ?? state.memoryTurns ?? 0;
-				const incomingCluster = payload.clusterState ?? state.clusterState;
 				const nextClusterState =
 					hasExistingCity || incomingTurns > 0
 						? incomingCluster
@@ -506,19 +505,19 @@ export function reduceAgUiEvent(state, event) {
 									temperatureC: null,
 									weatherCondition: null,
 									stopTitle: null,
-									allocatedUsd: 0,
+									allocatedUsd: null,
 									soundtrack: null
 								}
 							};
 				return {
 					...state,
+					tripDossierState: nextClusterState,
 					clusterState: nextClusterState,
 					memoryTurns: incomingTurns,
 					statusText: 'Trip parameters updated via live WebSocket (<50ms)',
 					events: nextEvents
 				};
 			}
-			const incomingCluster = payload.clusterState ?? state.clusterState;
 			const nextClusterState = payload.awaitingDestination
 				? {
 						...incomingCluster,
@@ -530,8 +529,9 @@ export function reduceAgUiEvent(state, event) {
 							exchangeRate: null,
 							temperatureC: null,
 							weatherCondition: null,
+							nights: null,
 							stopTitle: null,
-							allocatedUsd: 0,
+							allocatedUsd: null,
 							soundtrack: null
 						}
 					}
@@ -545,6 +545,7 @@ export function reduceAgUiEvent(state, event) {
 				: currentTurn.interaction;
 			return {
 				...state,
+				tripDossierState: nextClusterState,
 				clusterState: nextClusterState,
 				memoryTurns: payload.memoryTurns ?? state.memoryTurns ?? 0,
 				activeTurn: {
@@ -579,45 +580,48 @@ export function reduceAgUiEvent(state, event) {
 
 		case 'TOOL_CALL': {
 			const requiresApproval = Boolean(payload.requiresApproval);
+			const resolvedTool = payload.tool ?? payload.toolName ?? 'mcp-tool';
+			const resolvedCallId = payload.callId ?? payload.toolCallId;
+			const resolvedArgs = payload.args ?? payload.arguments ?? {};
 			const resolvedCallType =
 				payload.callType ?? (requiresApproval ? 'hitl:approval' : 'mcp:tool');
 			const pendingApproval = requiresApproval
 				? {
-						callId: payload.callId,
-						toolName: payload.tool,
-						city: payload.args?.city ?? 'Kyoto',
-						stopTitle: payload.args?.stopTitle ?? 'Hoshinoya Arashiyama Pavilion',
-						nights: payload.args?.nights ?? 4,
-						costUsd: payload.args?.costUsd ?? 1840
+						callId: resolvedCallId,
+						toolName: resolvedTool,
+						city: resolvedArgs?.city ?? null,
+						stopTitle: resolvedArgs?.stopTitle ?? null,
+						nights: resolvedArgs?.nights ?? null,
+						costUsd: resolvedArgs?.costUsd ?? null
 					}
 				: state.pendingApproval;
 
-			const rawCallId = payload.callId ?? `tl-${nextEvents.length}`;
+			const rawCallId = resolvedCallId ?? `tl-${nextEvents.length}`;
 			const uniqueCallId = currentTurn.timeline.some((item) => item.id === rawCallId)
 				? `${rawCallId}-${nextEvents.length}`
 				: rawCallId;
 			const timelineEntry = {
 				id: uniqueCallId,
 				callType: resolvedCallType,
-				title: payload.tool,
+				title: resolvedTool,
 				subtitle: payload.server ?? 'nomad-mcp-concierge (:8081)',
-				args: payload.args ?? {},
+				args: resolvedArgs,
 				status: requiresApproval ? 'awaiting_approval' : 'running',
 				detail: null
 			};
 
 			return {
 				...state,
-				statusText: requiresApproval ? 'HITL Gate — Awaiting Traveler Approval' : `MCP Tool: ${payload.tool}`,
+				statusText: requiresApproval ? 'HITL Gate — Awaiting Traveler Approval' : `MCP Tool: ${resolvedTool}`,
 				pendingApproval,
 				mcpCalls: [
 					...state.mcpCalls,
 					{
-						callId: payload.callId,
-						tool: payload.tool,
+						callId: resolvedCallId,
+						tool: resolvedTool,
 						callType: resolvedCallType,
 						server: payload.server ?? 'nomad-mcp-concierge (:8081)',
-						args: payload.args ?? {},
+						args: resolvedArgs,
 						status: requiresApproval ? 'awaiting_approval' : 'running',
 						result: null
 					}
@@ -631,21 +635,28 @@ export function reduceAgUiEvent(state, event) {
 		}
 
 		case 'TOOL_RESULT': {
+			const resolvedCallId = payload.callId ?? payload.toolCallId;
+			const resolvedTool = payload.tool ?? payload.toolName;
+			const isError = isErrorPayload(payload);
+			const nextStatus = isError ? 'error' : 'completed';
+			const errorText = extractErrorDetail(payload);
 			const updatedTimeline = currentTurn.timeline.map((item) =>
-				item.id === payload.callId || item.title === payload.tool
+				item.id === resolvedCallId || item.title === resolvedTool
 					? {
 							...item,
-							status: 'completed',
+							status: nextStatus,
+							isError,
 							result: payload.result,
-							detail: summarizeToolResult(payload.tool, payload.result)
+							detail: isError ? errorText : summarizeToolResult(resolvedTool, payload.result)
 						}
 					: item
 			);
 			return {
 				...state,
+				statusText: isError ? `Tool Error: ${errorText}` : state.statusText,
 				mcpCalls: state.mcpCalls.map((c) =>
-					c.callId === payload.callId || c.tool === payload.tool
-						? { ...c, status: 'completed', result: payload.result }
+					c.callId === resolvedCallId || c.tool === resolvedTool
+						? { ...c, status: nextStatus, isError, error: isError ? errorText : null, result: payload.result }
 						: c
 				),
 				activeTurn: {
@@ -662,17 +673,18 @@ export function reduceAgUiEvent(state, event) {
 			const uniqueStepId = currentTurn.timeline.some((item) => item.id === rawStepId)
 				? `${rawStepId}-${nextEvents.length}`
 				: rawStepId;
+			const title = payload.skillId ?? payload.label ?? 'a2a-skill';
 			const stepEntry = {
 				id: uniqueStepId,
 				callType: resolvedCallType,
-				title: payload.skillId ?? 'a2a-skill',
+				title,
 				subtitle: `${payload.agentName ?? 'Nomad-A2A-Specialist'} (:8082)`,
 				status: 'running',
 				detail: null
 			};
 			return {
 				...state,
-				statusText: `A2A Delegation: ${payload.agentName} (${payload.skillId})`,
+				statusText: `A2A Delegation: ${payload.agentName ?? 'Nomad-A2A-Specialist'} (${title})`,
 				activeTurn: {
 					...currentTurn,
 					timeline: [...currentTurn.timeline, stepEntry]
@@ -683,21 +695,26 @@ export function reduceAgUiEvent(state, event) {
 
 		case 'STEP_FINISHED': {
 			const resolvedCallType = payload.callType ?? 'a2a:task';
+			const title = payload.skillId ?? payload.label ?? 'a2a-skill';
+			const isError = isErrorPayload(payload);
+			const nextStatus = isError ? 'error' : 'completed';
+			const detailText = isError ? extractErrorDetail(payload) : payload.summary;
 			const hasExisting = currentTurn.timeline.some(
 				(item) =>
 					item.id === payload.stepId ||
-					(item.title === payload.skillId && item.status === 'running')
+					(item.title === title && item.status === 'running')
 			);
 			const updatedTimeline = hasExisting
 				? currentTurn.timeline.map((item) =>
 						item.id === payload.stepId ||
-						(item.title === payload.skillId && item.status === 'running')
+						(item.title === title && item.status === 'running')
 							? {
 									...item,
 									callType: resolvedCallType,
-									status: 'completed',
-									detail: payload.summary,
-									result: payload.report
+									status: nextStatus,
+									isError,
+									detail: detailText,
+									result: payload.report ?? payload.result
 								}
 							: item
 					)
@@ -708,23 +725,27 @@ export function reduceAgUiEvent(state, event) {
 								? `${payload.stepId}-${nextEvents.length}`
 								: (payload.stepId ?? `a2a-${nextEvents.length}`),
 							callType: resolvedCallType,
-							title: payload.skillId ?? 'a2a-skill',
+							title,
 							subtitle: `${payload.agentName ?? 'Nomad-A2A-Specialist'} (:8082)`,
-							status: 'completed',
-							detail: payload.summary,
-							result: payload.report
+							status: nextStatus,
+							isError,
+							detail: detailText,
+							result: payload.report ?? payload.result
 						}
 					];
 			return {
 				...state,
+				statusText: isError ? `Service Error: ${detailText}` : state.statusText,
 				a2aSteps: [
 					...state.a2aSteps,
 					{
 						stepId: payload.stepId,
 						callType: resolvedCallType,
 						agentName: payload.agentName ?? 'Nomad-A2A-Specialist',
-						skillId: payload.skillId,
-						summary: payload.summary,
+						skillId: title,
+						status: nextStatus,
+						isError,
+						summary: detailText,
 						report: payload.report ?? {}
 					}
 				],
@@ -737,7 +758,7 @@ export function reduceAgUiEvent(state, event) {
 		}
 
 		case 'TEXT_DELTA': {
-			const chunk = payload.content ?? '';
+			const chunk = payload.content ?? payload.delta ?? '';
 			const prevEvent = state.events.at(-1);
 			const coalescedEvents =
 				prevEvent && prevEvent.type === 'TEXT_DELTA'
@@ -818,6 +839,66 @@ export function reduceAgUiEvent(state, event) {
 				events: nextEvents
 			};
 	}
+}
+
+function isErrorPayload(payload) {
+	if (!payload || typeof payload !== 'object') return false;
+	return Boolean(
+		payload.isError ||
+			payload.status === 'ERROR' ||
+			payload.result?.isError ||
+			payload.result?.status === 'ERROR' ||
+			payload.report?.isError ||
+			payload.report?.status === 'ERROR'
+	);
+}
+
+function extractErrorDetail(payload) {
+	return (
+		payload?.error ??
+		payload?.result?.error ??
+		payload?.report?.error ??
+		payload?.summary ??
+		'Upstream travel service unavailable'
+	);
+}
+
+/**
+ * Summarizes the aggregated `/api/agent/health` report for the Top-Bar Health Pill & Dossier Footer.
+ */
+export function summarizeHealthReport(health) {
+	if (!health || !Array.isArray(health.services)) {
+		return {
+			status: 'UNKNOWN',
+			label: 'Checking Health...',
+			healthyCount: 0,
+			totalCount: 0,
+			downCount: 0,
+			downServices: [],
+			services: []
+		};
+	}
+	const services = health.services;
+	const downServices = services.filter((s) => s.status !== 'UP');
+	const downCount = downServices.length;
+	const healthyCount = services.length - downCount;
+	const status =
+		health.status ?? (downCount === 0 ? 'UP' : healthyCount === 0 ? 'DOWN' : 'DEGRADED');
+	const label =
+		status === 'UP'
+			? 'All Systems Operational'
+			: status === 'DOWN'
+				? `Offline • ${downCount} Services Down`
+				: `Degraded • ${downCount} ${downCount === 1 ? 'API' : 'APIs'} Down`;
+	return {
+		status,
+		label,
+		healthyCount,
+		totalCount: services.length,
+		downCount,
+		downServices,
+		services
+	};
 }
 
 function summarizeToolResult(tool, result) {
@@ -950,13 +1031,17 @@ export function filterInspectorEvents(events, filter = 'ALL') {
  */
 export function updateTripNightsInState(clusterState, delta) {
 	if (!clusterState?.nomadTrip) return clusterState;
-	const nextNights = Math.max(1, Math.min(30, (clusterState.nomadTrip.nights ?? 4) + delta));
+	const baseNights = clusterState.nomadTrip.nights ?? 0;
+	const nextNights = Math.max(1, Math.min(30, baseNights + delta));
 	return {
 		...clusterState,
 		nomadTrip: {
 			...clusterState.nomadTrip,
 			nights: nextNights,
-			allocatedUsd: Math.round(nextNights * 420)
+			allocatedUsd:
+				clusterState.nomadTrip.budgetUsd != null
+					? Math.round(nextNights * 420)
+					: clusterState.nomadTrip.allocatedUsd
 		}
 	};
 }
@@ -985,30 +1070,33 @@ export function recordClientOutboundEvent(state, commandType, payload = {}) {
 export function formatTripDossierMarkdown(clusterState, messages = []) {
 	const trip = clusterState?.nomadTrip ?? {};
 	const prefs = clusterState?.preferences ?? {};
-	const city = trip.activeCity ?? 'Kyoto';
-	const country = trip.country ?? 'Japan';
-	const currency = trip.currency ?? 'JPY';
-	const rate = trip.exchangeRate ?? 151.4;
-	const nights = trip.nights ?? 4;
-	const allocatedUsd = trip.allocatedUsd ?? 1680;
-	const budgetUsd = trip.budgetUsd ?? 3200;
-	const localAllocated = Math.round(allocatedUsd * rate).toLocaleString();
+	const city = trip.activeCity ?? 'Destination Pending';
+	const country = trip.country ?? 'Unspecified';
+	const currency = trip.currency ?? '--';
+	const rate = trip.exchangeRate ?? null;
+	const nights = trip.nights != null ? `${trip.nights} Nights` : 'Duration Not Set';
+	const allocatedUsd = trip.allocatedUsd != null ? `$${trip.allocatedUsd}` : 'Not allocated';
+	const budgetUsd = trip.budgetUsd != null ? `$${trip.budgetUsd}` : 'Not set';
+	const localAllocated =
+		rate != null && trip.allocatedUsd != null
+			? `${Math.round(trip.allocatedUsd * rate).toLocaleString()} ${currency} @ 1 = ${rate} ${currency}`
+			: 'Awaiting FX audit';
 	const lastAssistant = [...(messages ?? [])].reverse().find((m) => m.role === 'assistant');
 
 	const lines = [
 		`# Nomad Cultural & Architectural Dossier — ${city}, ${country}`,
 		``,
-		`- **Sanctuary Allocation**: ${trip.stopTitle ?? `${city} Architectural Sanctuary`} (${nights} Nights)`,
-		`- **Live Open-Meteo Telemetry**: ${trip.temperatureC ?? 18.4}°C — ${trip.weatherCondition ?? 'Clear Sky'}`,
-		`- **Frankfurter FX Settlement**: $${allocatedUsd} / $${budgetUsd} USD (${localAllocated} ${currency} @ 1 USD = ${rate} ${currency})`,
-		`- **Home Currency**: ${prefs.homeCurrency ?? trip.homeCurrency ?? 'USD'}`,
-		`- **Soundtrack Preview**: ${trip.soundtrack?.trackName ?? 'Regional Acoustic Session'} — ${trip.soundtrack?.artistName ?? 'Local Ensemble'}`,
+		`- **Sanctuary Allocation**: ${trip.stopTitle ?? 'Not reserved yet'} (${nights})`,
+		`- **Live Open-Meteo Telemetry**: ${trip.temperatureC != null ? `${trip.temperatureC}°C` : '--°C'} — ${trip.weatherCondition ?? 'Awaiting weather check'}`,
+		`- **Frankfurter FX Settlement**: ${allocatedUsd} / ${budgetUsd} (${localAllocated})`,
+		`- **Home Currency**: ${prefs.homeCurrency ?? trip.homeCurrency ?? 'Not set'}`,
+		`- **Soundtrack Preview**: ${trip.soundtrack?.trackName ?? 'Not loaded'} — ${trip.soundtrack?.artistName ?? '--'}`,
 		``,
 		`## Traveler Profile (\`traveler://preferences\`)`,
-		`- **Architectural Style**: ${prefs.style ?? 'Architectural Minimalist & Slow Cultural Immersion'}`,
-		`- **Dietary Terroir**: ${prefs.dietary ?? 'Seasonal Local Terroir'}`,
-		`- **Acoustic & Music Taste**: ${prefs.musicTaste ?? 'Analog Vinyl & Regional Acoustic'}`,
-		`- **Cadence & Pace**: ${prefs.pace ?? 'Unrushed (2 curated stops per day)'}`,
+		`- **Architectural Style**: ${prefs.style ?? 'Not specified yet'}`,
+		`- **Dietary Terroir**: ${prefs.dietary ?? 'Not specified yet'}`,
+		`- **Acoustic & Music Taste**: ${prefs.musicTaste ?? 'Not specified yet'}`,
+		`- **Cadence & Pace**: ${prefs.pace ?? 'Not specified yet'}`,
 		``
 	];
 

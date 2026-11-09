@@ -1,5 +1,5 @@
 <script>
-	import { ArrowRight, Check, Copy, ExternalLink, RotateCcw } from '@lucide/svelte';
+	import { AlertTriangle, ArrowRight, Check, Copy, ExternalLink, RotateCcw } from '@lucide/svelte';
 	import ProtocolCallBadge from './ProtocolCallBadge.svelte';
 
 	let {
@@ -28,17 +28,28 @@
 <footer class="mt-3 border-t border-[#E4E0D8] pt-3 space-y-2.5">
 	{#if sources?.length}
 		<div class="flex flex-wrap items-center gap-1.5">
-			<span class="text-[11px] font-medium text-[#575551] mr-1">Verified Sources:</span>
+			<span class="text-[11px] font-medium text-[#575551] mr-1">Telemetry & Sources:</span>
 			{#each sources as src (src.title)}
-				<a
-					href={src.url}
-					target="_blank"
-					rel="noreferrer"
-					class="inline-flex items-center gap-1.5 rounded-md border border-[#E4E0D8] bg-[#F6F5F2] px-2 py-0.5 text-[11px] font-medium text-[#141413] transition-colors hover:border-[#CFCAC0] hover:bg-[#EFECE6]"
-				>
-					<span>{src.title}</span>
-					<ExternalLink class="size-2.5 text-[#575551]" />
-				</a>
+				{#if src.status === 'error'}
+					<span
+						title={src.error || 'Upstream service unavailable'}
+						class="inline-flex items-center gap-1.5 rounded-md border border-[#C84B31]/45 bg-[#FBEEE9] px-2 py-0.5 text-[11px] font-semibold text-[#C84B31]"
+					>
+						<AlertTriangle class="size-3 shrink-0" />
+						<span>{src.title}</span>
+						<span class="rounded bg-[#C84B31] px-1 py-0.2 font-mono text-[9px] font-bold text-white">UNAVAILABLE</span>
+					</span>
+				{:else}
+					<a
+						href={src.url}
+						target="_blank"
+						rel="noreferrer"
+						class="inline-flex items-center gap-1.5 rounded-md border border-[#E4E0D8] bg-[#F6F5F2] px-2 py-0.5 text-[11px] font-medium text-[#141413] transition-colors hover:border-[#CFCAC0] hover:bg-[#EFECE6]"
+					>
+						<span>{src.title}</span>
+						<ExternalLink class="size-2.5 text-[#575551]" />
+					</a>
+				{/if}
 			{/each}
 		</div>
 	{/if}
