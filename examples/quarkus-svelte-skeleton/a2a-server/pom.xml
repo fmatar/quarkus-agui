@@ -12,7 +12,7 @@
 
     <artifactId>quarkus-svelte-skeleton-a2a-server</artifactId>
     <name>AG-UI Showcase - Quarkus A2A Specialist Server (:8082)</name>
-    <description>Quarkus 3.40.1.1 + Java 25 Agent2Agent (A2A) Specialist Server (/.well-known/agent.json &amp; Task API)</description>
+    <description>Quarkus 3.40.1.1 + Java 25 Agent2Agent (A2A) Specialist Server (/.well-known/agent-card.json &amp; JSON-RPC 2.0)</description>
 
     <dependencies>
         <dependency>

@@ -56,15 +56,15 @@ Verify the MCP Server (`:8081`) and A2A Specialist Server (`:8082`) directly fro
 # Check Aggregated Live Multi-Service Health (:8080, :8081, :8082)
 curl -s http://localhost:8080/api/agent/health | jq .
 
-# Discover MCP Tools & Resources (:8081/mcp + Companion REST Bridge)
+# Discover MCP Tools & City Dossier Resource (:8081/mcp + Companion REST Bridge)
 curl -s http://localhost:8081/api/mcp/tools | jq .
-curl -s "http://localhost:8081/api/mcp/resources/template?city=Kyoto" | jq .
+curl -s http://localhost:8081/api/mcp/resources/city/Kyoto | jq .
 
-# Discover A2A AgentCard & Delegate Travel Specialist Task (:8082)
-curl -s http://localhost:8082/.well-known/agent.json | jq .
-curl -s -X POST http://localhost:8082/api/a2a/tasks/send \
+# Discover Official A2A AgentCard & Delegate Travel Specialist Audit (:8082)
+curl -s http://localhost:8082/.well-known/agent-card.json | jq .
+curl -s -X POST http://localhost:8082/api/a2a/audit \
   -H "Content-Type: application/json" \
-  -d '{"taskId":"task-demo-1","skillId":"convert-and-audit-budget","prompt":"Convert 1840 USD for Kyoto Japan"}' | jq .
+  -d '{"skillId":"convert-and-audit-budget","prompt":"Convert $1,840 USD for Kyoto","context":{"city":"Kyoto","budgetUsd":1840}}' | jq .
 
 # Stream AG-UI SSE events from the Nomad Concierge Orchestrator (:8080)
 curl -N -X POST http://localhost:8080/api/agent/run \
