@@ -13,6 +13,7 @@
 
 | 📥 Backlog | 📋 Ready | ⚡ In Progress | 🔍 In Review | ✅ Done |
 | :--- | :--- | :--- | :--- | :--- |
+|  |  |  | [#66 refactor(showcase): Proper Travel Chatbot, Native quarkus-mcp, Zero Assumed Defaults, Upstream Error Surfacing & Live Healthchecks](https://github.com/fmatar/quarkus-agui/issues/66) |  |
 |  |  |  |  | [#64 fix(orchestrator): Handle destination-free greetings & profile updates without defaulting to Kyoto](https://github.com/fmatar/quarkus-agui/issues/64) |
 |  |  |  |  | [#62 feat(ui): Replace hardcoded Kyoto initial state with interactive Destination Picker & Awaiting Destination Dossier](https://github.com/fmatar/quarkus-agui/issues/62) |
 |  |  |  |  | [#59 feat(showcase): Package SvelteKit Frontend with Quarkus Quinoa & Build Containers with Jib](https://github.com/fmatar/quarkus-agui/issues/59) |
@@ -45,6 +46,7 @@
 
 | Issue | Status | Priority | Component | Quality Gate | Spec Link |
 | :--- | :--- | :--- | :--- | :--- | :--- |
+| [#66 refactor(showcase): Proper Travel Chatbot, Native quarkus-mcp, Zero Assumed Defaults, Upstream Error Surfacing & Live Healthchecks](https://github.com/fmatar/quarkus-agui/issues/66) | `status:in-review` | P0 - Critical | Showcase | `Passed` | [ADR-004](docs/adr/ADR-004-nomad-concierge-and-svelte5-agui-component-kit.md) |
 | [#64 fix(orchestrator): Handle destination-free greetings & profile updates without defaulting to Kyoto](https://github.com/fmatar/quarkus-agui/issues/64) | `status:done` | P0 - Critical | Backend / Frontend | `Passed` | [ADR-004](docs/adr/ADR-004-nomad-concierge-and-svelte5-agui-component-kit.md) |
 | [#62 feat(ui): Replace hardcoded Kyoto initial state with interactive Destination Picker & Awaiting Destination Dossier](https://github.com/fmatar/quarkus-agui/issues/62) | `status:done` | P0 - Critical | Frontend | `Passed` | [ADR-004](docs/adr/ADR-004-nomad-concierge-and-svelte5-agui-component-kit.md) |
 | [#59 feat(showcase): Package SvelteKit Frontend with Quarkus Quinoa & Build Containers with Jib](https://github.com/fmatar/quarkus-agui/issues/59) | `status:done` | P0 - Critical | DevOps / Showcase | `Passed` | [examples/quarkus-svelte-skeleton/README.md](examples/quarkus-svelte-skeleton/README.md) |

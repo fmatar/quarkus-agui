@@ -1,5 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
 	NOMAD_DESTINATIONS,
 	PROTOCOL_CALL_TAXONOMY,
@@ -14,8 +17,11 @@ import {
 	reduceAgUiEvent,
 	resolveProtocolCallMeta,
 	selectTurnOption,
+	summarizeHealthReport,
 	updateTripNightsInState
 } from '../src/lib/agui-client.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 test('parseSseChunk splits multi-frame SSE chunks on double newline and preserves remainder', () => {
 	const raw =
@@ -186,7 +192,12 @@ test('filterInspectorEvents and updateTripNightsInState support 3-pane workbench
 	assert.deepEqual(filterInspectorEvents(null, 'ALL'), []);
 
 	const initial = createInitialWorkbenchState();
-	const updated = updateTripNightsInState(initial.clusterState, 2);
+	assert.equal(initial.tripDossierState.nomadTrip.nights, null);
+	assert.equal(initial.tripDossierState.nomadTrip.budgetUsd, null);
+	assert.equal(initial.tripDossierState.nomadTrip.homeCurrency, null);
+	const fromUnset = updateTripNightsInState(initial.tripDossierState, 2);
+	assert.equal(fromUnset.nomadTrip.nights, 2);
+	const updated = updateTripNightsInState({ nomadTrip: { nights: 4 } }, 2);
 	assert.equal(updated.nomadTrip.nights, 6);
 	assert.equal(updateTripNightsInState(null, 1), null);
 });
@@ -545,4 +556,125 @@ test('WebSocket transport, conversational memory, LangChain4j guardrails/RAG/spe
 	});
 	assert.equal(state.clusterState.nomadTrip.activeCity, null);
 	assert.equal(state.clusterState.preferences.travelerName, 'Fady');
+});
+
+test('Zero assumed defaults, honest upstream error surfacing, summarizeHealthReport, and TripDossierPanel domain rename (#66)', () => {
+	// 1. Domain rename check: TripDossierPanel.svelte replaces ClusterStatePanel.svelte
+	const componentsDir = path.resolve(__dirname, '../src/lib/components');
+	assert.equal(fs.existsSync(path.join(componentsDir, 'TripDossierPanel.svelte')), true);
+	assert.equal(fs.existsSync(path.join(componentsDir, 'ClusterStatePanel.svelte')), false);
+
+	// 2. Clean initial state & destination prompts never assume 3 or 4 nights or fake temperatures
+	let state = createInitialWorkbenchState('thread-zero-defaults');
+	assert.equal(state.tripDossierState.nomadTrip.activeCity, null);
+	assert.equal(state.tripDossierState.nomadTrip.nights, null);
+	assert.equal(state.tripDossierState.nomadTrip.budgetUsd, null);
+	assert.equal(state.tripDossierState.nomadTrip.allocatedUsd, null);
+	assert.equal(state.tripDossierState.nomadTrip.homeCurrency, null);
+	assert.equal(state.tripDossierState.preferences.style, null);
+	assert.equal(state.tripDossierState.preferences.dietary, null);
+	assert.equal(state.tripDossierState.preferences.musicTaste, null);
+	assert.equal(state.tripDossierState.preferences.pace, null);
+
+	for (const dest of NOMAD_DESTINATIONS) {
+		assert.equal(dest.temperatureC ?? null, null, 'Destination switcher must not hardcode fake temperatures');
+		assert.ok(!/4-night|3-day/i.test(dest.prompt), `Destination prompt should not assume duration: ${dest.prompt}`);
+	}
+	for (const opt of state.messages[0].interaction.options) {
+		assert.ok(!/4-night|3-day/i.test(opt.prompt), `Welcome picker prompt should not assume duration: ${opt.prompt}`);
+	}
+
+	// 3. Honest upstream error surfacing in TOOL_RESULT and STEP_FINISHED (e.g. restcountries.com v3.1 deprecation)
+	state = reduceAgUiEvent(state, {
+		id: 'err-run',
+		type: 'RUN_STARTED',
+		payload: { llmMode: 'ollama:llama3.2:latest' }
+	});
+	state = reduceAgUiEvent(state, {
+		id: 'err-tc',
+		type: 'TOOL_CALL',
+		payload: { callId: 'mcp-w1', tool: 'fetchCityWeather', callType: 'mcp:tool', args: { city: 'Paris' } }
+	});
+	state = reduceAgUiEvent(state, {
+		id: 'err-tr',
+		type: 'TOOL_RESULT',
+		payload: {
+			callId: 'mcp-w1',
+			tool: 'fetchCityWeather',
+			callType: 'mcp:tool',
+			status: 'ERROR',
+			isError: true,
+			error: 'Open-Meteo Weather API unreachable',
+			result: { status: 'ERROR', isError: true, error: 'Open-Meteo Weather API unreachable' }
+		}
+	});
+	assert.equal(state.mcpCalls[0].status, 'error');
+	assert.equal(state.activeTurn.timeline[0].status, 'error');
+	assert.ok(state.activeTurn.timeline[0].detail.includes('Open-Meteo Weather API unreachable'));
+
+	state = reduceAgUiEvent(state, {
+		id: 'err-ss',
+		type: 'STEP_STARTED',
+		payload: {
+			stepId: 'a2a-adv-1',
+			callType: 'a2a:task',
+			agentName: 'Nomad-A2A-Specialist',
+			skillId: 'verify-travel-advisory'
+		}
+	});
+	state = reduceAgUiEvent(state, {
+		id: 'err-sf',
+		type: 'STEP_FINISHED',
+		payload: {
+			stepId: 'a2a-adv-1',
+			callType: 'a2a:task',
+			agentName: 'Nomad-A2A-Specialist',
+			skillId: 'verify-travel-advisory',
+			status: 'ERROR',
+			isError: true,
+			error: 'Travel Advisory Service Unavailable (restcountries.com): This API version has been deprecated.',
+			summary: 'Travel Advisory Service Unavailable (restcountries.com): This API version has been deprecated.',
+			report: { status: 'ERROR', isError: true }
+		}
+	});
+	assert.equal(state.a2aSteps[0].status, 'error');
+	assert.equal(state.activeTurn.timeline[1].status, 'error');
+	assert.ok(state.activeTurn.timeline[1].detail.includes('deprecated'));
+
+	// 4. tripDossierState snapshot & summarizeHealthReport helper
+	state = reduceAgUiEvent(state, {
+		id: 'snap-dossier',
+		type: 'STATE_DELTA',
+		payload: {
+			tripDossierState: {
+				uri: 'itinerary://active-trip',
+				nomadTrip: { activeCity: 'Paris', country: 'France', nights: 5, budgetUsd: 2500, homeCurrency: 'EUR' }
+			}
+		}
+	});
+	assert.equal(state.tripDossierState.nomadTrip.activeCity, 'Paris');
+	assert.equal(state.clusterState.nomadTrip.nights, 5);
+
+	const degradedSummary = summarizeHealthReport({
+		status: 'DEGRADED',
+		services: [
+			{ id: 'mcp-server', name: 'Quarkus MCP Server (:8081/mcp)', status: 'UP' },
+			{
+				id: 'restcountries-advisory',
+				name: 'REST Countries Travel Advisory API',
+				status: 'DOWN',
+				error: 'This API version has been deprecated.'
+			}
+		]
+	});
+	assert.equal(degradedSummary.status, 'DEGRADED');
+	assert.equal(degradedSummary.downCount, 1);
+	assert.equal(degradedSummary.label, 'Degraded • 1 API Down');
+
+	const healthySummary = summarizeHealthReport({
+		status: 'UP',
+		services: [{ id: 'mcp-server', status: 'UP' }]
+	});
+	assert.equal(healthySummary.status, 'UP');
+	assert.equal(healthySummary.label, 'All Systems Operational');
 });

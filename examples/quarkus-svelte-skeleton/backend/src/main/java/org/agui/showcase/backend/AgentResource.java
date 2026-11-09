@@ -22,11 +22,17 @@ import org.jboss.resteasy.reactive.RestStreamElementType;
 @Produces(MediaType.APPLICATION_JSON)
 public class AgentResource {
 
-    private final OpsPilotOrchestratorService orchestrator;
+    private final NomadConciergeOrchestratorService orchestrator;
 
     @Inject
-    public AgentResource(OpsPilotOrchestratorService orchestrator) {
+    public AgentResource(NomadConciergeOrchestratorService orchestrator) {
         this.orchestrator = orchestrator;
+    }
+
+    @GET
+    @Path("/health")
+    public Map<String, Object> health() {
+        return orchestrator.checkSystemHealth();
     }
 
     @GET

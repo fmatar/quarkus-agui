@@ -105,7 +105,8 @@
 
 				{#each visibleEvents as evt, idx (`${evt.id ?? evt.type}-${idx}`)}
 					{@const isClient = evt.direction === 'client'}
-					<div class="overflow-hidden rounded-xl border border-[#E4E0D8] bg-[#FAF9F6]">
+					{@const isFrameError = Boolean(evt.payload?.isError || evt.payload?.status === 'ERROR')}
+					<div class="overflow-hidden rounded-xl border {isFrameError ? 'border-[#C84B31]/55 bg-[#FBEEE9]/40' : 'border-[#E4E0D8] bg-[#FAF9F6]'}">
 						<button
 							type="button"
 							onclick={() => toggleExpand(evt.id ?? `${evt.type}-${idx}`)}
@@ -134,6 +135,11 @@
 								<span class="rounded px-1.5 py-0.5 text-[10px] font-bold shrink-0 {getEventBadgeStyle(evt.type, evt.direction)}">
 									{evt.type}
 								</span>
+								{#if isFrameError}
+									<span class="rounded bg-[#C84B31] px-1.5 py-0.5 font-mono text-[9px] font-bold text-white shrink-0">
+										ERROR
+									</span>
+								{/if}
 								{#if evt.payload?.callType}
 									<ProtocolCallBadge callType={evt.payload.callType} />
 								{:else}

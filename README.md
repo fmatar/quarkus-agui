@@ -53,20 +53,23 @@ node .agent/scripts/sdlc-engine.mjs product status
 
 Verify the MCP Server (`:8081`) and A2A Specialist Server (`:8082`) directly from your terminal:
 ```bash
-# Discover MCP Tools & Resources (:8081)
+# Check Aggregated Live Multi-Service Health (:8080, :8081, :8082)
+curl -s http://localhost:8080/api/agent/health | jq .
+
+# Discover MCP Tools & City Dossier Resource (:8081/mcp + Companion REST Bridge)
 curl -s http://localhost:8081/api/mcp/tools | jq .
-curl -s http://localhost:8081/api/mcp/resources/topology | jq .
+curl -s http://localhost:8081/api/mcp/resources/city/Kyoto | jq .
 
-# Discover A2A AgentCard & Delegate Specialist Task (:8082)
-curl -s http://localhost:8082/.well-known/agent.json | jq .
-curl -s -X POST http://localhost:8082/api/a2a/tasks/send \
+# Discover Official A2A AgentCard & Delegate Travel Specialist Audit (:8082)
+curl -s http://localhost:8082/.well-known/agent-card.json | jq .
+curl -s -X POST http://localhost:8082/api/a2a/audit \
   -H "Content-Type: application/json" \
-  -d '{"taskId":"task-demo-1","skillId":"audit-clean-architecture","prompt":"Audit cluster topology"}' | jq .
+  -d '{"skillId":"convert-and-audit-budget","prompt":"Convert $1,840 USD for Kyoto","context":{"city":"Kyoto","budgetUsd":1840}}' | jq .
 
-# Stream AG-UI SSE events from the OpsPilot Orchestrator (:8080)
+# Stream AG-UI SSE events from the Nomad Concierge Orchestrator (:8080)
 curl -N -X POST http://localhost:8080/api/agent/run \
   -H "Content-Type: application/json" \
-  -d '{"threadId":"thread-demo-1","prompt":"Inspect system architecture"}'
+  -d '{"threadId":"thread-demo-1","prompt":"Plan a 4-night architecture and tea trip in Kyoto with a $2,400 USD budget"}'
 ```
 
 ### 4. Portable GraalVM 25 Native Compilation ("Runs Everywhere")

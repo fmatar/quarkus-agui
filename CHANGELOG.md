@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- refactor(showcase): retire legacy DevOps filenames (`NomadMcpConciergeService`, `NomadTravelAdvisorService`, `NomadA2aAgentConfiguration`, `NomadConciergeOrchestratorService`, `TripDossierPanel.svelte`), wire native `quarkus-mcp` (`quarkus-mcp-server-http` `ToolResponse` + `quarkus-langchain4j-mcp` `StreamableHttpMcpTransport`), enforce Ollama-first `TravelIntent` conversational routing with zero assumed defaults & interactive `TripSlotState` slot-filling, and surface honest upstream errors (`restcountries.com/v3.1` deprecation) alongside live `/api/agent/health`, `/api/mcp/health`, and `/api/a2a/health` Top-Bar Health Pill diagnostics ([#66](https://github.com/fmatar/quarkus-agui/issues/66))
+
 ### Fixed
 - fix(orchestrator): handle destination-free greetings & preference updates (e.g., `"my name is Fady"`) without defaulting to `Kyoto` or executing city-specific MCP/A2A tools, extract `travelerName` into `traveler://preferences`, display `Traveler` in `ClusterStatePanel.svelte`, and preserve `activeCity: null` (`Awaiting Destination`) ([#64](https://github.com/fmatar/quarkus-agui/issues/64))
 

@@ -1,6 +1,9 @@
 <script>
 	import { onMount } from 'svelte';
 	import {
+		Activity,
+		AlertTriangle,
+		Check,
 		ChevronRight,
 		Compass,
 		Cpu,
@@ -18,9 +21,10 @@
 		recordClientOutboundEvent,
 		reduceAgUiEvent,
 		selectTurnOption,
+		summarizeHealthReport,
 		updateTripNightsInState
 	} from '$lib/agui-client.js';
-	import ClusterStatePanel from './ClusterStatePanel.svelte';
+	import TripDossierPanel from './TripDossierPanel.svelte';
 	import MessageHistory from './MessageHistory.svelte';
 	import InputBar from './InputBar.svelte';
 	import ProtocolInspector from './ProtocolInspector.svelte';
@@ -40,7 +44,36 @@
 	let abortController = $state(null);
 	let isInspectorOpen = $state(true);
 	let isGuideOpen = $state(false);
+	let isHealthOpen = $state(false);
+	let systemHealth = $state(null);
+	let isCheckingHealth = $state(false);
+	let healthSummary = $derived(summarizeHealthReport(systemHealth));
 	let wsSocket = null;
+
+	async function refreshSystemHealth() {
+		if (typeof window === 'undefined' || isCheckingHealth) return;
+		isCheckingHealth = true;
+		try {
+			const res = await fetch('/api/agent/health');
+			if (res.ok) {
+				systemHealth = await res.json();
+			}
+		} catch (err) {
+			systemHealth = {
+				status: 'DOWN',
+				services: [
+					{
+						id: 'backend',
+						name: 'Nomad Orchestrator (:8080)',
+						status: 'DOWN',
+						error: err?.message ?? 'Orchestrator unreachable'
+					}
+				]
+			};
+		} finally {
+			isCheckingHealth = false;
+		}
+	}
 
 	function connectWebSocket() {
 		if (typeof window === 'undefined' || typeof WebSocket === 'undefined') return;
@@ -66,6 +99,9 @@
 					const parsed = JSON.parse(msgEvt.data);
 					if (parsed && parsed.type && parsed.type !== 'pong') {
 						workbench = reduceAgUiEvent(workbench, parsed);
+						if (parsed.type === 'RUN_FINISHED') {
+							refreshSystemHealth();
+						}
 					}
 				} catch {
 					// ignore malformed frame
@@ -101,6 +137,7 @@
 
 	onMount(() => {
 		connectWebSocket();
+		refreshSystemHealth();
 		return () => {
 			wsSocket?.close();
 			wsSocket = null;
@@ -123,11 +160,11 @@
 
 	function resolvePresetPrompt(preset) {
 		if (preset.id === 'nomad-hitl') {
-			const trip = workbench.clusterState?.nomadTrip;
-			const city = trip?.activeCity ?? 'Kyoto';
-			const stopTitle = trip?.stopTitle ?? `${city} Architectural Sanctuary`;
-			const nights = trip?.nights ?? 4;
-			return `Reserve ${stopTitle} in ${city} for ${nights} nights ($1840)`;
+			const trip = (workbench.tripDossierState ?? workbench.clusterState)?.nomadTrip;
+			if (trip?.activeCity && trip?.nights) {
+				const stopTitle = trip.stopTitle ?? `${trip.activeCity} Architectural Sanctuary`;
+				return `Reserve ${stopTitle} in ${trip.activeCity} for ${trip.nights} nights ($1840)`;
+			}
 		}
 		return preset.prompt;
 	}
@@ -228,6 +265,7 @@
 					isStreaming: false
 				};
 			}
+			refreshSystemHealth();
 		}
 	}
 
@@ -273,6 +311,7 @@
 					isStreaming: false
 				};
 			}
+			refreshSystemHealth();
 		}
 	}
 
@@ -340,9 +379,10 @@
 			if (opt.prompt) {
 				runScenarioPrompt(opt.prompt);
 			} else {
-				const city = workbench.clusterState?.nomadTrip?.activeCity ?? 'Kyoto';
+				const city = (workbench.tripDossierState ?? workbench.clusterState)?.nomadTrip?.activeCity;
 				const detail = opt.description ? ` (${opt.description})` : '';
-				runScenarioPrompt(`Selected itinerary preference: ${opt.label}${detail} in ${city}`);
+				const suffix = city ? ` in ${city}` : '';
+				runScenarioPrompt(`Selected itinerary preference: ${opt.label}${detail}${suffix}`);
 			}
 		}
 	}
@@ -354,9 +394,10 @@
 			const match = options.find((o) => o.id === id);
 			return match ? match.label : id;
 		});
-		const city = workbench.clusterState?.nomadTrip?.activeCity ?? 'Kyoto';
+		const city = (workbench.tripDossierState ?? workbench.clusterState)?.nomadTrip?.activeCity;
+		const suffix = city ? ` in ${city}` : '';
 		workbench = lockTurnInteraction(workbench, messageId);
-		runScenarioPrompt(`Confirmed multi-select itinerary preferences: ${labels.join('; ')} in ${city}`);
+		runScenarioPrompt(`Confirmed multi-select itinerary preferences: ${labels.join('; ')}${suffix}`);
 	}
 
 	function clearInspectorEvents() {
@@ -371,8 +412,9 @@
 	}
 
 	function handleWindowKeydown(event) {
-		if (event.key === 'Escape' && isGuideOpen) {
-			isGuideOpen = false;
+		if (event.key === 'Escape') {
+			if (isGuideOpen) isGuideOpen = false;
+			if (isHealthOpen) isHealthOpen = false;
 		}
 	}
 </script>
@@ -463,11 +505,40 @@
 				{/each}
 			</div>
 
-			<!-- Inspector & Quick Guide Controls -->
-			<div class="flex items-center gap-1.5" role="group" aria-label="Inspector and Help">
+			<!-- Inspector, Healthcheck & Quick Guide Controls -->
+			<div class="flex items-center gap-1.5" role="group" aria-label="Health, Inspector and Help">
 				<button
 					type="button"
-					onclick={() => (isGuideOpen = !isGuideOpen)}
+					onclick={() => {
+						isHealthOpen = !isHealthOpen;
+						if (isHealthOpen) {
+							isGuideOpen = false;
+							refreshSystemHealth();
+						}
+					}}
+					aria-expanded={isHealthOpen}
+					aria-label="Inspect Multi-Service Healthcheck"
+					class="inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 font-mono text-[11px] font-semibold transition-colors {healthSummary.status === 'UP'
+						? 'border-[#1F6E50]/30 bg-[#EAF4EF] text-[#1F6E50]'
+						: healthSummary.status === 'UNKNOWN'
+							? 'border-[#E4E0D8] bg-[#F6F5F2] text-[#575551]'
+							: 'border-[#C84B31]/40 bg-[#FBEEE9] text-[#C84B31]'}"
+					title="Live Multi-Service & Upstream API Healthcheck (/api/agent/health)"
+				>
+					{#if healthSummary.status === 'UP'}
+						<Activity class="size-3.5 shrink-0" />
+					{:else}
+						<AlertTriangle class="size-3.5 shrink-0" />
+					{/if}
+					<span>{healthSummary.label}</span>
+				</button>
+
+				<button
+					type="button"
+					onclick={() => {
+						isGuideOpen = !isGuideOpen;
+						if (isGuideOpen) isHealthOpen = false;
+					}}
 					aria-expanded={isGuideOpen}
 					aria-label="Open Concierge Guide and Keyboard Shortcuts"
 					class="inline-flex items-center gap-1 rounded-xl border border-[#E4E0D8] bg-white px-2.5 py-1.5 text-xs font-semibold text-[#141413] transition-colors hover:bg-[#EFECE6]"
@@ -493,6 +564,83 @@
 				</button>
 			</div>
 		</div>
+
+		{#if isHealthOpen}
+			<div
+				class="absolute top-full right-4 z-30 mt-2 w-88 sm:w-[27rem] rounded-2xl border border-[#CFCAC0] bg-white p-4 shadow-xl space-y-3"
+				role="dialog"
+				aria-label="Multi-Service and Upstream API Healthcheck"
+			>
+				<div class="flex items-center justify-between border-b border-[#E4E0D8] pb-2">
+					<div>
+						<h2 class="text-xs font-bold text-[#141413]">
+							Live Protocol & Upstream API Healthcheck
+						</h2>
+						<p class="font-mono text-[10px] text-[#575551]">
+							GET /api/agent/health • {healthSummary.healthyCount}/{healthSummary.totalCount} operational
+						</p>
+					</div>
+					<div class="flex items-center gap-1">
+						<button
+							type="button"
+							disabled={isCheckingHealth}
+							onclick={refreshSystemHealth}
+							aria-label="Refresh healthcheck"
+							class="inline-flex items-center gap-1 rounded-lg border border-[#E4E0D8] bg-[#F6F5F2] px-2 py-1 font-mono text-[10px] font-semibold text-[#141413] hover:bg-[#EFECE6] disabled:opacity-40"
+						>
+							<RotateCcw class="size-3 {isCheckingHealth ? 'animate-spin' : ''}" />
+							<span>Refresh</span>
+						</button>
+						<button
+							type="button"
+							onclick={() => (isHealthOpen = false)}
+							aria-label="Close healthcheck"
+							class="rounded p-1 text-[#575551] hover:bg-[#EFECE6] hover:text-[#141413]"
+						>
+							<X class="size-3.5" />
+						</button>
+					</div>
+				</div>
+
+				<div class="max-h-80 overflow-y-auto space-y-1.5 pr-0.5">
+					{#each healthSummary.services as svc (svc.id + (svc.via ?? ''))}
+						{@const isUp = svc.status === 'UP'}
+						<div
+							class="rounded-xl border p-2.5 text-xs {isUp
+								? 'border-[#E4E0D8] bg-[#FAF9F6]'
+								: 'border-[#C84B31]/45 bg-[#FBEEE9]/55'}"
+						>
+							<div class="flex items-center justify-between gap-2">
+								<span class="font-semibold text-[#141413] truncate">{svc.name ?? svc.id}</span>
+								<div class="flex items-center gap-1.5 shrink-0 font-mono text-[10px]">
+									{#if svc.latencyMs != null}
+										<span class="text-[#575551] tabular-nums">{svc.latencyMs}ms</span>
+									{/if}
+									<span
+										class="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 font-bold {isUp
+											? 'bg-[#EAF4EF] text-[#1F6E50]'
+											: 'bg-[#C84B31] text-white'}"
+									>
+										{#if isUp}
+											<Check class="size-2.5" />
+											<span>UP</span>
+										{:else}
+											<AlertTriangle class="size-2.5" />
+											<span>DOWN</span>
+										{/if}
+									</span>
+								</div>
+							</div>
+							{#if !isUp && svc.error}
+								<p class="mt-1 font-mono text-[10px] leading-snug text-[#9E331D]">
+									{svc.error}
+								</p>
+							{/if}
+						</div>
+					{/each}
+				</div>
+			</div>
+		{/if}
 
 		{#if isGuideOpen}
 			<div
@@ -536,12 +684,18 @@
 	</header>
 
 	<!-- Pane 1: Left Trip Dossier & Protocol Rail -->
-	<ClusterStatePanel
+	<TripDossierPanel
+		tripDossierState={workbench.tripDossierState}
 		clusterState={workbench.clusterState}
+		{systemHealth}
 		messages={workbench.messages}
 		isStreaming={workbench.isStreaming}
 		onTriggerSkill={runScenarioPrompt}
 		onUpdateTripParams={handleUpdateTripParams}
+		onToggleHealthPopover={() => {
+			isHealthOpen = !isHealthOpen;
+			if (isHealthOpen) refreshSystemHealth();
+		}}
 	/>
 
 	<!-- Pane 2: Center Concierge Conversation & Modular AG-UI Component Kit -->

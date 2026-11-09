@@ -1,35 +1,35 @@
 {
-  "activeSessionId": 36,
+  "activeSessionId": 66,
   "sessions": {
-    "36": {
+    "66": {
       "active": true,
-      "issueId": 36,
-      "type": "bug",
-      "branch": "fix/issue-#36-docker-compose-frontend-build",
+      "issueId": 66,
+      "type": "feat",
+      "branch": "feature/issue-#66-nomad-travel-chatbot-mcp-health",
       "worktree": null,
       "stage": 5,
-      "stageName": "Documentation, Showcase & Changelog Sync",
+      "stageName": "Documentation & Showcase Sync",
       "remediationCount": 0,
       "maxRemediations": 3,
       "manifest": {
-        "specPath": "README.md",
+        "specPath": null,
         "prNumber": null,
-        "coverageReport": "examples/quarkus-svelte-skeleton/backend/target/site/jacoco/index.html",
-        "mutationScore": 85.0,
+        "coverageReport": null,
+        "mutationScore": null,
         "uiScreenshotPath": null,
         "checkpoints": {
-          "stage1": "2026-11-08T16:18:50.000Z",
-          "stage2": "2026-11-08T16:18:55.000Z",
-          "stage3": "2026-11-08T16:19:00.000Z",
-          "stage4": "2026-11-08T16:22:00.000Z",
-          "stage5": "2026-11-08T16:23:00.000Z",
+          "stage1": null,
+          "stage2": null,
+          "stage3": "2026-11-09T15:52:03.611Z",
+          "stage4": "2026-11-09T17:40:36.765Z",
+          "stage5": "2026-11-09T18:41:10.328Z",
           "stage6": null,
           "stage7": null,
           "stage8": null
         }
       },
-      "startedAt": "2026-11-08T16:18:50.000Z",
-      "updatedAt": "2026-11-08T16:23:00.000Z",
+      "startedAt": "2026-11-09T15:52:03.611Z",
+      "updatedAt": "2026-11-09T18:41:10.561Z",
       "activeSubagents": []
     }
   }
