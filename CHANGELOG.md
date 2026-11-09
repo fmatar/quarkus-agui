@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- feat(ui): implement Wide-Resolution (`1920px`–`2560px+`) Container-Query Editorial Split (`@container turn-card (inline-size > 820px)`) in `AssistantTurn.svelte`, `aspect-[16/10]` architectural photography framing & blurred `max-w-5xl` Lightbox in `MediaGallery.svelte`, 2-column collapsible `ExecutionTimeline.svelte`, and deep-linked Verified Sources (`api.open-meteo.com/v1/forecast`, `restcountries.com/v3.1/name/...?fields=...`, `api.frankfurter.dev/v1/latest`, `itunes.apple.com/search`) ([#57](https://github.com/fmatar/quarkus-agui/issues/57))
+- feat(showcase): implement Full-Duplex Quarkus WebSockets Next (`/api/agent/ws`), Multi-Turn Conversational Memory & `traveler://preferences` extraction, `quarkus-langchain4j` Input/Output Guardrails + Cultural Field Notes RAG + Specialist Persona Council, `quarkus-mcp-server` `@ResourceTemplate` + `@CompletePrompt` + `mcp:sampling` + `.md` export, and GSAP motion choreography ([#51](https://github.com/fmatar/quarkus-agui/issues/51), [#52](https://github.com/fmatar/quarkus-agui/issues/52), [#53](https://github.com/fmatar/quarkus-agui/issues/53), [#54](https://github.com/fmatar/quarkus-agui/issues/54), [#55](https://github.com/fmatar/quarkus-agui/issues/55))
+
 ### Fixed
 - fix(showcase): resolve Svelte 5 `each_key_duplicate` runtime crash in `ExecutionTimeline.svelte` when streaming multiple A2A steps, configure `AGUI_A2A_PUBLIC_URL=http://a2a-server:8082` in `SentinelA2aAgentConfiguration` & `docker-compose.yml`, wire `McpGatewayClient` to invoke `mcp-server (:8081)` over HTTP for live Open-Meteo/Wikipedia/iTunes 30s audio previews, and make Nomad Concierge the default persona for free-form chat ([#38](https://github.com/fmatar/quarkus-agui/issues/38))
 - fix(showcase): include `pnpm-workspace.yaml` (`allowBuilds: esbuild: true`) in `frontend/Dockerfile`, add `frontend/.dockerignore`, and use `install -DskipTests` in `Dockerfile.quarkus` so all 4 Docker Compose images build cleanly ([#36](https://github.com/fmatar/quarkus-agui/issues/36))

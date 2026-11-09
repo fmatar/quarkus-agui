@@ -141,7 +141,7 @@
 			e.preventDefault();
 			triggerSubmit();
 		}}
-		class="flex items-end gap-2.5"
+		class="mx-auto flex w-full max-w-[1440px] items-end gap-2.5"
 	>
 		<label for="agui-prompt-input" class="sr-only">Concierge Prompt</label>
 		<div class="relative flex-1">

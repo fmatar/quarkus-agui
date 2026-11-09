@@ -3,40 +3,53 @@
 
 	let { media = [] } = $props();
 	let lightboxImage = $state(null);
+	let dialogEl = $state(null);
 
 	const WAVEFORM_BARS = [
 		28, 52, 74, 42, 88, 64, 36, 94, 58, 46, 82, 70, 38, 90, 62, 48, 76, 54, 84, 40, 68, 50, 34, 60
 	];
 
-	function handleWindowKeydown(event) {
-		if (event.key === 'Escape' && lightboxImage) {
-			lightboxImage = null;
+	function openLightbox(item) {
+		lightboxImage = item;
+		requestAnimationFrame(() => {
+			if (dialogEl && !dialogEl.open) {
+				dialogEl.showModal();
+			}
+		});
+	}
+
+	function closeLightbox() {
+		if (dialogEl?.open) {
+			dialogEl.close();
 		}
+		lightboxImage = null;
 	}
 </script>
 
-<svelte:window onkeydown={handleWindowKeydown} />
-
 {#if media?.length}
-	<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+	<div class="turn-media-grid">
 		{#each media as item (item.title + item.type)}
 			{#if item.type === 'image'}
 				<div class="nomad-card overflow-hidden rounded-xl">
 					<button
 						type="button"
-						onclick={() => (lightboxImage = item)}
-						class="group relative block h-40 w-full overflow-hidden bg-[#EFECE6] text-left"
+						onclick={() => openLightbox(item)}
+						class="group relative block aspect-[16/10] max-h-60 w-full overflow-hidden bg-[#EFECE6] text-left"
 					>
 						<img
 							src={item.url}
 							alt={item.title}
 							loading="lazy"
-							class="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
+							class="block h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
 						/>
+						<span class="pointer-events-none absolute right-2.5 bottom-2.5 inline-flex items-center gap-1 rounded-md bg-[#141413]/75 px-2 py-1 font-mono text-[10px] font-medium text-white backdrop-blur-xs transition-opacity group-hover:bg-[#141413]/90">
+							<span>Expand Plate</span>
+							<ExternalLink class="size-2.5" />
+						</span>
 					</button>
 					<div class="px-3.5 py-2.5">
 						<div class="flex items-center gap-1.5 text-xs font-semibold text-[#141413]">
-							<ImageIcon class="size-3.5 text-[#C84B31]" />
+							<ImageIcon class="size-3.5 text-[#C84B31] shrink-0" />
 							<span class="truncate">{item.title}</span>
 						</div>
 						{#if item.subtitle}
@@ -136,36 +149,50 @@
 	</div>
 {/if}
 
-{#if lightboxImage}
-	<!-- svelte-ignore a11y_click_events_have_key_events -->
-	<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-	<div
-		class="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-6"
-		role="dialog"
-		aria-modal="true"
-		aria-label={lightboxImage.title}
-		tabindex="-1"
-		onclick={(e) => {
-			if (e.target === e.currentTarget) {
-				lightboxImage = null;
-			}
-		}}
-	>
-		<div class="max-w-3xl overflow-hidden rounded-2xl bg-white shadow-2xl">
-			<img src={lightboxImage.url} alt={lightboxImage.title} class="max-h-[72vh] w-full object-contain bg-[#141413]" />
-			<div class="flex items-center justify-between px-5 py-3.5">
-				<div>
-					<div class="text-sm font-semibold text-[#141413]">{lightboxImage.title}</div>
-					<div class="text-xs text-[#575551]">{lightboxImage.subtitle ?? ''}</div>
-				</div>
+<dialog
+	bind:this={dialogEl}
+	aria-label={lightboxImage?.title ?? 'Destination Image Preview'}
+	onclose={() => (lightboxImage = null)}
+	onclick={(e) => {
+		if (e.target === e.currentTarget) {
+			closeLightbox();
+		}
+	}}
+	class="nomad-lightbox-dialog m-auto w-full max-w-5xl overflow-hidden rounded-2xl border border-[#E4E0D8] bg-white p-0 shadow-2xl"
+>
+	{#if lightboxImage}
+		<div class="flex items-center justify-center bg-[#141413] p-2 sm:p-4">
+			<img
+				src={lightboxImage.url}
+				alt={lightboxImage.title}
+				class="block max-h-[78vh] w-full rounded-lg object-contain"
+			/>
+		</div>
+		<div class="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5">
+			<div>
+				<div class="text-sm font-semibold text-[#141413]">{lightboxImage.title}</div>
+				<div class="text-xs text-[#575551]">{lightboxImage.subtitle ?? ''}</div>
+			</div>
+			<div class="flex items-center gap-2">
+				{#if lightboxImage.url}
+					<a
+						href={lightboxImage.url}
+						target="_blank"
+						rel="noreferrer"
+						class="inline-flex items-center gap-1.5 rounded-lg border border-[#E4E0D8] bg-[#FAF9F6] px-3 py-1.5 text-xs font-medium text-[#141413] hover:bg-[#EFECE6]"
+					>
+						<span>Open Original</span>
+						<ExternalLink class="size-3 text-[#575551]" />
+					</a>
+				{/if}
 				<button
 					type="button"
-					onclick={() => (lightboxImage = null)}
-					class="rounded-lg border border-[#E4E0D8] px-3 py-1.5 text-xs font-medium text-[#141413] hover:bg-[#F6F5F2]"
+					onclick={closeLightbox}
+					class="rounded-lg bg-[#141413] px-3.5 py-1.5 text-xs font-medium text-white hover:bg-[#2A2927]"
 				>
 					Close Preview (Esc)
 				</button>
 			</div>
 		</div>
-	</div>
-{/if}
+	{/if}
+</dialog>

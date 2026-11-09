@@ -367,6 +367,17 @@ class OpsPilotOrchestratorServiceTest {
         A2aGatewayClient.registerCityCountry("Batroun", "Lebanon");
         assertEquals("Lebanon", A2aGatewayClient.resolveCountryForCity("Batroun"));
         assertEquals("LBP", A2aGatewayClient.resolveCurrencyForCountry("Lebanon"));
+
+        List<String> beirutStreamFrames = service.streamRun(new AgentRunRequest(
+                "thread-beirut-sources",
+                "Plan a 3-day trip in Beirut",
+                Map.of(),
+                "deterministic")).collect().asList().await().indefinitely();
+        assertTrue(beirutStreamFrames.stream().anyMatch(f -> f.contains("api.open-meteo.com/v1/forecast?latitude=")));
+        assertTrue(beirutStreamFrames.stream().anyMatch(f -> f.contains("en.wikipedia.org/wiki/Beirut")));
+        assertTrue(beirutStreamFrames.stream().anyMatch(f -> f.contains("itunes.apple.com/search?term=")));
+        assertTrue(beirutStreamFrames.stream().anyMatch(f -> f.contains("api.frankfurter.dev/v1/latest?base=USD")));
+        assertTrue(beirutStreamFrames.stream().anyMatch(f -> f.contains("restcountries.com/v3.1/name/Lebanon?fields=name,capital,currencies,region,timezones")));
     }
 
     @Test
