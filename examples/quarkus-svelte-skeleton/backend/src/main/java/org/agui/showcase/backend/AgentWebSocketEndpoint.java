@@ -15,31 +15,27 @@ import org.agui.core.domain.AgUiEvent;
 
 /**
  * Full-Duplex Quarkus WebSockets Next Endpoint (`/api/agent/ws`) for the Nomad Concierge Studio (:8080).
- * Supports bidirectional AG-UI envelopes:
- * - `RUN_AGENT`: Streams AG-UI protocol frames over the persistent WebSocket
- * - `APPROVE_HITL`: Resumes or rejects a pending HITL sanctuary hold
- * - `CANCEL_RUN`: Immediately aborts an active streaming turn on the server
- * - `UPDATE_TRIP_PARAMS`: Instant `<50ms` Trip Dossier nights & homeCurrency state update (`STATE_DELTA`)
- * - `RESET_MEMORY`: Clears sliding-window conversational memory and resets traveler preferences
  */
 @WebSocket(path = "/api/agent/ws")
 @ApplicationScoped
 public class AgentWebSocketEndpoint {
 
-    private final OpsPilotOrchestratorService orchestrator;
+    private final NomadConciergeOrchestratorService orchestrator;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Inject
-    public AgentWebSocketEndpoint(OpsPilotOrchestratorService orchestrator) {
+    public AgentWebSocketEndpoint(NomadConciergeOrchestratorService orchestrator) {
         this.orchestrator = orchestrator;
     }
 
     @OnOpen
     public void onOpen(WebSocketConnection connection) {
+        Object dossier = orchestrator.getCatalog().get("tripDossierState");
         sendEventFrame(connection, "thread-nomad-1", "WS_CONNECTED", Map.of(
                 "sessionId", connection.id(),
                 "transport", "websocket-full-duplex",
-                "clusterState", orchestrator.getCatalog().get("clusterState"),
+                "tripDossierState", dossier,
+                "clusterState", dossier,
                 "memoryTurns", orchestrator.getConversationMemory("thread-nomad-1").size()));
     }
 
@@ -95,7 +91,7 @@ public class AgentWebSocketEndpoint {
 
                 default -> {
                     String prompt = root.path("prompt").asText("");
-                    String mode = root.path("mode").asText("ollama:llama3.2:latest");
+                    String mode = root.hasNonNull("mode") ? root.path("mode").asText() : null;
                     Map<String, Object> state = root.has("state") && root.path("state").isObject()
                             ? objectMapper.convertValue(root.path("state"), new TypeReference<Map<String, Object>>() {})
                             : Map.of();

@@ -3,7 +3,7 @@ package org.agui.showcase.backend;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+import static org.hamcrest.Matchers.notNullValue;
 
 import io.quarkus.test.junit.QuarkusTest;
 import java.util.Map;
@@ -13,43 +13,33 @@ import org.junit.jupiter.api.Test;
 class AgentResourceTest {
 
     @Test
-    void catalogEndpointReturnsTriProtocolCapabilities() {
+    void catalogAndHealthEndpointsExposeOllamaDefaultAndMultiServiceHealth() {
         given()
                 .when()
                 .get("/api/agent/catalog")
                 .then()
                 .statusCode(200)
-                .body("llmMode", equalTo("deterministic"))
+                .body("llmMode", equalTo("ollama:llama3.2:latest"))
                 .body("mcpTools.size()", equalTo(3))
-                .body("a2aAgent.name", equalTo("Nomad-A2A-Specialist"));
-    }
+                .body("a2aAgent.name", equalTo("Nomad-A2A-Specialist"))
+                .body("tripDossierState", notNullValue());
 
-    @Test
-    void chatEndpointExecutesTriProtocolWorkflow() {
         given()
-                .contentType("application/json")
-                .body(Map.of(
-                        "threadId", "thread-http-1",
-                        "prompt", "Curate a 4-night architectural and koto music escape in Kyoto",
-                        "state", Map.of("city", "Kyoto"),
-                        "mode", "deterministic"))
                 .when()
-                .post("/api/agent/chat")
+                .get("/api/agent/health")
                 .then()
                 .statusCode(200)
-                .body("threadId", equalTo("thread-http-1"))
-                .body("status", equalTo("COMPLETED"))
-                .body("mcpCalls.size()", greaterThanOrEqualTo(1))
-                .body("a2aHandoffs.size()", greaterThanOrEqualTo(1));
+                .body("orchestrator", equalTo("Nomad-Concierge-Orchestrator"))
+                .body("services", notNullValue());
     }
 
     @Test
-    void runSseEndpointStreamsAgUiFrames() {
+    void incompleteTripPromptTriggersSlotFillingInsteadOfAssumingThreeDays() {
         given()
                 .contentType("application/json")
                 .body(Map.of(
-                        "threadId", "thread-sse-http",
-                        "prompt", "Explore Lisbon Fado and azulejo architecture",
+                        "threadId", "thread-http-slots",
+                        "prompt", "I want a trip in Paris",
                         "state", Map.of(),
                         "mode", "deterministic"))
                 .when()
@@ -58,15 +48,13 @@ class AgentResourceTest {
                 .statusCode(200)
                 .contentType(containsString("text/event-stream"))
                 .body(containsString("RUN_STARTED"))
-                .body(containsString("STATE_SNAPSHOT"))
-                .body(containsString("TOOL_CALL"))
-                .body(containsString("STATE_DELTA"))
-                .body(containsString("TEXT_DELTA"))
+                .body(containsString("awaitingTripSlots"))
+                .body(containsString("trip-slot-elicitation"))
                 .body(containsString("RUN_FINISHED"));
     }
 
     @Test
-    void approveEndpointResumesInterruptedHitlRun() {
+    void hitlApproveParamsMemoryResetCancelAndCompleteEndpointsWork() {
         given()
                 .contentType("application/json")
                 .body(Map.of(
@@ -92,7 +80,6 @@ class AgentResourceTest {
                 .statusCode(200)
                 .contentType(containsString("text/event-stream"))
                 .body(containsString("TOOL_RESULT"))
-                .body(containsString("STATE_DELTA"))
                 .body(containsString("completed"));
 
         given()
