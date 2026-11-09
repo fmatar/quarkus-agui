@@ -167,5 +167,29 @@ class NomadMcpConciergeServiceTest {
         Map<String, Object> health = service.checkHealth();
         assertEquals("UP", health.get("status"));
         assertNotNull(health.get("upstreams"));
+
+        // Verify MCP prompts, acoustic mood sampling, and string-typed dispatch arguments
+        assertNotNull(service.weekendCulturalEscapePrompt("Paris").content());
+        assertNotNull(service.localMusicAndFoodWalkPrompt("Beirut").content());
+        org.junit.jupiter.api.Assertions.assertThrows(
+                IllegalArgumentException.class,
+                () -> service.weekendCulturalEscapePrompt(" "));
+        org.junit.jupiter.api.Assertions.assertThrows(
+                IllegalArgumentException.class,
+                () -> service.localMusicAndFoodWalkPrompt(""));
+
+        assertEquals("ERROR", service.sampleAcousticMoodProfile("", null, null).get("status"));
+        assertEquals("OK", service.sampleAcousticMoodProfile("Beirut", "Clear", "oud").get("status"));
+        assertEquals("OK", service.sampleAcousticMoodProfile("Oaxaca", null, null).get("status"));
+        assertEquals("ERROR", service.getCityDossier(" ").get("status"));
+        assertEquals("itinerary://city/missing/dossier", service.cityDossierResourceTemplate("").uri());
+
+        McpToolInvocationResponse stringTypedItinerary = service.dispatchTool(
+                new McpToolInvocationRequest("updateTripItinerary", Map.of(
+                        "city", "Beirut",
+                        "stopTitle", "Albergo Achrafieh",
+                        "nights", "4",
+                        "costUsd", "1650.5")));
+        assertFalse(stringTypedItinerary.isError());
     }
 }

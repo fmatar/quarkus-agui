@@ -139,5 +139,40 @@ class McpServerResourceTest {
                 .body("travelerName", equalTo("Fady"))
                 .body("dietary", equalTo("Vegan"))
                 .body("homeCurrency", equalTo("EUR"));
+
+        given()
+                .when().get("/api/mcp/resources/preferences")
+                .then()
+                .statusCode(200)
+                .body("travelerName", equalTo("Fady"));
+
+        given()
+                .when().get("/api/mcp/resources/city/Lisbon")
+                .then()
+                .statusCode(200)
+                .body("city", equalTo("Lisbon"))
+                .body("weatherStatus", equalTo("OK"));
+
+        given()
+                .when().get("/api/mcp/prompts")
+                .then()
+                .statusCode(200)
+                .body("prompts", hasSize(2));
+
+        given()
+                .queryParam("prefix", "Li")
+                .when().get("/api/mcp/prompts/complete")
+                .then()
+                .statusCode(200)
+                .body("argument", equalTo("city"));
+
+        given()
+                .contentType(ContentType.JSON)
+                .body(Map.of("city", "Lisbon", "weatherCondition", "Clear Sky", "genre", "fado"))
+                .when().post("/api/mcp/sampling")
+                .then()
+                .statusCode(200)
+                .body("status", equalTo("OK"))
+                .body("city", equalTo("Lisbon"));
     }
 }

@@ -76,6 +76,77 @@ public class NomadMcpConciergeService {
 
     private record CityCoordinates(String city, String country, double latitude, double longitude) {}
 
+    private static final Map<String, CityCoordinates> KNOWN_COORDINATES = Map.ofEntries(
+            Map.entry("kyoto", new CityCoordinates("Kyoto", "Japan", 35.0116, 135.7681)),
+            Map.entry("lisbon", new CityCoordinates("Lisbon", "Portugal", 38.7223, -9.1393)),
+            Map.entry("reykjavik", new CityCoordinates("Reykjavik", "Iceland", 64.1466, -21.9426)),
+            Map.entry("beirut", new CityCoordinates("Beirut", "Lebanon", 33.8938, 35.5018)),
+            Map.entry("tokyo", new CityCoordinates("Tokyo", "Japan", 35.6762, 139.6503)),
+            Map.entry("paris", new CityCoordinates("Paris", "France", 48.8566, 2.3522)),
+            Map.entry("rome", new CityCoordinates("Rome", "Italy", 41.9028, 12.4964)),
+            Map.entry("barcelona", new CityCoordinates("Barcelona", "Spain", 41.3874, 2.1686)),
+            Map.entry("london", new CityCoordinates("London", "United Kingdom", 51.5072, -0.1276)),
+            Map.entry("seoul", new CityCoordinates("Seoul", "South Korea", 37.5665, 126.9780)),
+            Map.entry("new york", new CityCoordinates("New York", "United States", 40.7128, -74.0060)),
+            Map.entry("marrakech", new CityCoordinates("Marrakech", "Morocco", 31.6295, -7.9811)));
+
+    private static final Map<String, String> CITY_MUSIC_QUERIES = Map.ofEntries(
+            Map.entry("lisbon", "Amalia Rodrigues Fado"),
+            Map.entry("porto", "Amalia Rodrigues Fado"),
+            Map.entry("reykjavik", "Olafur Arnalds strings"),
+            Map.entry("kyoto", "koto shakuhachi"),
+            Map.entry("tokyo", "Ryuichi Sakamoto"),
+            Map.entry("osaka", "Ryuichi Sakamoto"),
+            Map.entry("paris", "Erik Satie piano"),
+            Map.entry("lyon", "Erik Satie piano"),
+            Map.entry("rome", "Ennio Morricone"),
+            Map.entry("florence", "Ennio Morricone"),
+            Map.entry("barcelona", "Paco de Lucia guitar"),
+            Map.entry("madrid", "Paco de Lucia guitar"),
+            Map.entry("marrakech", "gnawa oud"),
+            Map.entry("oaxaca", "Lila Downs Oaxaca"),
+            Map.entry("buenos aires", "Astor Piazzolla tango"),
+            Map.entry("beirut", "Fairuz"));
+
+    private static final Map<String, String> CITY_ARCHITECTURE = Map.of(
+            "lisbon", "Alfama Azulejo Terraces, Chiado Pombaline Ironwork & MAAT Riverfront",
+            "reykjavik", "Harpa Basalt Columns, Hallgrímskirkja Concrete Vault & Turf Sanctuaries",
+            "beirut", "Sursock Museum Ottoman-Venetian Arches, Mar Mikhael Heritage Stairs & Corniche",
+            "tokyo", "Tadao Ando Concrete Galleries, Omotesando Modernism & Yanaka Timber Alleys",
+            "oaxaca", "Santo Domingo Cantera Stone Courtyards & Contemporary Adobe Ateliers",
+            "kyoto", "Sukiya-zukuri Cedar Machiya, Katsura Imperial Joinery & Zen Dry-Landscape Gardens",
+            "paris", "Haussmannian Limestone Courtyards, Place des Vosges Arcades & Modernist Ateliers");
+
+    private static final Map<String, String> CITY_ACOUSTIC_MOODS = Map.of(
+            "lisbon", "Warm 12-string Portuguese guitarra resonance paired with Atlantic twilight breeze",
+            "reykjavik", "Intimate bowed cello harmonics and sub-Arctic chamber acoustics inside basalt walls",
+            "beirut", "Levantine oud and Fairuz orchestral nostalgia drifting across Mediterranean limestone courtyards",
+            "tokyo", "Tube-amplified modal jazz vinyl warmth in a subterranean Shibuya kissaten",
+            "kyoto", "Contemplative silk-stringed koto and bamboo shakuhachi phrasing tuned to cedar courtyard mist");
+
+    private static final Map<Integer, String> WMO_CONDITIONS = Map.ofEntries(
+            Map.entry(0, "Clear Sky & Crisp Light"),
+            Map.entry(1, "Partly Clouded Horizon"),
+            Map.entry(2, "Partly Clouded Horizon"),
+            Map.entry(3, "Soft Overcast Canopy"),
+            Map.entry(45, "Atmospheric Mist & Fog"),
+            Map.entry(48, "Atmospheric Mist & Fog"),
+            Map.entry(51, "Light Coastal Drizzle"),
+            Map.entry(53, "Light Coastal Drizzle"),
+            Map.entry(55, "Light Coastal Drizzle"),
+            Map.entry(61, "Fresh Rain Showers"),
+            Map.entry(63, "Fresh Rain Showers"),
+            Map.entry(65, "Fresh Rain Showers"),
+            Map.entry(80, "Fresh Rain Showers"),
+            Map.entry(81, "Fresh Rain Showers"),
+            Map.entry(82, "Fresh Rain Showers"),
+            Map.entry(71, "Crisp Snowfall"),
+            Map.entry(73, "Crisp Snowfall"),
+            Map.entry(75, "Crisp Snowfall"),
+            Map.entry(95, "Electric Storm Front"),
+            Map.entry(96, "Electric Storm Front"),
+            Map.entry(99, "Electric Storm Front"));
+
     @PostConstruct
     void init() {
         resetState();
@@ -451,14 +522,10 @@ public class NomadMcpConciergeService {
         String resolvedCity = normalizeCity(city);
         String cond = (weatherCondition == null || weatherCondition.isBlank()) ? "Ambient local sky" : weatherCondition;
         String resolvedGenre = (genre == null || genre.isBlank()) ? "regional acoustic" : genre;
-        String moodDistillation = switch (resolvedCity.toLowerCase(Locale.ROOT)) {
-            case "lisbon" -> "Warm 12-string Portuguese guitarra resonance paired with Atlantic twilight breeze (" + cond + ").";
-            case "reykjavik" -> "Intimate bowed cello harmonics and sub-Arctic chamber acoustics inside basalt walls (" + cond + ").";
-            case "beirut" -> "Levantine oud and Fairuz orchestral nostalgia drifting across Mediterranean limestone courtyards (" + cond + ").";
-            case "tokyo" -> "Tube-amplified modal jazz vinyl warmth in a subterranean Shibuya kissaten (" + cond + ").";
-            case "kyoto" -> "Contemplative silk-stringed koto and bamboo shakuhachi phrasing tuned to cedar courtyard mist (" + cond + ").";
-            default -> "Curated " + resolvedGenre + " listening atmosphere tailored to " + resolvedCity + " (" + cond + ").";
-        };
+        String baseMood = CITY_ACOUSTIC_MOODS.get(resolvedCity.toLowerCase(Locale.ROOT));
+        String moodDistillation = baseMood != null
+                ? baseMood + " (" + cond + ")."
+                : "Curated " + resolvedGenre + " listening atmosphere tailored to " + resolvedCity + " (" + cond + ").";
         return Map.of(
                 "status", "OK",
                 "protocol", "mcp:sampling",
@@ -521,22 +588,7 @@ public class NomadMcpConciergeService {
     }
 
     private CityCoordinates resolveCityCoordinates(String city) {
-        String lower = city.toLowerCase(Locale.ROOT);
-        CityCoordinates known = switch (lower) {
-            case "kyoto" -> new CityCoordinates("Kyoto", "Japan", 35.0116, 135.7681);
-            case "lisbon" -> new CityCoordinates("Lisbon", "Portugal", 38.7223, -9.1393);
-            case "reykjavik" -> new CityCoordinates("Reykjavik", "Iceland", 64.1466, -21.9426);
-            case "beirut" -> new CityCoordinates("Beirut", "Lebanon", 33.8938, 35.5018);
-            case "tokyo" -> new CityCoordinates("Tokyo", "Japan", 35.6762, 139.6503);
-            case "paris" -> new CityCoordinates("Paris", "France", 48.8566, 2.3522);
-            case "rome" -> new CityCoordinates("Rome", "Italy", 41.9028, 12.4964);
-            case "barcelona" -> new CityCoordinates("Barcelona", "Spain", 41.3874, 2.1686);
-            case "london" -> new CityCoordinates("London", "United Kingdom", 51.5072, -0.1276);
-            case "seoul" -> new CityCoordinates("Seoul", "South Korea", 37.5665, 126.9780);
-            case "new york" -> new CityCoordinates("New York", "United States", 40.7128, -74.0060);
-            case "marrakech" -> new CityCoordinates("Marrakech", "Morocco", 31.6295, -7.9811);
-            default -> null;
-        };
+        CityCoordinates known = KNOWN_COORDINATES.get(city.toLowerCase(Locale.ROOT));
         if (known != null) {
             return known;
         }
@@ -630,47 +682,19 @@ public class NomadMcpConciergeService {
         if (!isGeneric) {
             return trimmedGenre;
         }
-        return switch (city.toLowerCase(Locale.ROOT)) {
-            case "lisbon", "porto" -> "Amalia Rodrigues Fado";
-            case "reykjavik" -> "Olafur Arnalds strings";
-            case "kyoto" -> "koto shakuhachi";
-            case "tokyo", "osaka" -> "Ryuichi Sakamoto";
-            case "paris", "lyon" -> "Erik Satie piano";
-            case "rome", "florence", "venice", "milan" -> "Ennio Morricone";
-            case "barcelona", "madrid", "seville" -> "Paco de Lucia guitar";
-            case "marrakech" -> "gnawa oud";
-            case "oaxaca", "mexico city" -> "Lila Downs Oaxaca";
-            case "buenos aires" -> "Astor Piazzolla tango";
-            case "beirut" -> "Fairuz";
-            default -> city + (trimmedGenre.isEmpty() ? " acoustic" : " " + trimmedGenre);
-        };
+        return CITY_MUSIC_QUERIES.getOrDefault(
+                city.toLowerCase(Locale.ROOT),
+                city + (trimmedGenre.isEmpty() ? " acoustic" : " " + trimmedGenre));
     }
 
     private String architecturalHighlightFor(String city) {
-        return switch (city.toLowerCase(Locale.ROOT)) {
-            case "lisbon" -> "Alfama Azulejo Terraces, Chiado Pombaline Ironwork & MAAT Riverfront";
-            case "reykjavik" -> "Harpa Basalt Columns, Hallgrímskirkja Concrete Vault & Turf Sanctuaries";
-            case "beirut" -> "Sursock Museum Ottoman-Venetian Arches, Mar Mikhael Heritage Stairs & Corniche";
-            case "tokyo" -> "Tadao Ando Concrete Galleries, Omotesando Modernism & Yanaka Timber Alleys";
-            case "oaxaca" -> "Santo Domingo Cantera Stone Courtyards & Contemporary Adobe Ateliers";
-            case "kyoto" -> "Sukiya-zukuri Cedar Machiya, Katsura Imperial Joinery & Zen Dry-Landscape Gardens";
-            case "paris" -> "Haussmannian Limestone Courtyards, Place des Vosges Arcades & Modernist Ateliers";
-            default -> city + " Historic & Modernist Architectural Corridors";
-        };
+        return CITY_ARCHITECTURE.getOrDefault(
+                city.toLowerCase(Locale.ROOT),
+                city + " Historic & Modernist Architectural Corridors");
     }
 
     private String describeWmoCode(int code) {
-        return switch (code) {
-            case 0 -> "Clear Sky & Crisp Light";
-            case 1, 2 -> "Partly Clouded Horizon";
-            case 3 -> "Soft Overcast Canopy";
-            case 45, 48 -> "Atmospheric Mist & Fog";
-            case 51, 53, 55 -> "Light Coastal Drizzle";
-            case 61, 63, 65, 80, 81, 82 -> "Fresh Rain Showers";
-            case 71, 73, 75, 77, 85, 86 -> "Crisp Snowfall";
-            case 95, 96, 99 -> "Electric Storm Front";
-            default -> "Variable Local Conditions";
-        };
+        return WMO_CONDITIONS.getOrDefault(code, "Variable Local Conditions");
     }
 
     private String normalizeCity(String raw) {
