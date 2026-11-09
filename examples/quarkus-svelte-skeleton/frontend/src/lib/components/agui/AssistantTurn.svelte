@@ -19,9 +19,13 @@
 		onApproveHitl,
 		onRejectHitl
 	} = $props();
+
+	let hasCompanion = $derived(
+		Boolean(turn.media?.length || turn.interaction || pendingApproval)
+	);
 </script>
 
-<article class="nomad-card turn-enter rounded-2xl p-4 sm:p-5 space-y-3.5">
+<article class="nomad-card turn-enter turn-card-container rounded-2xl p-4 sm:p-5 space-y-3.5">
 	<header class="flex items-center justify-between gap-2 border-b border-[#E4E0D8] pb-2.5">
 		<div class="flex items-center gap-2">
 			<div class="flex size-7 items-center justify-center rounded-lg bg-[#141413] text-white">
@@ -42,25 +46,33 @@
 
 	<ExecutionTimeline timeline={turn.timeline} />
 
-	<StreamingMarkdownBody content={turn.content} {isStreaming} />
+	<div class="turn-editorial-split {hasCompanion ? 'has-companion' : ''}">
+		<div class="min-w-0 flex-1">
+			<StreamingMarkdownBody content={turn.content} {isStreaming} />
+		</div>
 
-	<MediaGallery media={turn.media} />
+		{#if hasCompanion}
+			<aside class="turn-companion-col space-y-3.5 min-w-0" aria-label="Destination Media & Interactive Controls">
+				<MediaGallery media={turn.media} />
 
-	<StructuredResponseBlock
-		interaction={turn.interaction}
-		disabled={isStreaming}
-		onSelectOption={(opt) => onSelectOption?.(turn.id, opt)}
-		onConfirmMultiSelect={(vals) => onConfirmMultiSelect?.(turn.id, vals)}
-		onTriggerAction={(prompt) => onTriggerPrompt?.(prompt)}
-	/>
+				<StructuredResponseBlock
+					interaction={turn.interaction}
+					disabled={isStreaming}
+					onSelectOption={(opt) => onSelectOption?.(turn.id, opt)}
+					onConfirmMultiSelect={(vals) => onConfirmMultiSelect?.(turn.id, vals)}
+					onTriggerAction={(prompt) => onTriggerPrompt?.(prompt)}
+				/>
 
-	{#if pendingApproval}
-		<HitlApprovalCard
-			{pendingApproval}
-			onApprove={onApproveHitl}
-			onReject={onRejectHitl}
-		/>
-	{/if}
+				{#if pendingApproval}
+					<HitlApprovalCard
+						{pendingApproval}
+						onApprove={onApproveHitl}
+						onReject={onRejectHitl}
+					/>
+				{/if}
+			</aside>
+		{/if}
+	</div>
 
 	{#if !isStreaming}
 		<TurnFooter

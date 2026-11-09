@@ -108,7 +108,7 @@ class SpecialistAuditAgentServiceTest {
             if (url.contains("/v1/latest")) {
                 return "{\"amount\":1.0,\"base\":\"USD\",\"rates\":{\"JPY\":153.25,\"EUR\":0.91}}";
             }
-            if (url.contains("/v3.1/name/")) {
+            if (url.contains("/v3.1/name/") && url.contains("fields=name,capital,currencies,region,timezones")) {
                 return "[{\"name\":{\"common\":\"Japan\"},\"capital\":[\"Tokyo\"],\"region\":\"Asia\",\"timezones\":[\"UTC+09:00\"]}]";
             }
             return null;

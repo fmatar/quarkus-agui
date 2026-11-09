@@ -124,7 +124,9 @@ public class SpecialistAuditAgentService {
         }
         String source = "restcountries-fallback";
         try {
-            String url = restCountriesBaseUrl + "/v3.1/name/" + URLEncoder.encode(country, StandardCharsets.UTF_8);
+            String url = restCountriesBaseUrl + "/v3.1/name/"
+                    + URLEncoder.encode(country, StandardCharsets.UTF_8)
+                    + "?fields=name,capital,currencies,region,timezones";
             String body = httpFetcher.apply(url);
             if (body != null) {
                 JsonNode arr = objectMapper.readTree(body);
@@ -293,7 +295,9 @@ public class SpecialistAuditAgentService {
             return staticCurrency;
         }
         try {
-            String url = restCountriesBaseUrl + "/v3.1/name/" + URLEncoder.encode(country, StandardCharsets.UTF_8);
+            String url = restCountriesBaseUrl + "/v3.1/name/"
+                    + URLEncoder.encode(country, StandardCharsets.UTF_8)
+                    + "?fields=name,capital,currencies,region,timezones";
             String body = httpFetcher.apply(url);
             if (body != null) {
                 JsonNode arr = objectMapper.readTree(body);

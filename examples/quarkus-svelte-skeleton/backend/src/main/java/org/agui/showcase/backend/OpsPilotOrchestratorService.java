@@ -1677,13 +1677,62 @@ public class OpsPilotOrchestratorService {
                 "options", options);
     }
 
+    @SuppressWarnings("unchecked")
     private List<Map<String, Object>> buildTurnSources(String city) {
+        Map<String, Object> trip = activeNomadTripState();
+        String country = String.valueOf(trip.getOrDefault("country", A2aGatewayClient.resolveCountryForCity(city)));
+        String currency = String.valueOf(trip.getOrDefault("currency", A2aGatewayClient.resolveCurrencyForCountry(country)));
+        double lat = trip.get("latitude") instanceof Number n ? n.doubleValue() : resolveCityCoordinates(city)[0];
+        double lon = trip.get("longitude") instanceof Number n ? n.doubleValue() : resolveCityCoordinates(city)[1];
+        String artistQuery = city + " traditional music";
+        if (trip.get("soundtrack") instanceof Map<?, ?> st) {
+            Object artistObj = ((Map<String, Object>) st).get("artistName");
+            if (artistObj instanceof String a && !a.isBlank()) {
+                artistQuery = a + " " + city;
+            }
+        }
+        String openMeteoUrl = String.format(
+                Locale.ROOT,
+                "https://api.open-meteo.com/v1/forecast?latitude=%.4f&longitude=%.4f&current=temperature_2m,weather_code,wind_speed_10m",
+                lat,
+                lon);
+        String wikiUrl = "https://en.wikipedia.org/wiki/" + city.trim().replace(" ", "_");
+        String itunesUrl = "https://itunes.apple.com/search?term="
+                + java.net.URLEncoder.encode(artistQuery, StandardCharsets.UTF_8)
+                + "&media=music&limit=1";
+        String frankfurterUrl = "https://api.frankfurter.dev/v1/latest?base=USD&symbols="
+                + java.net.URLEncoder.encode(currency, StandardCharsets.UTF_8);
+        String restCountriesUrl = "https://restcountries.com/v3.1/name/"
+                + java.net.URLEncoder.encode(country, StandardCharsets.UTF_8)
+                + "?fields=name,capital,currencies,region,timezones";
+
         return List.of(
-                Map.of("title", "Open-Meteo Weather API (" + city + ")", "url", "https://api.open-meteo.com", "protocol", "mcp:tool"),
-                Map.of("title", "Wikipedia REST API v1 (" + city + ")", "url", "https://en.wikipedia.org/wiki/" + city.replace(" ", "_"), "protocol", "mcp:tool"),
-                Map.of("title", "Apple iTunes 30s Audio Preview", "url", "https://itunes.apple.com", "protocol", "mcp:tool"),
-                Map.of("title", "Frankfurter ECB FX Reference", "url", "https://api.frankfurter.dev", "protocol", "a2a:task"),
-                Map.of("title", "REST Countries Advisory v3.1", "url", "https://restcountries.com", "protocol", "a2a:artifact"));
+                Map.of("title", "Open-Meteo Weather API (" + city + ")", "url", openMeteoUrl, "protocol", "mcp:tool"),
+                Map.of("title", "Wikipedia REST API v1 (" + city + ")", "url", wikiUrl, "protocol", "mcp:tool"),
+                Map.of("title", "Apple iTunes 30s Audio Preview", "url", itunesUrl, "protocol", "mcp:tool"),
+                Map.of("title", "Frankfurter ECB FX Reference (" + currency + ")", "url", frankfurterUrl, "protocol", "a2a:task"),
+                Map.of("title", "REST Countries Advisory v3.1 (" + country + ")", "url", restCountriesUrl, "protocol", "a2a:artifact"));
+    }
+
+    private static double[] resolveCityCoordinates(String city) {
+        if (city == null) {
+            return new double[]{35.0116, 135.7681};
+        }
+        return switch (city.trim().toLowerCase(Locale.ROOT)) {
+            case "lisbon" -> new double[]{38.7223, -9.1393};
+            case "reykjavik" -> new double[]{64.1466, -21.9426};
+            case "tokyo" -> new double[]{35.6762, 139.6503};
+            case "beirut" -> new double[]{33.8938, 35.5018};
+            case "paris" -> new double[]{48.8566, 2.3522};
+            case "rome" -> new double[]{41.9028, 12.4964};
+            case "barcelona" -> new double[]{41.3874, 2.1686};
+            case "london" -> new double[]{51.5072, -0.1276};
+            case "seoul" -> new double[]{37.5665, 126.9780};
+            case "new york" -> new double[]{40.7128, -74.0060};
+            case "marrakech" -> new double[]{31.6295, -7.9811};
+            case "oaxaca" -> new double[]{17.0732, -96.7266};
+            default -> new double[]{35.0116, 135.7681};
+        };
     }
 
     private List<String> buildTurnFollowUps(String city) {

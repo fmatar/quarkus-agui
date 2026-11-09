@@ -371,10 +371,31 @@ export function createInitialWorkbenchState(threadId = 'thread-nomad-1') {
 				],
 				interaction: null,
 				sources: [
-					{ title: 'Open-Meteo Live Weather', url: 'https://api.open-meteo.com', protocol: 'mcp:tool' },
-					{ title: 'Wikipedia REST API v1', url: 'https://en.wikipedia.org/wiki/Kyoto', protocol: 'mcp:tool' },
-					{ title: 'Apple iTunes 30s Audio', url: 'https://itunes.apple.com', protocol: 'mcp:tool' },
-					{ title: 'Frankfurter ECB FX', url: 'https://api.frankfurter.dev', protocol: 'a2a:task' }
+					{
+						title: 'Open-Meteo Weather API (Kyoto)',
+						url: 'https://api.open-meteo.com/v1/forecast?latitude=35.0116&longitude=135.7681&current=temperature_2m,weather_code,wind_speed_10m',
+						protocol: 'mcp:tool'
+					},
+					{
+						title: 'Wikipedia REST API v1 (Kyoto)',
+						url: 'https://en.wikipedia.org/wiki/Kyoto',
+						protocol: 'mcp:tool'
+					},
+					{
+						title: 'Apple iTunes 30s Audio Preview',
+						url: 'https://itunes.apple.com/search?term=Chikatoyo+Tsujimoto+Kyoto&media=music&limit=1',
+						protocol: 'mcp:tool'
+					},
+					{
+						title: 'Frankfurter ECB FX Reference (JPY)',
+						url: 'https://api.frankfurter.dev/v1/latest?base=USD&symbols=JPY',
+						protocol: 'a2a:task'
+					},
+					{
+						title: 'REST Countries Advisory v3.1 (Japan)',
+						url: 'https://restcountries.com/v3.1/name/Japan?fields=name,capital,currencies,region,timezones',
+						protocol: 'a2a:artifact'
+					}
 				],
 				followUps: [
 					'Give me 2 random evening options in Kyoto to pick from',

@@ -54,14 +54,19 @@ export function renderMarkdownToHtml(markdown) {
 	function closeTable() {
 		if (inTable) {
 			if (tableRows.length > 0) {
-				let tableHtml = '<div class="overflow-x-auto my-3 rounded-xl border border-[#E4E0D8] bg-white"><table class="w-full text-left text-xs">';
+				let tableHtml = '<div class="overflow-x-auto my-3.5 rounded-xl border border-[#E4E0D8] bg-white shadow-2xs"><table class="w-full text-left text-xs tabular-nums">';
 				tableRows.forEach((row, idx) => {
 					const isHeader = idx === 0;
 					const tag = isHeader ? 'th' : 'td';
-					const bg = isHeader ? 'bg-[#F6F5F2] text-[#141413] font-semibold border-b border-[#E4E0D8]' : 'border-b border-[#E4E0D8] text-[#575551] hover:bg-[#FAF9F6]';
+					const bg = isHeader
+						? 'bg-[#F6F5F2] text-[#141413] font-semibold border-b border-[#E4E0D8]'
+						: 'border-b border-[#E4E0D8] last:border-b-0 text-[#575551] hover:bg-[#FAF9F6]';
 					tableHtml += `<tr class="${bg}">`;
-					row.forEach(cell => {
-						tableHtml += `<${tag} class="px-3.5 py-2">${parseInline(cell.trim())}</${tag}>`;
+					row.forEach((cell, cellIdx) => {
+						const trimmed = cell.trim();
+						const isNumericOrCost = /^[$€¥£₹]?\s*\d|cost|budget|price|rate|total|amount/i.test(trimmed);
+						const alignClass = cellIdx > 0 && isNumericOrCost ? 'text-right font-mono font-medium text-[#141413]' : '';
+						tableHtml += `<${tag} class="px-4 py-2.5 ${alignClass}">${parseInline(trimmed)}</${tag}>`;
 					});
 					tableHtml += '</tr>';
 				});

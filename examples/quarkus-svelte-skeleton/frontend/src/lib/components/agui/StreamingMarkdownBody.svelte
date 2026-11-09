@@ -5,7 +5,7 @@
 </script>
 
 {#if content}
-	<div class="nomad-markdown max-w-[72ch] text-sm leading-relaxed text-[#141413] space-y-2.5">
+	<div class="nomad-markdown max-w-[78ch] text-sm leading-relaxed text-[#141413] space-y-2.5">
 		{@html renderMarkdownToHtml(content)}
 		{#if isStreaming}
 			<span
