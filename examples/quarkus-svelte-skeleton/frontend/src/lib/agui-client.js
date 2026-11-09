@@ -5,6 +5,17 @@
 
 export const NOMAD_DESTINATIONS = [
 	{
+		id: 'beirut',
+		city: 'Beirut',
+		country: 'Lebanon',
+		currency: 'LBP',
+		exchangeRate: 89500,
+		temperatureC: 24.0,
+		condition: 'Mediterranean Coastal Sun & Sea Breeze',
+		tagline: 'Levantine Limestone Arcades, Sursock Modernism & Oud Acoustics',
+		prompt: 'Plan a 4-night Beirut architectural, Levantine culinary & Oud music itinerary'
+	},
+	{
 		id: 'kyoto',
 		city: 'Kyoto',
 		country: 'Japan',
@@ -40,6 +51,13 @@ export const NOMAD_DESTINATIONS = [
 ];
 
 export const SLASH_COMMANDS = [
+	{
+		command: '/beirut',
+		label: 'Beirut Modernism & Oud Dossier',
+		description: 'Mediterranean weather, Levantine landmarks, 30s Fairuz/Oud preview & LBP FX audit',
+		protocol: 'MCP + A2A',
+		prompt: 'Plan a 4-night Beirut architectural, Levantine culinary & Oud music itinerary'
+	},
 	{
 		command: '/kyoto',
 		label: 'Kyoto Cultural & Koto Dossier',
@@ -287,23 +305,18 @@ export function createInitialWorkbenchState(threadId = 'thread-nomad-1') {
 			uri: 'itinerary://active-trip',
 			nomadTrip: {
 				uri: 'itinerary://active-trip',
-				activeCity: 'Kyoto',
-				country: 'Japan',
-				currency: 'JPY',
-				exchangeRate: 151.4,
-				temperatureC: 18.4,
-				weatherCondition: 'Clear Cedar & Autumn Mist',
+				activeCity: null,
+				country: null,
+				currency: null,
+				exchangeRate: null,
+				temperatureC: null,
+				weatherCondition: null,
 				nights: 4,
-				stopTitle: 'Hoshinoya Arashiyama Pavilion',
+				stopTitle: null,
 				budgetUsd: 3200,
-				allocatedUsd: 1680,
+				allocatedUsd: 0,
 				homeCurrency: 'USD',
-				soundtrack: {
-					trackName: 'Four Seasons in Kyoto (Koto & Shakuhachi)',
-					artistName: 'Chikatoyo Tsujimoto',
-					previewUrl:
-						'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/9b/27/76/9b2776c5-65cd-87f1-3f33-ccbccc642285/mzaf_16549365214060917501.plus.aac.p.m4a'
-				}
+				soundtrack: null
 			},
 			preferences: {
 				uri: 'traveler://preferences',
@@ -320,88 +333,55 @@ export function createInitialWorkbenchState(threadId = 'thread-nomad-1') {
 				role: 'assistant',
 				status: 'completed',
 				content:
-					'### Welcome to Nomad — Architectural, Weather & Local Culture Concierge\n\nI curate bespoke travel dossiers for **any city in the world**, combining live **Open-Meteo weather forecasts**, **Wikipedia architectural & cultural context**, and **30-second Apple iTunes local music previews** with **Frankfurter ECB currency conversion** and **REST Countries travel advisories**.\n\nAsk about any destination (e.g., *Tokyo*, *Oaxaca*, *Paris*, *Copenhagen*, *Marrakech*), sample the 30-second Kyoto Koto preview below, or choose an experience sequence to begin.',
-				reasoning: {
-					durationMs: 840,
-					thought:
-						'Initialized active Kyoto itinerary dossier with live Open-Meteo telemetry, Wikipedia cultural context, Apple iTunes 30s audio preview, and Frankfurter JPY FX rate.'
-				},
-				timeline: [
-					{
-						id: 'init-mcp-res',
-						callType: 'mcp:resource',
-						title: 'itinerary://active-trip',
-						subtitle: 'Active Trip Dossier',
-						status: 'completed',
-						detail: 'Loaded 4-night Kyoto sanctuary dossier ($1,680 / $3,200 USD allocated)'
-					},
-					{
-						id: 'init-mcp-tool',
-						callType: 'mcp:tool',
-						title: 'fetchCityWeather',
-						subtitle: 'Open-Meteo Live API',
-						status: 'completed',
-						detail: 'Kyoto • 18.4°C — Clear Cedar & Autumn Mist'
-					},
-					{
-						id: 'init-a2a-fx',
-						callType: 'a2a:task',
-						title: 'convert-and-audit-budget',
-						subtitle: 'Frankfurter ECB FX',
-						status: 'completed',
-						detail: 'Frankfurter FX: $3,200 USD = ¥484,480 JPY (1 USD = 151.40 JPY)'
-					}
-				],
+					'### Welcome to Nomad — Cultural, Architectural & Acoustic Concierge\n\nWhich city or cultural landscape would you like to explore?\n\nSelect a starter destination from the **Destination Picker** on the right, or type **any city in the world** below (e.g., *Beirut*, *Kyoto*, *Lisbon*, *Reykjavik*, *Marrakech*, *Tokyo*, *Oaxaca*) to synthesize a live Tri-Protocol dossier combining:\n- **Live Weather & Terroir (`MCP`)** via Open-Meteo geocoding & forecast telemetry\n- **Architectural Context & 30s Regional Audio (`MCP`)** via Wikipedia REST v1 & Apple iTunes Search\n- **Currency & Travel Advisory Audit (`A2A`)** via Frankfurter ECB FX & REST Countries v3.1\n- **Cultural Field Notes RAG & Specialist Council (`LangChain4j + AG-UI`)**',
+				reasoning: null,
+				timeline: [],
 				mcpCalls: [],
 				a2aSteps: [],
-				media: [
-					{
-						type: 'image',
-						title: 'Kyoto — Architectural & Cultural Landmark',
-						subtitle: 'Wikipedia REST API • Live Destination Photography',
-						url: 'https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?auto=format&fit=crop&w=1000&q=80'
-					},
-					{
-						type: 'audio',
-						title: 'Four Seasons in Kyoto (Koto & Shakuhachi)',
-						subtitle: 'Chikatoyo Tsujimoto • Apple iTunes 30s Preview',
-						url: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/9b/27/76/9b2776c5-65cd-87f1-3f33-ccbccc642285/mzaf_16549365214060917501.plus.aac.p.m4a',
-						durationSeconds: 30
-					}
-				],
-				interaction: null,
-				sources: [
-					{
-						title: 'Open-Meteo Weather API (Kyoto)',
-						url: 'https://api.open-meteo.com/v1/forecast?latitude=35.0116&longitude=135.7681&current=temperature_2m,weather_code,wind_speed_10m',
-						protocol: 'mcp:tool'
-					},
-					{
-						title: 'Wikipedia REST API v1 (Kyoto)',
-						url: 'https://en.wikipedia.org/wiki/Kyoto',
-						protocol: 'mcp:tool'
-					},
-					{
-						title: 'Apple iTunes 30s Audio Preview',
-						url: 'https://itunes.apple.com/search?term=Chikatoyo+Tsujimoto+Kyoto&media=music&limit=1',
-						protocol: 'mcp:tool'
-					},
-					{
-						title: 'Frankfurter ECB FX Reference (JPY)',
-						url: 'https://api.frankfurter.dev/v1/latest?base=USD&symbols=JPY',
-						protocol: 'a2a:task'
-					},
-					{
-						title: 'REST Countries Advisory v3.1 (Japan)',
-						url: 'https://restcountries.com/v3.1/name/Japan?fields=name,capital,currencies,region,timezones',
-						protocol: 'a2a:artifact'
-					}
-				],
+				media: [],
+				interaction: {
+					id: 'welcome-city-picker',
+					mode: 'single_select',
+					prompt: 'Choose a destination to initialize your live Trip Dossier:',
+					selectedValues: [],
+					submitted: false,
+					options: [
+						{
+							id: 'pick-beirut',
+							label: 'Beirut, Lebanon',
+							description: 'Levantine limestone arcades, Sursock modernism, coastal terroir & Oud acoustics',
+							badge: 'LBP • Mediterranean',
+							prompt: 'Plan a 4-night Beirut architectural, Levantine culinary & Oud music itinerary'
+						},
+						{
+							id: 'pick-kyoto',
+							label: 'Kyoto, Japan',
+							description: 'Arashiyama cedar pavilions, Gion machiya joinery, kaiseki & Koto strings',
+							badge: 'JPY • East Asia',
+							prompt: 'Curate a 4-night Kyoto architectural, culinary & Koto music itinerary'
+						},
+						{
+							id: 'pick-lisbon',
+							label: 'Lisbon, Portugal',
+							description: 'Alfama azulejo terraces, Siza Vieira concrete geometry & acoustic Fado',
+							badge: 'EUR • Atlantic',
+							prompt: 'Plan a 4-night Lisbon Fado, azulejo atelier & coastal itinerary'
+						},
+						{
+							id: 'pick-reykjavik',
+							label: 'Reykjavik, Iceland',
+							description: 'Harpa basalt facades, geothermal lagoons & Nordic chamber strings',
+							badge: 'ISK • Sub-Arctic',
+							prompt: 'Design a 4-night Reykjavik aurora, geothermal & chamber music escape'
+						}
+					]
+				},
+				sources: [],
 				followUps: [
-					'Give me 2 random evening options in Kyoto to pick from',
-					'Create 4 culinary and music experiences in Lisbon so I can select multiple',
-					'Plan a 3-day architectural, culinary and music trip in Beirut',
-					'Reserve Hoshinoya Arashiyama Pavilion in Kyoto for 4 nights'
+					'Plan a 4-night architectural, culinary and music trip in Beirut',
+					'Curate a 4-night Kyoto architectural & Koto music escape',
+					'Compare 4 neighborhood culinary & music experiences in Lisbon',
+					'Design a 4-night Tokyo modernist architecture & vinyl kissaten itinerary'
 				]
 			}
 		],
@@ -461,16 +441,22 @@ export function reduceAgUiEvent(state, event) {
 	const currentTurn = state.activeTurn ?? createEmptyActiveTurn();
 
 	switch (event.type) {
-		case 'WS_CONNECTED':
+		case 'WS_CONNECTED': {
+			const incomingTurns = payload.memoryTurns ?? state.memoryTurns ?? 0;
+			const hasExistingCity = Boolean(state.clusterState?.nomadTrip?.activeCity);
 			return {
 				...state,
 				wsConnected: true,
 				transportMode: 'ws',
-				memoryTurns: payload.memoryTurns ?? state.memoryTurns ?? 0,
-				clusterState: payload.clusterState ?? state.clusterState,
+				memoryTurns: incomingTurns,
+				clusterState:
+					incomingTurns > 0 || hasExistingCity
+						? (payload.clusterState ?? state.clusterState)
+						: state.clusterState,
 				statusText: 'WebSocket Full-Duplex Connected (/api/agent/ws)',
 				events: nextEvents
 			};
+		}
 
 		case 'RUN_STARTED':
 			return {
@@ -491,7 +477,7 @@ export function reduceAgUiEvent(state, event) {
 				const initial = createInitialWorkbenchState(state.threadId);
 				return {
 					...state,
-					clusterState: payload.clusterState ?? initial.clusterState,
+					clusterState: initial.clusterState,
 					memoryTurns: 0,
 					isStreaming: false,
 					pendingApproval: null,
@@ -503,10 +489,31 @@ export function reduceAgUiEvent(state, event) {
 				};
 			}
 			if (payload.status === 'params_updated') {
+				const hasExistingCity = Boolean(state.clusterState?.nomadTrip?.activeCity);
+				const incomingTurns = payload.memoryTurns ?? state.memoryTurns ?? 0;
+				const incomingCluster = payload.clusterState ?? state.clusterState;
+				const nextClusterState =
+					hasExistingCity || incomingTurns > 0
+						? incomingCluster
+						: {
+								...incomingCluster,
+								nomadTrip: {
+									...(incomingCluster?.nomadTrip ?? {}),
+									activeCity: null,
+									country: null,
+									currency: null,
+									exchangeRate: null,
+									temperatureC: null,
+									weatherCondition: null,
+									stopTitle: null,
+									allocatedUsd: 0,
+									soundtrack: null
+								}
+							};
 				return {
 					...state,
-					clusterState: payload.clusterState ?? state.clusterState,
-					memoryTurns: payload.memoryTurns ?? state.memoryTurns ?? 0,
+					clusterState: nextClusterState,
+					memoryTurns: incomingTurns,
 					statusText: 'Trip parameters updated via live WebSocket (<50ms)',
 					events: nextEvents
 				};

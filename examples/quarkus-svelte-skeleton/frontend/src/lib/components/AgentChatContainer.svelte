@@ -337,9 +337,13 @@
 		const isMulti = targetMsg?.interaction?.mode === 'multi_select';
 		workbench = selectTurnOption(workbench, messageId, opt.id);
 		if (!isMulti) {
-			const city = workbench.clusterState?.nomadTrip?.activeCity ?? 'Kyoto';
-			const detail = opt.description ? ` (${opt.description})` : '';
-			runScenarioPrompt(`Selected itinerary preference: ${opt.label}${detail} in ${city}`);
+			if (opt.prompt) {
+				runScenarioPrompt(opt.prompt);
+			} else {
+				const city = workbench.clusterState?.nomadTrip?.activeCity ?? 'Kyoto';
+				const detail = opt.description ? ` (${opt.description})` : '';
+				runScenarioPrompt(`Selected itinerary preference: ${opt.label}${detail} in ${city}`);
+			}
 		}
 	}
 

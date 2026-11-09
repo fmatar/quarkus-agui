@@ -26,23 +26,22 @@
 
 	let nomadTrip = $derived(
 		clusterState?.nomadTrip ?? {
-			activeCity: 'Kyoto',
-			country: 'Japan',
-			currency: 'JPY',
-			exchangeRate: 151.4,
-			temperatureC: 18.4,
-			weatherCondition: 'Clear Cedar & Autumn Mist',
+			activeCity: null,
+			country: null,
+			currency: null,
+			exchangeRate: null,
+			temperatureC: null,
+			weatherCondition: 'Awaiting city selection',
 			nights: 4,
-			stopTitle: 'Hoshinoya Arashiyama Pavilion',
+			stopTitle: 'Select or type any city to initialize live telemetry',
 			budgetUsd: 3200,
-			allocatedUsd: 1680,
+			allocatedUsd: 0,
 			homeCurrency: 'USD',
-			soundtrack: {
-				trackName: 'Haru no Umi (Spring Sea — Koto & Shakuhachi)',
-				artistName: 'Kyoto Koto Consort'
-			}
+			soundtrack: null
 		}
 	);
+
+	let hasActiveCity = $derived(Boolean(nomadTrip?.activeCity));
 
 	let preferences = $derived(
 		clusterState?.preferences ?? {
@@ -65,31 +64,35 @@
 	);
 
 	let budgetPercent = $derived(
-		Math.min(100, Math.round(((nomadTrip.allocatedUsd ?? 1680) / (nomadTrip.budgetUsd ?? 3200)) * 100))
+		hasActiveCity
+			? Math.min(100, Math.round(((nomadTrip.allocatedUsd ?? 0) / (nomadTrip.budgetUsd ?? 3200)) * 100))
+			: 0
 	);
 
 	let convertedTotal = $derived(
-		Math.round((nomadTrip.allocatedUsd ?? 1680) * (nomadTrip.exchangeRate ?? 151.4))
+		hasActiveCity
+			? Math.round((nomadTrip.allocatedUsd ?? 0) * (nomadTrip.exchangeRate ?? 1))
+			: 0
 	);
 
 	const rawCounters = {
-		temp: 18.4,
-		fxTotal: 254352,
-		allocated: 1680
+		temp: 0,
+		fxTotal: 0,
+		allocated: 0
 	};
 
 	let tweenState = $state({
-		temp: 18.4,
-		fxTotal: 254352,
-		allocated: 1680
+		temp: 0,
+		fxTotal: 0,
+		allocated: 0
 	});
 
 	let dossierCardEl;
 
 	$effect(() => {
-		const targetTemp = Number(nomadTrip.temperatureC ?? 18.4);
+		const targetTemp = Number(nomadTrip.temperatureC ?? 0);
 		const targetFx = Number(convertedTotal ?? 0);
-		const targetAllocated = Number(nomadTrip.allocatedUsd ?? 1680);
+		const targetAllocated = Number(nomadTrip.allocatedUsd ?? 0);
 		const prefersReduced =
 			typeof window !== 'undefined' &&
 			window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
@@ -117,7 +120,7 @@
 			}
 		});
 
-		if (dossierCardEl) {
+		if (dossierCardEl && hasActiveCity) {
 			gsap.fromTo(
 				dossierCardEl,
 				{ boxShadow: '0 0 0 2px rgba(200, 75, 49, 0.22)' },
@@ -177,9 +180,12 @@
 			</div>
 			<button
 				type="button"
+				disabled={!hasActiveCity}
 				onclick={exportDossierMarkdown}
-				class="inline-flex items-center gap-1 rounded-md border border-[#CFCAC0] bg-white px-2 py-1 font-mono text-[10px] font-semibold text-[#141413] transition-colors hover:border-[#C84B31] hover:text-[#C84B31]"
-				title="Export active destination dossier as Markdown (.md)"
+				class="inline-flex items-center gap-1 rounded-md border border-[#CFCAC0] bg-white px-2 py-1 font-mono text-[10px] font-semibold text-[#141413] transition-colors hover:border-[#C84B31] hover:text-[#C84B31] disabled:cursor-not-allowed disabled:opacity-45"
+				title={hasActiveCity
+					? 'Export active destination dossier as Markdown (.md)'
+					: 'Select a destination first to export its dossier'}
 			>
 				<Download class="size-3" />
 				<span>Export .md</span>
@@ -190,12 +196,21 @@
 		<div bind:this={dossierCardEl} class="rounded-xl border border-[#E4E0D8] bg-white p-3.5 space-y-3">
 			<div class="flex items-start justify-between gap-2">
 				<div class="min-w-0">
-					<h3 class="text-base font-bold text-[#141413] truncate">
-						{nomadTrip.activeCity}, {nomadTrip.country ?? 'Japan'}
-					</h3>
-					<p class="text-xs text-[#575551] leading-snug" title={nomadTrip.stopTitle}>
-						{nomadTrip.stopTitle}
-					</p>
+					{#if hasActiveCity}
+						<h3 class="text-base font-bold text-[#141413] truncate">
+							{nomadTrip.activeCity}{nomadTrip.country ? `, ${nomadTrip.country}` : ''}
+						</h3>
+						<p class="text-xs text-[#575551] leading-snug" title={nomadTrip.stopTitle}>
+							{nomadTrip.stopTitle}
+						</p>
+					{:else}
+						<h3 class="text-sm font-bold text-[#141413]">
+							Awaiting Destination
+						</h3>
+						<p class="text-xs text-[#575551] leading-snug">
+							Select or type any city to initialize live telemetry
+						</p>
+					{/if}
 				</div>
 
 				<!-- Instant WebSocket Nights Stepper -->
@@ -234,12 +249,21 @@
 						<CloudSun class="size-3.5 text-[#C84B31]" />
 						<span>Open-Meteo</span>
 					</div>
-					<div class="mt-1 font-mono text-sm font-bold text-[#141413] tabular-nums">
-						{tweenState.temp.toFixed(1)}°C
-					</div>
-					<div class="truncate text-[11px] text-[#575551]" title={nomadTrip.weatherCondition}>
-						{nomadTrip.weatherCondition}
-					</div>
+					{#if hasActiveCity && nomadTrip.temperatureC != null}
+						<div class="mt-1 font-mono text-sm font-bold text-[#141413] tabular-nums">
+							{tweenState.temp.toFixed(1)}°C
+						</div>
+						<div class="truncate text-[11px] text-[#575551]" title={nomadTrip.weatherCondition}>
+							{nomadTrip.weatherCondition}
+						</div>
+					{:else}
+						<div class="mt-1 font-mono text-sm font-bold text-[#575551] tabular-nums">
+							--°C
+						</div>
+						<div class="truncate text-[11px] text-[#575551]">
+							Awaiting city selection
+						</div>
+					{/if}
 				</div>
 
 				<div class="rounded-lg bg-[#F6F5F2] p-2.5">
@@ -247,12 +271,21 @@
 						<Coins class="size-3.5 text-[#1F6E50] shrink-0" />
 						<span class="truncate">Frankfurter FX</span>
 					</div>
-					<div class="mt-1 truncate whitespace-nowrap font-mono text-sm font-bold text-[#141413] tabular-nums">
-						{formatFxAmount(tweenState.fxTotal)} {nomadTrip.currency}
-					</div>
-					<div class="truncate text-[11px] text-[#575551] tabular-nums">
-						1 {activeHomeCurrency} = {formatFxAmount((nomadTrip.exchangeRate ?? 151.4) / homeCurrencyFactor)} {nomadTrip.currency}
-					</div>
+					{#if hasActiveCity && nomadTrip.currency}
+						<div class="mt-1 truncate whitespace-nowrap font-mono text-sm font-bold text-[#141413] tabular-nums">
+							{formatFxAmount(tweenState.fxTotal)} {nomadTrip.currency}
+						</div>
+						<div class="truncate text-[11px] text-[#575551] tabular-nums">
+							1 {activeHomeCurrency} = {formatFxAmount((nomadTrip.exchangeRate ?? 1) / homeCurrencyFactor)} {nomadTrip.currency}
+						</div>
+					{:else}
+						<div class="mt-1 truncate whitespace-nowrap font-mono text-sm font-bold text-[#575551] tabular-nums">
+							--
+						</div>
+						<div class="truncate text-[11px] text-[#575551] tabular-nums">
+							1 {activeHomeCurrency} = --
+						</div>
+					{/if}
 				</div>
 			</div>
 
@@ -261,7 +294,7 @@
 				<div class="flex items-center justify-between gap-2 text-[11px] text-[#575551] tabular-nums">
 					<span class="whitespace-nowrap">Sanctuary Budget</span>
 					<span class="whitespace-nowrap font-mono font-semibold text-[#141413]">
-						{homeCurrencySymbol}{Math.round(tweenState.allocated * homeCurrencyFactor).toLocaleString()} / {homeCurrencySymbol}{Math.round((nomadTrip.budgetUsd ?? 3200) * homeCurrencyFactor).toLocaleString()} ({budgetPercent}%)
+						{homeCurrencySymbol}{hasActiveCity ? Math.round(tweenState.allocated * homeCurrencyFactor).toLocaleString() : '0'} / {homeCurrencySymbol}{Math.round((nomadTrip.budgetUsd ?? 3200) * homeCurrencyFactor).toLocaleString()} ({budgetPercent}%)
 					</span>
 				</div>
 				<div class="h-1.5 w-full overflow-hidden rounded-full bg-[#EFECE6]">
@@ -362,19 +395,21 @@
 			<div class="space-y-1.5">
 				<button
 					type="button"
-					disabled={isStreaming}
+					disabled={isStreaming || !hasActiveCity}
+					title={hasActiveCity ? `Audit FX & Trip Budget for ${nomadTrip.activeCity}` : 'Select a destination first'}
 					onclick={() => onTriggerSkill?.(`Convert ${nomadTrip.activeCity} budget to ${nomadTrip.currency} and audit limits`)}
-					class="flex w-full items-center justify-between rounded-xl border border-[#E4E0D8] bg-white px-3 py-2 text-left text-xs font-medium text-[#141413] transition-colors hover:border-[#1F6E50] disabled:opacity-40"
+					class="flex w-full items-center justify-between rounded-xl border border-[#E4E0D8] bg-white px-3 py-2 text-left text-xs font-medium text-[#141413] transition-colors hover:border-[#1F6E50] disabled:cursor-not-allowed disabled:opacity-45"
 				>
-					<span class="truncate">Audit FX & Trip Budget ({nomadTrip.currency})</span>
+					<span class="truncate">Audit FX & Trip Budget{nomadTrip.currency ? ` (${nomadTrip.currency})` : ''}</span>
 					<ShieldCheck class="size-3.5 text-[#1F6E50] shrink-0" />
 				</button>
 
 				<button
 					type="button"
-					disabled={isStreaming}
+					disabled={isStreaming || !hasActiveCity}
+					title={hasActiveCity ? `Verify travel advisory for ${nomadTrip.activeCity}` : 'Select a destination first'}
 					onclick={() => onTriggerSkill?.(`Verify travel advisory and entry readiness for ${nomadTrip.activeCity}`)}
-					class="flex w-full items-center justify-between rounded-xl border border-[#E4E0D8] bg-white px-3 py-2 text-left text-xs font-medium text-[#141413] transition-colors hover:border-[#1F6E50] disabled:opacity-40"
+					class="flex w-full items-center justify-between rounded-xl border border-[#E4E0D8] bg-white px-3 py-2 text-left text-xs font-medium text-[#141413] transition-colors hover:border-[#1F6E50] disabled:cursor-not-allowed disabled:opacity-45"
 				>
 					<span class="truncate">Verify Entry & Cultural Advisory</span>
 					<ShieldCheck class="size-3.5 text-[#1F6E50] shrink-0" />
@@ -382,9 +417,10 @@
 
 				<button
 					type="button"
-					disabled={isStreaming}
+					disabled={isStreaming || !hasActiveCity}
+					title={hasActiveCity ? `Reserve ${nomadTrip.stopTitle}` : 'Select a destination first'}
 					onclick={() => onTriggerSkill?.(`Reserve ${nomadTrip.stopTitle} in ${nomadTrip.activeCity} for ${nomadTrip.nights ?? 4} nights ($1840)`)}
-					class="flex w-full items-center justify-between rounded-xl border border-[#C84B31]/40 bg-[#FBEEE9]/70 px-3 py-2 text-left text-xs font-semibold text-[#C84B31] transition-colors hover:bg-[#FBEEE9] disabled:opacity-40"
+					class="flex w-full items-center justify-between rounded-xl border border-[#C84B31]/40 bg-[#FBEEE9]/70 px-3 py-2 text-left text-xs font-semibold text-[#C84B31] transition-colors hover:bg-[#FBEEE9] disabled:cursor-not-allowed disabled:opacity-45"
 				>
 					<span class="truncate">Hold Sanctuary Suite ($1,840)</span>
 					<Server class="size-3.5 shrink-0" />
