@@ -256,6 +256,10 @@ For scale-to-zero serverless deployments (`~25–45ms` cold startup, `~50MB` RSS
 
 ## 6. How to Use the Nomad Studio Workbench (`http://localhost:8080`)
 
+### 6.0 Initial Onboarding: Interactive Destination Picker & Awaiting Destination Dossier
+- **Center Pane (`Welcome to Nomad`)**: Opens with an interactive **Single-Select Destination Picker Card** (`Beirut, Lebanon`, `Kyoto, Japan`, `Lisbon, Portugal`, `Reykjavik, Iceland`) asking *"Which city or cultural landscape would you like to explore?"* — clicking any starter card (or typing any city in the world in the prompt bar) immediately launches a live Tri-Protocol (`MCP + A2A + AG-UI`) curation run.
+- **Left Pane (`Awaiting Destination` State)**: Starts in a clean **Awaiting Destination** state (`--°C` Open-Meteo, `--` Frankfurter FX, `$0 / $3,200 (0%)` Sanctuary Budget) while allowing the traveler to pre-configure **Trip Duration (`- 4N +`)** and **Home Currency (`USD` / `EUR` / `GBP`)** before selecting a city.
+
 ### 6.1 Header Controls
 - **`WS Connected` / `SSE Mode` Toggle**: Switch live between full-duplex WebSockets (`/api/agent/ws`) and HTTP Server-Sent Events (`/api/agent/run`).
 - **`Memory: N` Badge & Reset (`↺`)**: Inspect how many conversational turns are stored for the active thread, or click `↺` to clear thread memory and extracted traveler preferences.

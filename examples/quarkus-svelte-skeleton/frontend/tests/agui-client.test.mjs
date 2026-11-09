@@ -241,7 +241,14 @@ test('Nomad AG-UI Component Kit reducer populates timeline callTypes, reasoning,
 	assert.equal(resolveProtocolCallMeta(null, 'LOCAL').callType, 'tool:function');
 
 	let state = createInitialWorkbenchState('thread-nomad');
-	assert.equal(state.messages[0].interaction, null);
+	assert.equal(state.clusterState.nomadTrip.activeCity, null);
+	assert.equal(state.messages[0].timeline.length, 0);
+	assert.equal(state.messages[0].media.length, 0);
+	assert.equal(state.messages[0].sources.length, 0);
+	assert.equal(state.messages[0].interaction.id, 'welcome-city-picker');
+	assert.equal(state.messages[0].interaction.mode, 'single_select');
+	assert.equal(state.messages[0].interaction.options.length, 4);
+	assert.equal(state.messages[0].interaction.options[0].label, 'Beirut, Lebanon');
 	state = reduceAgUiEvent(state, {
 		id: 'n1',
 		type: 'RUN_STARTED',
@@ -427,6 +434,18 @@ test('WebSocket transport, conversational memory, LangChain4j guardrails/RAG/spe
 
 	let state = createInitialWorkbenchState('thread-ws');
 	state = reduceAgUiEvent(state, {
+		id: 'ws-0',
+		type: 'WS_CONNECTED',
+		payload: {
+			transport: 'websocket',
+			endpoint: '/api/agent/ws',
+			memoryTurns: 0,
+			clusterState: { nomadTrip: { activeCity: 'Kyoto', nights: 4, homeCurrency: 'USD' } }
+		}
+	});
+	assert.equal(state.clusterState.nomadTrip.activeCity, null);
+
+	state = reduceAgUiEvent(state, {
 		id: 'ws-1',
 		type: 'WS_CONNECTED',
 		payload: { transport: 'websocket', endpoint: '/api/agent/ws', memoryTurns: 2 }
@@ -484,9 +503,11 @@ test('WebSocket transport, conversational memory, LangChain4j guardrails/RAG/spe
 		type: 'STATE_DELTA',
 		payload: {
 			status: 'memory_reset',
-			memoryTurns: 0
+			memoryTurns: 0,
+			clusterState: { nomadTrip: { activeCity: 'Kyoto', nights: 4, homeCurrency: 'USD' } }
 		}
 	});
 	assert.equal(state.memoryTurns, 0);
+	assert.equal(state.clusterState.nomadTrip.activeCity, null);
 	assert.equal(state.statusText, 'Conversational memory & traveler profile reset');
 });
