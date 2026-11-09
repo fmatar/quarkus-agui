@@ -22,6 +22,7 @@ public class AgentWebSocketEndpoint {
 
     private final NomadConciergeOrchestratorService orchestrator;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    boolean asyncDispatch = true;
 
     @Inject
     public AgentWebSocketEndpoint(NomadConciergeOrchestratorService orchestrator) {
@@ -84,9 +85,10 @@ public class AgentWebSocketEndpoint {
                             ? objectMapper.convertValue(root.path("modifiedArgs"), new TypeReference<Map<String, Object>>() {})
                             : null;
                     AgentApprovalRequest approval = new AgentApprovalRequest(threadId, approved, reason, modifiedArgs);
-                    Thread.ofVirtual().name("agui-ws-hitl-" + threadId).start(() ->
+                    dispatchWork("agui-ws-hitl-" + threadId, () ->
                             orchestrator.approvePendingAction(approval)
-                                    .subscribe().with(frame -> sendRawSseFrameAsJson(connection, frame)));
+                                    .collect().asList().await().indefinitely()
+                                    .forEach(frame -> sendRawSseFrameAsJson(connection, frame)));
                 }
 
                 default -> {
@@ -96,15 +98,24 @@ public class AgentWebSocketEndpoint {
                             ? objectMapper.convertValue(root.path("state"), new TypeReference<Map<String, Object>>() {})
                             : Map.of();
                     AgentRunRequest runRequest = new AgentRunRequest(threadId, prompt, state, mode);
-                    Thread.ofVirtual().name("agui-ws-run-" + threadId).start(() ->
+                    dispatchWork("agui-ws-run-" + threadId, () ->
                             orchestrator.streamRun(runRequest)
-                                    .subscribe().with(frame -> sendRawSseFrameAsJson(connection, frame)));
+                                    .collect().asList().await().indefinitely()
+                                    .forEach(frame -> sendRawSseFrameAsJson(connection, frame)));
                 }
             }
         } catch (Exception e) {
             sendEventFrame(connection, "thread-nomad-1", "RUN_FINISHED", Map.of(
                     "status", "failed",
                     "error", e.getMessage() == null ? "Invalid WebSocket frame" : e.getMessage()));
+        }
+    }
+
+    private void dispatchWork(String threadName, Runnable task) {
+        if (asyncDispatch) {
+            Thread.ofVirtual().name(threadName).start(task);
+        } else {
+            task.run();
         }
     }
 

@@ -172,15 +172,15 @@ public class A2aGatewayClient {
             boolean isError = Boolean.TRUE.equals(data.get("isError"))
                     || "ERROR".equalsIgnoreCase(String.valueOf(data.get("status")));
 
-            Map<String, Object> out = new LinkedHashMap<>();
-            out.put("taskId", taskId);
-            out.put("agentName", "Nomad-A2A-Specialist");
-            out.put("skillId", resolvedSkill);
-            out.put("status", isError ? "ERROR" : "COMPLETED");
-            out.put("isError", isError);
-            out.put("summary", summary);
-            out.put("prompt", prompt == null ? "" : prompt);
-            out.put("report", data);
+            Map<String, Object> out = new LinkedHashMap<>(Map.ofEntries(
+                    Map.entry("taskId", taskId == null ? "task-1" : taskId),
+                    Map.entry("agentName", "Nomad-A2A-Specialist"),
+                    Map.entry("skillId", resolvedSkill),
+                    Map.entry("status", isError ? "ERROR" : "COMPLETED"),
+                    Map.entry("isError", isError),
+                    Map.entry("summary", summary),
+                    Map.entry("prompt", prompt == null ? "" : prompt),
+                    Map.entry("report", data)));
             if (isError) {
                 out.put("error", data.getOrDefault("error", summary));
             }
@@ -202,17 +202,16 @@ public class A2aGatewayClient {
                 "serviceAvailable", false,
                 "upstream", "Nomad-A2A-Specialist (:8082)",
                 "error", errorMsg);
-        Map<String, Object> out = new LinkedHashMap<>();
-        out.put("taskId", taskId);
-        out.put("agentName", "Nomad-A2A-Specialist");
-        out.put("skillId", skillId);
-        out.put("status", "ERROR");
-        out.put("isError", true);
-        out.put("error", errorMsg);
-        out.put("summary", "⚠️ " + errorMsg);
-        out.put("prompt", prompt == null ? "" : prompt);
-        out.put("report", errReport);
-        return out;
+        return Map.ofEntries(
+                Map.entry("taskId", taskId == null ? "task-err" : taskId),
+                Map.entry("agentName", "Nomad-A2A-Specialist"),
+                Map.entry("skillId", skillId),
+                Map.entry("status", "ERROR"),
+                Map.entry("isError", true),
+                Map.entry("error", errorMsg),
+                Map.entry("summary", "⚠️ " + errorMsg),
+                Map.entry("prompt", prompt == null ? "" : prompt),
+                Map.entry("report", errReport));
     }
 
     public List<Map<String, Object>> checkA2aHealth() {
@@ -224,16 +223,15 @@ public class A2aGatewayClient {
                     .GET()
                     .build();
             HttpResponse<String> res = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
-            long elapsedMs = Math.max(1L, (System.nanoTime() - startNs) / 1_000_000L);
+            long elapsedMs = Math.max(1L, Duration.ofNanos(System.nanoTime() - startNs).toMillis());
             if (res.statusCode() >= 200 && res.statusCode() < 300 && res.body() != null) {
                 JsonNode root = objectMapper.readTree(res.body());
-                Map<String, Object> serverNode = new LinkedHashMap<>();
-                serverNode.put("id", "a2a-server");
-                serverNode.put("name", "Quarkus A2A Specialist (:8082)");
-                serverNode.put("category", "protocol");
-                serverNode.put("status", "UP");
-                serverNode.put("latencyMs", elapsedMs);
-                entries.add(serverNode);
+                entries.add(Map.of(
+                        "id", "a2a-server",
+                        "name", "Quarkus A2A Specialist (:8082)",
+                        "category", "protocol",
+                        "status", "UP",
+                        "latencyMs", elapsedMs));
 
                 JsonNode upstreams = root.path("upstreams");
                 if (upstreams.isArray()) {
@@ -254,7 +252,7 @@ public class A2aGatewayClient {
                     "latencyMs", elapsedMs,
                     "error", "HTTP " + res.statusCode()));
         } catch (Exception ex) {
-            long elapsedMs = Math.max(1L, (System.nanoTime() - startNs) / 1_000_000L);
+            long elapsedMs = Math.max(1L, Duration.ofNanos(System.nanoTime() - startNs).toMillis());
             entries.add(Map.of(
                     "id", "a2a-server",
                     "name", "Quarkus A2A Specialist (:8082)",

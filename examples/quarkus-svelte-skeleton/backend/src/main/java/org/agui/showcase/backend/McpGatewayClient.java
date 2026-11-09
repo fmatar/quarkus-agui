@@ -63,6 +63,8 @@ public class McpGatewayClient implements AutoCloseable {
     @ConfigProperty(name = "agui.mcp.base-url", defaultValue = "http://127.0.0.1:8081")
     String mcpBaseUrl = "http://127.0.0.1:8081";
 
+    Duration mcpTimeout = Duration.ofSeconds(3);
+
     private volatile McpClient activeMcpClient;
     private volatile String activeMcpEndpoint;
 
@@ -70,33 +72,29 @@ public class McpGatewayClient implements AutoCloseable {
         resetState();
     }
 
+    private static final List<String> INITIAL_TRIP_KEYS = List.of(
+            "activeCity", "country", "currency", "exchangeRate", "temperatureC",
+            "weatherCondition", "nights", "stopTitle", "budgetUsd", "allocatedUsd",
+            "homeCurrency", "soundtrack");
+
+    private static final List<String> INITIAL_PREF_KEYS = List.of(
+            "travelerName", "style", "dietary", "musicTaste", "pace", "homeCurrency");
+
     public final void resetState() {
         synchronized (nomadTrip) {
             nomadTrip.clear();
             nomadTrip.put("uri", "itinerary://active-trip");
-            nomadTrip.put("activeCity", null);
-            nomadTrip.put("country", null);
-            nomadTrip.put("currency", null);
-            nomadTrip.put("exchangeRate", null);
-            nomadTrip.put("temperatureC", null);
-            nomadTrip.put("weatherCondition", null);
-            nomadTrip.put("nights", null);
-            nomadTrip.put("stopTitle", null);
-            nomadTrip.put("budgetUsd", null);
-            nomadTrip.put("allocatedUsd", null);
-            nomadTrip.put("homeCurrency", null);
-            nomadTrip.put("soundtrack", null);
+            for (String key : INITIAL_TRIP_KEYS) {
+                nomadTrip.put(key, null);
+            }
         }
 
         synchronized (travelerPreferences) {
             travelerPreferences.clear();
             travelerPreferences.put("uri", "traveler://preferences");
-            travelerPreferences.put("travelerName", null);
-            travelerPreferences.put("style", null);
-            travelerPreferences.put("dietary", null);
-            travelerPreferences.put("musicTaste", null);
-            travelerPreferences.put("pace", null);
-            travelerPreferences.put("homeCurrency", null);
+            for (String key : INITIAL_PREF_KEYS) {
+                travelerPreferences.put(key, null);
+            }
         }
     }
 
@@ -108,17 +106,17 @@ public class McpGatewayClient implements AutoCloseable {
         closeQuietly(activeMcpClient);
         StreamableHttpMcpTransport transport = StreamableHttpMcpTransport.builder()
                 .url(targetEndpoint)
-                .timeout(Duration.ofSeconds(4))
+                .timeout(mcpTimeout)
                 .build();
         activeMcpClient = DefaultMcpClient.builder()
                 .key("nomad-mcp-concierge")
                 .protocolVersion("2025-03-26")
-                .initializationTimeout(Duration.ofSeconds(3))
+                .initializationTimeout(mcpTimeout)
                 .transport(transport)
-                .toolExecutionTimeout(Duration.ofSeconds(5))
-                .resourcesTimeout(Duration.ofSeconds(4))
-                .promptsTimeout(Duration.ofSeconds(4))
-                .pingTimeout(Duration.ofSeconds(3))
+                .toolExecutionTimeout(mcpTimeout)
+                .resourcesTimeout(mcpTimeout)
+                .promptsTimeout(mcpTimeout)
+                .pingTimeout(mcpTimeout)
                 .reconnectInterval(Duration.ofSeconds(30))
                 .build();
         activeMcpEndpoint = targetEndpoint;
@@ -177,11 +175,13 @@ public class McpGatewayClient implements AutoCloseable {
             return;
         }
         synchronized (nomadTrip) {
-            for (Map.Entry<String, Object> entry : fields.entrySet()) {
-                if (entry.getKey() != null) {
-                    nomadTrip.put(entry.getKey(), entry.getValue());
-                }
-            }
+            fields.forEach(this::putTripIfPresent);
+        }
+    }
+
+    private void putTripIfPresent(String key, Object value) {
+        if (key != null && value != null) {
+            nomadTrip.put(key, value);
         }
     }
 
@@ -355,13 +355,13 @@ public class McpGatewayClient implements AutoCloseable {
                 applySuccessfulToolSideEffects(toolName, parsedResult);
             }
 
-            Map<String, Object> envelope = new LinkedHashMap<>();
-            envelope.put("toolName", toolName);
-            envelope.put("server", "nomad-mcp-concierge (:8081)");
-            envelope.put("status", isError ? "ERROR" : "OK");
-            envelope.put("isError", isError);
-            envelope.put("arguments", args);
-            envelope.put("result", parsedResult);
+            Map<String, Object> envelope = new LinkedHashMap<>(Map.of(
+                    "toolName", toolName,
+                    "server", "nomad-mcp-concierge (:8081)",
+                    "status", isError ? "ERROR" : "OK",
+                    "isError", isError,
+                    "arguments", args,
+                    "result", parsedResult));
             if (isError) {
                 envelope.put("error", parsedResult.getOrDefault("error", "MCP tool execution failed: " + toolName));
             }
@@ -399,48 +399,27 @@ public class McpGatewayClient implements AutoCloseable {
                     A2aGatewayClient.registerCityCountry(city, country);
                     nomadTrip.put("currency", A2aGatewayClient.resolveCurrencyForCountry(country));
                 }
-                if (result.get("temperatureC") != null) {
-                    nomadTrip.put("temperatureC", result.get("temperatureC"));
-                }
-                if (result.get("condition") != null) {
-                    nomadTrip.put("weatherCondition", result.get("condition"));
-                }
+                putTripIfPresent("temperatureC", result.get("temperatureC"));
+                putTripIfPresent("weatherCondition", result.get("condition"));
             }
             case "discoverLocalCultureAndMedia" -> {
-                String dest = stringVal(result.get("destination"));
-                if (dest != null) {
-                    nomadTrip.put("activeCity", dest);
-                }
-                if (result.get("audioTrack") != null) {
-                    nomadTrip.put("soundtrack", result.get("audioTrack"));
-                }
-                if (result.get("heroImageUrl") != null) {
-                    nomadTrip.put("heroImageUrl", result.get("heroImageUrl"));
-                }
-                if (result.get("culturalSummary") != null) {
-                    nomadTrip.put("culturalSummary", result.get("culturalSummary"));
-                }
+                putTripIfPresent("activeCity", stringVal(result.get("destination")));
+                putTripIfPresent("soundtrack", result.get("audioTrack"));
+                putTripIfPresent("heroImageUrl", result.get("heroImageUrl"));
+                putTripIfPresent("culturalSummary", result.get("culturalSummary"));
             }
             case "updateTripItinerary" -> {
-                if (result.get("activeCity") != null) {
-                    nomadTrip.put("activeCity", result.get("activeCity"));
-                }
-                if (result.get("stopTitle") != null) {
-                    nomadTrip.put("stopTitle", result.get("stopTitle"));
-                }
-                if (result.get("nights") != null) {
-                    nomadTrip.put("nights", result.get("nights"));
-                }
-                if (result.get("allocatedUsd") != null) {
-                    nomadTrip.put("allocatedUsd", result.get("allocatedUsd"));
-                }
+                putTripIfPresent("activeCity", result.get("activeCity"));
+                putTripIfPresent("stopTitle", result.get("stopTitle"));
+                putTripIfPresent("nights", result.get("nights"));
+                putTripIfPresent("allocatedUsd", result.get("allocatedUsd"));
             }
             default -> {
             }
         }
     }
 
-    private Map<String, Object> parseToolResultText(String text) {
+    Map<String, Object> parseToolResultText(String text) {
         if (text == null || text.isBlank()) {
             return Map.of();
         }
@@ -466,17 +445,21 @@ public class McpGatewayClient implements AutoCloseable {
         } catch (Exception ex) {
             pingErr = ex.getMessage();
         }
-        long pingMs = Math.max(1L, (System.nanoTime() - pingStart) / 1_000_000L);
-        Map<String, Object> mcpNode = new LinkedHashMap<>();
-        mcpNode.put("id", "mcp-server");
-        mcpNode.put("name", "Quarkus MCP Server (:8081/mcp)");
-        mcpNode.put("category", "protocol");
-        mcpNode.put("status", mcpPingOk ? "UP" : "DOWN");
-        mcpNode.put("latencyMs", pingMs);
-        if (!mcpPingOk && pingErr != null) {
-            mcpNode.put("error", pingErr);
-        }
-        entries.add(mcpNode);
+        long pingMs = Math.max(1L, Duration.ofNanos(System.nanoTime() - pingStart).toMillis());
+        entries.add(mcpPingOk
+                ? Map.of(
+                        "id", "mcp-server",
+                        "name", "Quarkus MCP Server (:8081/mcp)",
+                        "category", "protocol",
+                        "status", "UP",
+                        "latencyMs", pingMs)
+                : Map.of(
+                        "id", "mcp-server",
+                        "name", "Quarkus MCP Server (:8081/mcp)",
+                        "category", "protocol",
+                        "status", "DOWN",
+                        "latencyMs", pingMs,
+                        "error", pingErr == null ? "MCP ping failed" : pingErr));
 
         try {
             HttpRequest req = HttpRequest.newBuilder(URI.create(mcpBaseUrl + "/api/mcp/health"))

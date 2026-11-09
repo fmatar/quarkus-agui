@@ -66,6 +66,14 @@
             <plugin>
                 <groupId>org.pitest</groupId>
                 <artifactId>pitest-maven</artifactId>
+                <configuration>
+                    <targetClasses>
+                        <param>org.agui.showcase.mcp.*</param>
+                    </targetClasses>
+                    <targetTests>
+                        <param>org.agui.showcase.mcp.NomadMcpConciergeServiceTest</param>
+                    </targetTests>
+                </configuration>
             </plugin>
         </plugins>
     </build>

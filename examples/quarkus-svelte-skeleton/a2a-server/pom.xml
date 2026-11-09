@@ -66,6 +66,14 @@
             <plugin>
                 <groupId>org.pitest</groupId>
                 <artifactId>pitest-maven</artifactId>
+                <configuration>
+                    <targetClasses>
+                        <param>org.agui.showcase.a2a.*</param>
+                    </targetClasses>
+                    <targetTests>
+                        <param>org.agui.showcase.a2a.NomadTravelAdvisorServiceTest</param>
+                    </targetTests>
+                </configuration>
             </plugin>
         </plugins>
     </build>

@@ -31,9 +31,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.agui.core.domain.AgUiEvent;
-import org.agui.quarkus.core.runtime.adapters.AgUiA2aBridge;
 import org.agui.quarkus.core.runtime.adapters.AgUiBridge;
-import org.agui.quarkus.core.runtime.adapters.AgUiMcpBridge;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 /**
@@ -161,8 +159,6 @@ public class NomadConciergeOrchestratorService {
     private final McpGatewayClient mcpClient;
     private final A2aGatewayClient a2aClient;
     private final AgUiBridge agUiBridge = new AgUiBridge();
-    private final AgUiMcpBridge agUiMcpBridge = new AgUiMcpBridge();
-    private final AgUiA2aBridge agUiA2aBridge = new AgUiA2aBridge();
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final HttpClient httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(3))
@@ -190,27 +186,18 @@ public class NomadConciergeOrchestratorService {
         return agUiBridge;
     }
 
-    public AgUiMcpBridge agUiMcpBridge() {
-        return agUiMcpBridge;
-    }
-
-    public AgUiA2aBridge agUiA2aBridge() {
-        return agUiA2aBridge;
-    }
-
     public Map<String, Object> getCatalog() {
         Map<String, Object> dossier = mcpClient.readTripDossierState();
-        Map<String, Object> out = new LinkedHashMap<>();
-        out.put("orchestrator", ORCHESTRATOR_NAME);
-        out.put("extension", "org.agui:quarkus-ag-ui");
-        out.put("llmMode", "ollama:" + defaultOllamaModel);
-        out.put("defaultOllamaModel", defaultOllamaModel);
-        out.put("supportedModes", List.of("ollama:" + defaultOllamaModel, "deterministic"));
-        out.put("mcpTools", mcpClient.listTools());
-        out.put("a2aAgent", a2aClient.getAgentCard());
-        out.put("tripDossierState", dossier);
-        out.put("clusterState", dossier);
-        return out;
+        return Map.ofEntries(
+                Map.entry("orchestrator", ORCHESTRATOR_NAME),
+                Map.entry("extension", "org.agui:quarkus-ag-ui"),
+                Map.entry("llmMode", "ollama:" + defaultOllamaModel),
+                Map.entry("defaultOllamaModel", defaultOllamaModel),
+                Map.entry("supportedModes", List.of("ollama:" + defaultOllamaModel, "deterministic")),
+                Map.entry("mcpTools", mcpClient.listTools()),
+                Map.entry("a2aAgent", a2aClient.getAgentCard()),
+                Map.entry("tripDossierState", dossier),
+                Map.entry("clusterState", dossier));
     }
 
     public Map<String, Object> checkSystemHealth() {
@@ -223,14 +210,13 @@ public class NomadConciergeOrchestratorService {
         long downCount = services.size() - upCount;
         String overall = downCount == 0 ? "UP" : (upCount == 0 ? "DOWN" : "DEGRADED");
 
-        Map<String, Object> report = new LinkedHashMap<>();
-        report.put("orchestrator", ORCHESTRATOR_NAME);
-        report.put("status", overall);
-        report.put("healthyCount", upCount);
-        report.put("downCount", downCount);
-        report.put("totalCount", services.size());
-        report.put("services", services);
-        return report;
+        return Map.of(
+                "orchestrator", ORCHESTRATOR_NAME,
+                "status", overall,
+                "healthyCount", upCount,
+                "downCount", downCount,
+                "totalCount", services.size(),
+                "services", services);
     }
 
     private Map<String, Object> checkOllamaHealth() {
@@ -241,7 +227,7 @@ public class NomadConciergeOrchestratorService {
                     .GET()
                     .build();
             HttpResponse<String> res = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
-            long ms = Math.max(1L, (System.nanoTime() - startNs) / 1_000_000L);
+            long ms = Math.max(1L, Duration.ofNanos(System.nanoTime() - startNs).toMillis());
             if (res.statusCode() >= 200 && res.statusCode() < 300) {
                 return Map.of(
                         "id", "ollama-llm",
@@ -258,7 +244,7 @@ public class NomadConciergeOrchestratorService {
                     "latencyMs", ms,
                     "error", "HTTP " + res.statusCode() + " from Ollama (:11434)");
         } catch (Exception ex) {
-            long ms = Math.max(1L, (System.nanoTime() - startNs) / 1_000_000L);
+            long ms = Math.max(1L, Duration.ofNanos(System.nanoTime() - startNs).toMillis());
             return Map.of(
                     "id", "ollama-llm",
                     "name", "Ollama Travel Brain (" + defaultOllamaModel + ")",
@@ -288,13 +274,12 @@ public class NomadConciergeOrchestratorService {
                 prev.travelFocus());
         threadSlots.put(resolvedThread, updated);
 
-        Map<String, Object> out = new LinkedHashMap<>();
-        out.put("threadId", resolvedThread);
-        out.put("status", "params_updated");
-        out.put("tripSlots", updated.toMap());
-        out.put("tripDossierState", dossier);
-        out.put("clusterState", dossier);
-        return out;
+        return Map.of(
+                "threadId", resolvedThread,
+                "status", "params_updated",
+                "tripSlots", updated.toMap(),
+                "tripDossierState", dossier,
+                "clusterState", dossier);
     }
 
     public Map<String, Object> resetMemory(String threadId) {
@@ -434,18 +419,10 @@ public class NomadConciergeOrchestratorService {
             String country = A2aGatewayClient.resolveCountryForCity(mergedSlots.city());
             Map<String, Object> partial = new LinkedHashMap<>();
             partial.put("activeCity", mergedSlots.city());
-            if (!country.isBlank()) {
-                partial.put("country", country);
-            }
-            if (mergedSlots.hasDuration()) {
-                partial.put("nights", mergedSlots.nights());
-            }
-            if (mergedSlots.budget() != null) {
-                partial.put("budgetUsd", mergedSlots.budget());
-            }
-            if (mergedSlots.homeCurrency() != null) {
-                partial.put("homeCurrency", mergedSlots.homeCurrency());
-            }
+            partial.put("country", country.isBlank() ? null : country);
+            partial.put("nights", mergedSlots.nights());
+            partial.put("budgetUsd", mergedSlots.budget());
+            partial.put("homeCurrency", mergedSlots.homeCurrency());
             mcpClient.updateActiveTripFields(partial);
         }
 
@@ -500,9 +477,7 @@ public class NomadConciergeOrchestratorService {
                 + "Do NOT assume any default destination city (never mention Kyoto unless asked). "
                 + (travelerName != null ? "Greet " + travelerName + " by name, acknowledge any preferences shared, and " : "")
                 + "ask which city or travel experience they would like to explore next in 2-3 concise sentences.";
-        String finalText = streamAssistantText(emitter, threadId, llmMode, systemPrompt, prompt, fallbackReply);
-        appendMemoryTurn(threadId, "assistant", finalText);
-        emitCompletedRun(emitter, threadId, llmMode);
+        finishAssistantTurn(emitter, threadId, llmMode, systemPrompt, prompt, fallbackReply);
     }
 
     private void handleTripPlanningTurn(
@@ -531,15 +506,14 @@ public class NomadConciergeOrchestratorService {
         String cityLabel = slots.hasCity() ? slots.city() : "your trip";
         Map<String, Object> dossier = mcpClient.readTripDossierState();
 
-        Map<String, Object> delta = new LinkedHashMap<>();
-        delta.put("awaitingTripSlots", true);
-        delta.put("missingSlots", missing);
-        delta.put("tripSlots", slots.toMap());
-        delta.put("tripDossierState", dossier);
-        delta.put("clusterState", dossier);
-        delta.put("interaction", buildSlotElicitationInteraction(slots, missing));
-        delta.put("followUps", buildSlotFollowUpSuggestions(slots));
-        emitFrame(emitter, threadId, "STATE_DELTA", delta);
+        emitFrame(emitter, threadId, "STATE_DELTA", Map.of(
+                "awaitingTripSlots", true,
+                "missingSlots", missing,
+                "tripSlots", slots.toMap(),
+                "tripDossierState", dossier,
+                "clusterState", dossier,
+                "interaction", buildSlotElicitationInteraction(slots, missing),
+                "followUps", buildSlotFollowUpSuggestions(slots)));
 
         List<String> questions = new ArrayList<>();
         if (missing.contains("destination")) {
@@ -566,9 +540,7 @@ public class NomadConciergeOrchestratorService {
                 + "Politely and concisely ask the traveler ONLY for these missing required details before building the itinerary: "
                 + String.join(", ", missing) + ". Do not invent weather, prices, or a 3-day itinerary yet.";
 
-        String reply = streamAssistantText(emitter, threadId, llmMode, systemPrompt, prompt, deterministicAsk);
-        appendMemoryTurn(threadId, "assistant", reply);
-        emitCompletedRun(emitter, threadId, llmMode);
+        finishAssistantTurn(emitter, threadId, llmMode, systemPrompt, prompt, deterministicAsk);
     }
 
     private void executeCompleteTripPlan(
@@ -634,12 +606,8 @@ public class NomadConciergeOrchestratorService {
         tripUpdates.put("budgetUsd", budget);
         tripUpdates.put("homeCurrency", homeCurrency);
         if (!Boolean.TRUE.equals(fxHandoff.get("isError")) && fxHandoff.get("report") instanceof Map<?, ?> fxReport) {
-            if (fxReport.get("targetCurrency") != null) {
-                tripUpdates.put("currency", fxReport.get("targetCurrency"));
-            }
-            if (fxReport.get("exchangeRate") != null) {
-                tripUpdates.put("exchangeRate", fxReport.get("exchangeRate"));
-            }
+            tripUpdates.put("currency", fxReport.get("targetCurrency"));
+            tripUpdates.put("exchangeRate", fxReport.get("exchangeRate"));
         }
         mcpClient.updateActiveTripFields(tripUpdates);
 
@@ -710,9 +678,7 @@ public class NomadConciergeOrchestratorService {
         String sys = "You are Nomad, a concise travel concierge. Answer the user's weather question for " + city
                 + " using ONLY this live tool output (if status is ERROR, tell the user the weather service is unavailable): "
                 + weatherCall;
-        String text = streamAssistantText(emitter, threadId, llmMode, sys, prompt, fallback);
-        appendMemoryTurn(threadId, "assistant", text);
-        emitCompletedRun(emitter, threadId, llmMode);
+        finishAssistantTurn(emitter, threadId, llmMode, sys, prompt, fallback);
     }
 
     private void handleAdvisoryOnlyTurn(
@@ -780,9 +746,7 @@ public class NomadConciergeOrchestratorService {
                 ? "⚠️ **Currency Conversion Service Unavailable**: " + fxHandoff.get("error")
                 : String.valueOf(fxHandoff.get("summary"));
         String sys = "You are Nomad. Report this exact Frankfurter FX conversion result (or surface the error if status is ERROR): " + fxHandoff;
-        String text = streamAssistantText(emitter, threadId, llmMode, sys, prompt, fallback);
-        appendMemoryTurn(threadId, "assistant", text);
-        emitCompletedRun(emitter, threadId, llmMode);
+        finishAssistantTurn(emitter, threadId, llmMode, sys, prompt, fallback);
     }
 
     private void handleCultureOnlyTurn(
@@ -817,9 +781,7 @@ public class NomadConciergeOrchestratorService {
                         + extractNestedString(cultureCall, "result", "culturalSummary");
         String sys = "You are Nomad. Highlight the cultural landmarks and playable 30s music track for " + city
                 + " based on this tool result (or report the service error if status is ERROR): " + cultureCall;
-        String text = streamAssistantText(emitter, threadId, llmMode, sys, prompt, fallback);
-        appendMemoryTurn(threadId, "assistant", text);
-        emitCompletedRun(emitter, threadId, llmMode);
+        finishAssistantTurn(emitter, threadId, llmMode, sys, prompt, fallback);
     }
 
     private void handleChoiceCurationTurn(
@@ -870,18 +832,18 @@ public class NomadConciergeOrchestratorService {
                     "stopTitle", stopTitle,
                     "nights", nights,
                     "costUsd", costUsd);
-            Map<String, Object> approvalPayload = new LinkedHashMap<>();
-            approvalPayload.put("callId", callId);
-            approvalPayload.put("callType", "hitl:approval");
-            approvalPayload.put("tool", "updateTripItinerary");
-            approvalPayload.put("toolName", "updateTripItinerary");
-            approvalPayload.put("requiresApproval", true);
-            approvalPayload.put("args", approvalArgs);
-            approvalPayload.put("city", city);
-            approvalPayload.put("stopTitle", stopTitle);
-            approvalPayload.put("nights", nights);
-            approvalPayload.put("costUsd", costUsd);
-            approvalPayload.put("thresholdUsd", HITL_THRESHOLD_USD);
+            Map<String, Object> approvalPayload = Map.ofEntries(
+                    Map.entry("callId", callId),
+                    Map.entry("callType", "hitl:approval"),
+                    Map.entry("tool", "updateTripItinerary"),
+                    Map.entry("toolName", "updateTripItinerary"),
+                    Map.entry("requiresApproval", true),
+                    Map.entry("args", approvalArgs),
+                    Map.entry("city", city),
+                    Map.entry("stopTitle", stopTitle),
+                    Map.entry("nights", nights),
+                    Map.entry("costUsd", costUsd),
+                    Map.entry("thresholdUsd", HITL_THRESHOLD_USD));
             emitFrame(emitter, threadId, "TOOL_CALL", approvalPayload);
             emitFrame(emitter, threadId, "STATE_DELTA", Map.of("pendingApproval", approvalPayload));
             emitTextDelta(emitter, threadId, String.format(
@@ -1032,7 +994,10 @@ public class NomadConciergeOrchestratorService {
 
     private BudgetPair extractBudgetAndCurrency(String prompt, Map<String, Object> reqState) {
         if (prompt != null && !prompt.isBlank()) {
-            Matcher symBefore = Pattern.compile("([$€£¥])\\s*([0-9]{1,7}(?:,[0-9]{3})*(?:\\.[0-9]+)?)\\s*([A-Za-z]{3})?").matcher(prompt);
+            Matcher symBefore = Pattern.compile(
+                            "([$€£¥])\\s*([0-9]{1,7}(?:,[0-9]{3})*(?:\\.[0-9]+)?)(?:\\s+(USD|EUR|GBP|JPY|CHF|CAD|AUD|ISK|MXN|LBP)\\b)?",
+                            Pattern.CASE_INSENSITIVE)
+                    .matcher(prompt);
             if (symBefore.find()) {
                 double val = Double.parseDouble(symBefore.group(2).replace(",", ""));
                 String explicitCode = symBefore.group(3);
@@ -1172,13 +1137,14 @@ public class NomadConciergeOrchestratorService {
         Map<String, Object> outcome = mcpClient.callTool(toolName, args);
         boolean isErr = Boolean.TRUE.equals(outcome.get("isError"));
         Map<String, Object> resultFrame = new LinkedHashMap<>(outcome);
-        resultFrame.put("callId", callId);
-        resultFrame.put("toolCallId", callId);
-        resultFrame.put("tool", toolName);
-        resultFrame.put("toolName", toolName);
-        resultFrame.put("callType", "mcp:tool");
-        resultFrame.put("status", isErr ? "ERROR" : "COMPLETED");
-        resultFrame.put("isError", isErr);
+        resultFrame.putAll(Map.of(
+                "callId", callId,
+                "toolCallId", callId,
+                "tool", toolName,
+                "toolName", toolName,
+                "callType", "mcp:tool",
+                "status", isErr ? "ERROR" : "COMPLETED",
+                "isError", isErr));
         emitFrame(emitter, threadId, "TOOL_RESULT", resultFrame);
         return outcome;
     }
@@ -1200,13 +1166,14 @@ public class NomadConciergeOrchestratorService {
         Map<String, Object> handoff = a2aClient.delegateTask(taskId, skillId, taskPrompt, ctx);
         boolean isErr = Boolean.TRUE.equals(handoff.get("isError"));
         Map<String, Object> resultFrame = new LinkedHashMap<>(handoff);
-        resultFrame.put("stepId", taskId);
-        resultFrame.put("protocol", "A2A");
-        resultFrame.put("callType", "a2a:task");
-        resultFrame.put("skillId", skillId);
-        resultFrame.put("agentName", "Nomad-A2A-Specialist");
-        resultFrame.put("status", isErr ? "ERROR" : "COMPLETED");
-        resultFrame.put("isError", isErr);
+        resultFrame.putAll(Map.of(
+                "stepId", taskId,
+                "protocol", "A2A",
+                "callType", "a2a:task",
+                "skillId", skillId,
+                "agentName", "Nomad-A2A-Specialist",
+                "status", isErr ? "ERROR" : "COMPLETED",
+                "isError", isErr));
         emitFrame(emitter, threadId, "STEP_FINISHED", resultFrame);
         return handoff;
     }
@@ -1222,19 +1189,19 @@ public class NomadConciergeOrchestratorService {
         String agentLabel = callType.startsWith("mcp:") ? "nomad-mcp-concierge" : "Nomad-Concierge-Orchestrator";
         emitFrame(emitter, threadId, "STEP_STARTED", Map.of(
                 "stepId", stepId, "callType", callType, "skillId", label, "label", label, "agentName", agentLabel));
-        Map<String, Object> finished = new LinkedHashMap<>();
-        finished.put("stepId", stepId);
-        finished.put("callType", callType);
-        finished.put("skillId", label);
-        finished.put("label", label);
-        finished.put("agentName", agentLabel);
-        finished.put("status", isErr ? "ERROR" : "COMPLETED");
-        finished.put("isError", isErr);
-        finished.put("summary", isErr
-                ? String.valueOf(result.getOrDefault("error", label + " failed"))
-                : String.valueOf(result.getOrDefault("expandedPrompt", result.getOrDefault("sampledMood", label + " verified"))));
-        finished.put("report", result);
-        finished.put("result", result);
+        Map<String, Object> finished = new LinkedHashMap<>(Map.ofEntries(
+                Map.entry("stepId", stepId),
+                Map.entry("callType", callType),
+                Map.entry("skillId", label),
+                Map.entry("label", label),
+                Map.entry("agentName", agentLabel),
+                Map.entry("status", isErr ? "ERROR" : "COMPLETED"),
+                Map.entry("isError", isErr),
+                Map.entry("summary", isErr
+                        ? String.valueOf(result.getOrDefault("error", label + " failed"))
+                        : String.valueOf(result.getOrDefault("expandedPrompt", result.getOrDefault("sampledMood", label + " verified")))),
+                Map.entry("report", result),
+                Map.entry("result", result)));
         if (isErr && result.get("error") != null) {
             finished.put("error", result.get("error"));
         }
@@ -1420,7 +1387,17 @@ public class NomadConciergeOrchestratorService {
                 "interaction", buildWelcomeCityPickerInteraction(null)));
         String ask = "Which **destination city** would you like me to " + actionLabel + " for?";
         String sys = "Ask the user concisely which destination city they want to " + actionLabel + " for. Do not assume any default city.";
-        String text = streamAssistantText(emitter, threadId, llmMode, sys, prompt, ask);
+        finishAssistantTurn(emitter, threadId, llmMode, sys, prompt, ask);
+    }
+
+    private void finishAssistantTurn(
+            MultiEmitter<? super String> emitter,
+            String threadId,
+            String llmMode,
+            String systemPrompt,
+            String userPrompt,
+            String fallbackText) {
+        String text = streamAssistantText(emitter, threadId, llmMode, systemPrompt, userPrompt, fallbackText);
         appendMemoryTurn(threadId, "assistant", text);
         emitCompletedRun(emitter, threadId, llmMode);
     }
