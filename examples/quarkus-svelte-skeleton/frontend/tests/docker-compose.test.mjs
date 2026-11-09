@@ -77,4 +77,11 @@ test('Quinoa SPA static adapter, Jib container extensions, -Pnative profile, and
 	assert.doesNotMatch(launcherContent, /quarkus-extension\/common/);
 	assert.match(launcherContent, /--docker-native/);
 	assert.match(launcherContent, /http:\/\/localhost:8080/);
+
+	const showcaseReadmePath = path.join(showcaseDir, 'README.md');
+	assert.equal(fs.existsSync(showcaseReadmePath), true, 'examples/quarkus-svelte-skeleton/README.md should exist');
+	const readmeContent = fs.readFileSync(showcaseReadmePath, 'utf8');
+	assert.match(readmeContent, /```mermaid/);
+	assert.match(readmeContent, /quarkus-quinoa/);
+	assert.match(readmeContent, /quarkus-container-image-jib/);
 });
