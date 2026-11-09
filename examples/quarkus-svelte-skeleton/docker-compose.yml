@@ -3,10 +3,7 @@ name: nomad-agui-showcase
 services:
   mcp-server:
     container_name: nomad-mcp-server
-    build:
-      context: ../..
-      dockerfile: examples/quarkus-svelte-skeleton/Dockerfile.quarkus
-      target: mcp-server
+    image: nomad-agui-showcase/mcp-server:latest
     ports:
       - "8081:8081"
     environment:
@@ -16,10 +13,7 @@ services:
 
   a2a-server:
     container_name: nomad-a2a-server
-    build:
-      context: ../..
-      dockerfile: examples/quarkus-svelte-skeleton/Dockerfile.quarkus
-      target: a2a-server
+    image: nomad-agui-showcase/a2a-server:latest
     ports:
       - "8082:8082"
     environment:
@@ -30,10 +24,7 @@ services:
 
   backend:
     container_name: nomad-agui-orchestrator
-    build:
-      context: ../..
-      dockerfile: examples/quarkus-svelte-skeleton/Dockerfile.quarkus
-      target: backend
+    image: nomad-agui-showcase/backend:latest
     ports:
       - "8080:8080"
     environment:
@@ -45,18 +36,4 @@ services:
     depends_on:
       - mcp-server
       - a2a-server
-    restart: unless-stopped
-
-  frontend:
-    container_name: nomad-concierge-studio
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    ports:
-      - "5173:5173"
-    environment:
-      - AGUI_BACKEND_PROXY_TARGET=http://backend:8080
-      - PUBLIC_AGUI_BACKEND_URL=http://localhost:8080
-    depends_on:
-      - backend
     restart: unless-stopped

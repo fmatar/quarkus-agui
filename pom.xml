@@ -31,6 +31,7 @@
         <a2a.sdk.version>1.4.0.Final</a2a.sdk.version>
         <quarkus.mcp.server.version>2.1.0.Beta1</quarkus.mcp.server.version>
         <quarkus.langchain4j.version>1.15.0.CR1</quarkus.langchain4j.version>
+        <quarkus.quinoa.version>2.9.3</quarkus.quinoa.version>
         <quarkus.native.builder-image>quay.io/quarkus/ubi9-quarkus-mandrel-builder-image:jdk-25</quarkus.native.builder-image>
         <junit.jupiter.version>5.11.4</junit.jupiter.version>
         <jacoco.version>0.8.14</jacoco.version>
@@ -122,6 +123,11 @@
                 <groupId>io.quarkiverse.mcp</groupId>
                 <artifactId>quarkus-mcp-server-http</artifactId>
                 <version>${quarkus.mcp.server.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.quarkiverse.quinoa</groupId>
+                <artifactId>quarkus-quinoa</artifactId>
+                <version>${quarkus.quinoa.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.agui</groupId>
