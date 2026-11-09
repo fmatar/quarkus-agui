@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- fix(orchestrator): handle destination-free greetings & preference updates (e.g., `"my name is Fady"`) without defaulting to `Kyoto` or executing city-specific MCP/A2A tools, extract `travelerName` into `traveler://preferences`, display `Traveler` in `ClusterStatePanel.svelte`, and preserve `activeCity: null` (`Awaiting Destination`) ([#64](https://github.com/fmatar/quarkus-agui/issues/64))
+
 ### Added
 - feat(ui): replace hardcoded `Kyoto` welcome turn and initial `nomadTrip` state with an interactive **Concierge Destination Picker Card** (`Beirut`, `Kyoto`, `Lisbon`, `Reykjavik`) and an **Awaiting Destination** Trip Dossier state (`--°C`, `--`, `0%` budget until a city is selected) ([#62](https://github.com/fmatar/quarkus-agui/issues/62))
 - feat(showcase): package SvelteKit 5 (`@sveltejs/adapter-static`) frontend inside Quarkus `backend` (`:8080`) via **Quarkus Quinoa** (`io.quarkiverse.quinoa:quarkus-quinoa:2.9.3`), transition all 3 showcase services (`mcp-server`, `a2a-server`, `backend`) to daemonless layered **Jib** container images (`io.quarkus:quarkus-container-image-jib:3.40.1.1` on `eclipse-temurin:25-jre`) with an opt-in `-Pnative` Maven profile (`--docker-native`), and remove legacy `Dockerfile.quarkus` and `frontend/Dockerfile` ([#59](https://github.com/fmatar/quarkus-agui/issues/59))

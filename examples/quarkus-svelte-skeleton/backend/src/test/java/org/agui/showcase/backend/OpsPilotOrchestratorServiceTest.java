@@ -467,4 +467,39 @@ class OpsPilotOrchestratorServiceTest {
         Thread.sleep(150);
         assertTrue(sentFrames.stream().anyMatch(f -> f.contains("RUN_FINISHED")));
     }
+
+    @Test
+    void destinationFreeGreetingExtractsTravelerNameAndDoesNotDefaultToKyoto() {
+        // 1. Deterministic mode: "My name is Fady" before any city is selected
+        AgentRunRequest introReq = new AgentRunRequest(
+                "thread-fady-intro",
+                "My name is Fady",
+                Map.of(),
+                "deterministic");
+
+        List<String> detFrames = service.streamRun(introReq).collect().asList().await().indefinitely();
+        assertFalse(detFrames.isEmpty());
+        Map<String, Object> prefs = mcpClient.readResource("traveler://preferences");
+        assertEquals("Fady", prefs.get("travelerName"));
+
+        // Must NOT invoke fetchCityWeather or discoverLocalCultureAndMedia for Kyoto
+        assertFalse(detFrames.stream().anyMatch(f -> f.contains("fetchCityWeather")));
+        assertFalse(detFrames.stream().anyMatch(f -> f.contains("discoverLocalCultureAndMedia")));
+        assertFalse(detFrames.stream().anyMatch(f -> f.contains("Hoshinoya Arashiyama Pavilion")));
+        // Must greet Fady and include the welcome-city-picker interaction
+        assertTrue(detFrames.stream().anyMatch(f -> f.contains("Fady")));
+        assertTrue(detFrames.stream().anyMatch(f -> f.contains("welcome-city-picker")));
+        assertTrue(detFrames.stream().anyMatch(f -> f.contains("\"awaitingDestination\":true")));
+
+        // 2. Live Ollama mode: "Hi, I'm Fady and I love analog vinyl" before any city is selected
+        AgentRunRequest ollamaIntroReq = new AgentRunRequest(
+                "thread-fady-ollama",
+                "Hi, I'm Fady and I love analog vinyl",
+                Map.of(),
+                "ollama:llama3.2:latest");
+        List<String> ollamaFrames = service.streamRun(ollamaIntroReq).collect().asList().await().indefinitely();
+        assertFalse(ollamaFrames.stream().anyMatch(f -> f.contains("fetchCityWeather")));
+        assertTrue(ollamaFrames.stream().anyMatch(f -> f.contains("welcome-city-picker")));
+        assertTrue(ollamaFrames.getLast().contains("\"status\":\"completed\""));
+    }
 }

@@ -510,4 +510,39 @@ test('WebSocket transport, conversational memory, LangChain4j guardrails/RAG/spe
 	assert.equal(state.memoryTurns, 0);
 	assert.equal(state.clusterState.nomadTrip.activeCity, null);
 	assert.equal(state.statusText, 'Conversational memory & traveler profile reset');
+
+	// Destination-free greeting turn ("My name is Fady") preserves activeCity: null while updating travelerName
+	state = reduceAgUiEvent(state, {
+		id: 'run-fady-1',
+		type: 'RUN_STARTED',
+		payload: { status: 'started', llmMode: 'deterministic' }
+	});
+	state = reduceAgUiEvent(state, {
+		id: 'snap-fady-1',
+		type: 'STATE_SNAPSHOT',
+		payload: {
+			awaitingDestination: true,
+			memoryTurns: 0,
+			clusterState: {
+				nomadTrip: { activeCity: 'Kyoto', nights: 4, homeCurrency: 'USD' },
+				preferences: { travelerName: 'Fady', style: 'Architectural Minimalist' }
+			}
+		}
+	});
+	assert.equal(state.clusterState.nomadTrip.activeCity, null);
+	assert.equal(state.clusterState.preferences.travelerName, 'Fady');
+	state = reduceAgUiEvent(state, {
+		id: 'delta-fady-1',
+		type: 'STATE_DELTA',
+		payload: {
+			awaitingDestination: true,
+			memoryTurns: 2,
+			clusterState: {
+				nomadTrip: { activeCity: 'Kyoto', nights: 4, homeCurrency: 'USD' },
+				preferences: { travelerName: 'Fady', style: 'Architectural Minimalist' }
+			}
+		}
+	});
+	assert.equal(state.clusterState.nomadTrip.activeCity, null);
+	assert.equal(state.clusterState.preferences.travelerName, 'Fady');
 });
