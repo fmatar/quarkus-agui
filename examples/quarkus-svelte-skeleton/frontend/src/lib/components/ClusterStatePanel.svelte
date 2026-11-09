@@ -342,6 +342,14 @@
 				<code class="font-mono text-[10px] text-[#575551]">traveler://preferences</code>
 			</div>
 			<div class="grid grid-cols-1 gap-1.5 text-[11px]">
+				{#if preferences.travelerName}
+					<div class="flex items-start justify-between gap-2 rounded-lg bg-[#F6F5F2] px-2.5 py-1.5">
+						<span class="font-medium text-[#575551] shrink-0">Traveler</span>
+						<span class="text-right font-semibold text-[#141413] leading-snug" title={preferences.travelerName}>
+							{preferences.travelerName}
+						</span>
+					</div>
+				{/if}
 				<div class="flex items-start justify-between gap-2 rounded-lg bg-[#F6F5F2] px-2.5 py-1.5">
 					<span class="font-medium text-[#575551] shrink-0">Style</span>
 					<span class="text-right font-semibold text-[#141413] leading-snug" title={preferences.style}>

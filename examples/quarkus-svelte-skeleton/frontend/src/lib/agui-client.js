@@ -518,6 +518,24 @@ export function reduceAgUiEvent(state, event) {
 					events: nextEvents
 				};
 			}
+			const incomingCluster = payload.clusterState ?? state.clusterState;
+			const nextClusterState = payload.awaitingDestination
+				? {
+						...incomingCluster,
+						nomadTrip: {
+							...(incomingCluster?.nomadTrip ?? {}),
+							activeCity: null,
+							country: null,
+							currency: null,
+							exchangeRate: null,
+							temperatureC: null,
+							weatherCondition: null,
+							stopTitle: null,
+							allocatedUsd: 0,
+							soundtrack: null
+						}
+					}
+				: incomingCluster;
 			const nextInteraction = payload.interaction
 				? {
 						...payload.interaction,
@@ -527,7 +545,7 @@ export function reduceAgUiEvent(state, event) {
 				: currentTurn.interaction;
 			return {
 				...state,
-				clusterState: payload.clusterState ?? state.clusterState,
+				clusterState: nextClusterState,
 				memoryTurns: payload.memoryTurns ?? state.memoryTurns ?? 0,
 				activeTurn: {
 					...currentTurn,

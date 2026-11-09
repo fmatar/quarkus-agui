@@ -162,6 +162,24 @@ public class OpsPilotOrchestratorService {
         String lower = prompt.toLowerCase(Locale.ROOT);
         Map<String, Object> extracted = new LinkedHashMap<>();
 
+        Matcher nameMatcher = Pattern.compile(
+                "\\b(?:my\\s+name\\s+is|i\\s+am|i'm|i’m|call\\s+me)\\s+([A-Za-z][a-zA-Z-]{1,24})\\b",
+                Pattern.CASE_INSENSITIVE).matcher(prompt);
+        while (nameMatcher.find()) {
+            String candidateName = nameMatcher.group(1).trim();
+            String candLower = candidateName.toLowerCase(Locale.ROOT);
+            if (!List.of(
+                    "vegan", "vegetarian", "pescatarian", "gluten", "halal",
+                    "looking", "planning", "going", "traveling", "travelling",
+                    "interested", "visiting", "exploring", "ready", "here",
+                    "curious", "hoping", "thinking", "trying", "from", "in", "on", "at").contains(candLower)) {
+                String normalizedName = candidateName.substring(0, 1).toUpperCase(Locale.ROOT)
+                        + candidateName.substring(1);
+                extracted.put("travelerName", normalizedName);
+                break;
+            }
+        }
+
         if (lower.contains("vegan")) {
             extracted.put("dietary", "Plant-Based Vegan Terroir");
         } else if (lower.contains("vegetarian")) {
@@ -315,12 +333,57 @@ public class OpsPilotOrchestratorService {
 
         extractAndApplyTravelerPreferences(prompt);
 
+        boolean awaitingDestination = isDestinationFreeConversationalTurn(prompt, request);
+
         frames.add(formatSseEvent(threadId, "STATE_SNAPSHOT", Map.of(
-                "clusterState", mcpClient.readClusterState(),
+                "clusterState", awaitingDestination ? awaitingDestinationClusterState() : mcpClient.readClusterState(),
                 "memoryTurns", getConversationMemory(threadId).size(),
+                "awaitingDestination", awaitingDestination,
                 "clientState", request != null && request.state() != null ? request.state() : Map.of())));
 
         if (checkAndRecordHitlInterrupt(threadId, prompt, lower, frames)) {
+            return frames;
+        }
+
+        if (awaitingDestination) {
+            frames.add(formatSseEvent(threadId, "STATUS", Map.of(
+                    "phase", "reasoning",
+                    "durationMs", 420,
+                    "thought", "Updating Traveler Profile (traveler://preferences on :8081) and preparing interactive Destination Picker without assuming a city.",
+                    "message", "Syncing Traveler Profile (traveler://preferences)")));
+
+            String resCallId = "call-res-" + UUID.randomUUID().toString().substring(0, 6);
+            Map<String, Object> prefs = mcpClient.readResource("traveler://preferences");
+            frames.add(formatSseEvent(threadId, "TOOL_CALL", Map.of(
+                    "callId", resCallId,
+                    "tool", "traveler://preferences",
+                    "protocol", "MCP",
+                    "callType", "mcp:resource",
+                    "server", "nomad-mcp-concierge (:8081)",
+                    "args", Map.of("uri", "traveler://preferences"))));
+            frames.add(formatSseEvent(threadId, "TOOL_RESULT", Map.of(
+                    "callId", resCallId,
+                    "tool", "traveler://preferences",
+                    "protocol", "MCP",
+                    "callType", "mcp:resource",
+                    "result", prefs)));
+
+            String reply = buildDestinationFreeConciergeReply(prompt, prefs);
+            recordMemoryTurn(threadId, "user", prompt, "");
+            recordMemoryTurn(threadId, "assistant", reply, "");
+
+            Map<String, Object> stateDelta = new LinkedHashMap<>();
+            stateDelta.put("awaitingDestination", true);
+            stateDelta.put("clusterState", awaitingDestinationClusterState());
+            stateDelta.put("memoryTurns", getConversationMemory(threadId).size());
+            stateDelta.put("interaction", buildWelcomeDestinationPicker());
+            stateDelta.put("followUps", buildAwaitingDestinationFollowUps());
+            frames.add(formatSseEvent(threadId, "STATE_DELTA", stateDelta));
+
+            appendTextDeltaFrames(frames, threadId, reply);
+            frames.add(formatSseEvent(threadId, "RUN_FINISHED", Map.of(
+                    "threadId", threadId,
+                    "status", "completed")));
             return frames;
         }
 
@@ -627,14 +690,77 @@ public class OpsPilotOrchestratorService {
 
             extractAndApplyTravelerPreferences(prompt);
 
+            boolean awaitingDestination = isDestinationFreeConversationalTurn(prompt, request);
+
             emitter.emit(formatSseEvent(threadId, "STATE_SNAPSHOT", Map.of(
-                    "clusterState", mcpClient.readClusterState(),
+                    "clusterState", awaitingDestination ? awaitingDestinationClusterState() : mcpClient.readClusterState(),
                     "memoryTurns", getConversationMemory(threadId).size(),
+                    "awaitingDestination", awaitingDestination,
                     "clientState", request != null && request.state() != null ? request.state() : Map.of())));
 
             List<String> hitlFrames = new ArrayList<>();
             if (checkAndRecordHitlInterrupt(threadId, prompt, lower, hitlFrames)) {
                 hitlFrames.forEach(emitter::emit);
+                emitter.complete();
+                return;
+            }
+
+            if (awaitingDestination) {
+                emitter.emit(formatSseEvent(threadId, "STATUS", Map.of(
+                        "phase", "reasoning",
+                        "durationMs", 420,
+                        "thought", "Updating Traveler Profile (traveler://preferences on :8081) with " + ollamaModel
+                                + " and preparing interactive Destination Picker without assuming a city.",
+                        "message", "Syncing Traveler Profile (traveler://preferences)")));
+
+                String resCallId = "call-res-" + UUID.randomUUID().toString().substring(0, 6);
+                Map<String, Object> prefs = mcpClient.readResource("traveler://preferences");
+                emitter.emit(formatSseEvent(threadId, "TOOL_CALL", Map.of(
+                        "callId", resCallId,
+                        "tool", "traveler://preferences",
+                        "protocol", "MCP",
+                        "callType", "mcp:resource",
+                        "server", "nomad-mcp-concierge (:8081)",
+                        "args", Map.of("uri", "traveler://preferences"))));
+                emitter.emit(formatSseEvent(threadId, "TOOL_RESULT", Map.of(
+                        "callId", resCallId,
+                        "tool", "traveler://preferences",
+                        "protocol", "MCP",
+                        "callType", "mcp:resource",
+                        "result", prefs)));
+
+                recordMemoryTurn(threadId, "user", prompt, "");
+
+                Map<String, Object> stateDelta = new LinkedHashMap<>();
+                stateDelta.put("awaitingDestination", true);
+                stateDelta.put("clusterState", awaitingDestinationClusterState());
+                stateDelta.put("memoryTurns", getConversationMemory(threadId).size());
+                stateDelta.put("interaction", buildWelcomeDestinationPicker());
+                stateDelta.put("followUps", buildAwaitingDestinationFollowUps());
+                emitter.emit(formatSseEvent(threadId, "STATE_DELTA", stateDelta));
+
+                emitter.emit(formatSseEvent(threadId, "STATUS", Map.of(
+                        "phase", "streaming_llm_tokens",
+                        "message", "Streaming live tokens from Ollama (" + ollamaModel + ")")));
+
+                StringBuilder assistantReplyBuilder = new StringBuilder();
+                boolean streamedFromOllama = streamTokensFromOllama(
+                        threadId, ollamaModel, prompt, "", emitter, assistantReplyBuilder);
+                if (!streamedFromOllama) {
+                    String fallbackReply = buildDestinationFreeConciergeReply(prompt, prefs);
+                    List<String> fallbackFrames = new ArrayList<>();
+                    appendTextDeltaFrames(fallbackFrames, threadId, fallbackReply);
+                    fallbackFrames.forEach(emitter::emit);
+                    recordMemoryTurn(threadId, "assistant", fallbackReply, "");
+                } else if (!assistantReplyBuilder.isEmpty()) {
+                    recordMemoryTurn(threadId, "assistant", assistantReplyBuilder.toString(), "");
+                }
+
+                emitter.emit(formatSseEvent(threadId, "RUN_FINISHED", Map.of(
+                        "threadId", threadId,
+                        "status", "completed",
+                        "memoryTurns", getConversationMemory(threadId).size(),
+                        "llmMode", "ollama:" + ollamaModel)));
                 emitter.complete();
                 return;
             }
@@ -970,20 +1096,38 @@ public class OpsPilotOrchestratorService {
             MultiEmitter<? super String> emitter,
             StringBuilder replyCollector) {
         try {
-            boolean hasInteractiveCard = isChoiceElicitationRequest(userPrompt);
+            boolean hasInteractiveCard = isChoiceElicitationRequest(userPrompt) || toolContext.isEmpty();
             Map<String, Object> prefs = mcpClient.readResource("traveler://preferences");
-            String systemPrompt = "You are Nomad, an authoritative, refined AI Travel, Architecture, Weather, FX & Local Culture Concierge. "
-                    + "Ground your response in the live Open-Meteo weather, Wikipedia cultural summary, Apple iTunes 30-second local music preview, "
-                    + "Frankfurter FX conversion, Cultural Field Notes RAG, and REST Countries travel advisory provided in the context. "
-                    + "Honor the traveler's live profile preferences: dietary=" + prefs.getOrDefault("dietary", "Seasonal Local Terroir")
-                    + ", architectural style=" + prefs.getOrDefault("style", "Architectural Minimalist")
-                    + ", music taste=" + prefs.getOrDefault("musicTaste", "Analog Vinyl & Regional Acoustic")
-                    + ", pace=" + prefs.getOrDefault("pace", "Unrushed")
-                    + ", homeCurrency=" + prefs.getOrDefault("homeCurrency", "USD") + ". "
-                    + "Format your response with a clean Markdown heading and concise bullet points covering atmospheric architecture, local listening/music culture, and practical weather/currency insights."
-                    + (hasInteractiveCard
-                            ? " An interactive AG-UI clickable selection card is rendered directly below your message—invite the traveler to click their preferred option(s) in the card below rather than typing a number."
-                            : "");
+            String travelerName = prefs.get("travelerName") instanceof String tn && !tn.isBlank() ? tn.trim() : null;
+            String systemPrompt;
+            if (toolContext.isEmpty()) {
+                systemPrompt = "You are Nomad, an authoritative, refined AI Travel, Architecture, Weather, FX & Local Culture Concierge. "
+                        + "The traveler has not selected a destination city yet. "
+                        + "CRITICAL RULE: Do NOT assume, invent, or describe any default destination city (such as Kyoto) unless the user explicitly asked for it. "
+                        + (travelerName != null ? "Greet the traveler warmly by name (" + travelerName + "). " : "")
+                        + "Confirm their live Traveler Profile preferences stored in traveler://preferences: "
+                        + (travelerName != null ? "travelerName=" + travelerName + ", " : "")
+                        + "dietary=" + prefs.getOrDefault("dietary", "Seasonal Local Terroir")
+                        + ", architectural style=" + prefs.getOrDefault("style", "Architectural Minimalist")
+                        + ", music taste=" + prefs.getOrDefault("musicTaste", "Analog Vinyl & Regional Acoustic")
+                        + ", pace=" + prefs.getOrDefault("pace", "Unrushed")
+                        + ", homeCurrency=" + prefs.getOrDefault("homeCurrency", "USD") + ". "
+                        + "Keep your reply concise (2-4 sentences) and invite them to select a destination from the interactive Destination Picker card rendered beside your message (Beirut, Kyoto, Lisbon, Reykjavik) or name any city in the world they would like to explore.";
+            } else {
+                systemPrompt = "You are Nomad, an authoritative, refined AI Travel, Architecture, Weather, FX & Local Culture Concierge. "
+                        + (travelerName != null ? "The traveler's name is " + travelerName + "—address them naturally when appropriate. " : "")
+                        + "Ground your response in the live Open-Meteo weather, Wikipedia cultural summary, Apple iTunes 30-second local music preview, "
+                        + "Frankfurter FX conversion, Cultural Field Notes RAG, and REST Countries travel advisory provided in the context. "
+                        + "Honor the traveler's live profile preferences: dietary=" + prefs.getOrDefault("dietary", "Seasonal Local Terroir")
+                        + ", architectural style=" + prefs.getOrDefault("style", "Architectural Minimalist")
+                        + ", music taste=" + prefs.getOrDefault("musicTaste", "Analog Vinyl & Regional Acoustic")
+                        + ", pace=" + prefs.getOrDefault("pace", "Unrushed")
+                        + ", homeCurrency=" + prefs.getOrDefault("homeCurrency", "USD") + ". "
+                        + "Format your response with a clean Markdown heading and concise bullet points covering atmospheric architecture, local listening/music culture, and practical weather/currency insights."
+                        + (hasInteractiveCard
+                                ? " An interactive AG-UI clickable selection card is rendered directly below your message—invite the traveler to click their preferred option(s) in the card below rather than typing a number."
+                                : "");
+            }
 
             String augmentedUserPrompt = toolContext.isEmpty()
                     ? userPrompt
@@ -1177,7 +1321,22 @@ public class OpsPilotOrchestratorService {
         return Multi.createFrom().iterable(frames);
     }
 
-    private String detectNomadCity(String prompt, AgentRunRequest request) {
+    boolean isDestinationFreeConversationalTurn(String prompt, AgentRunRequest request) {
+        if (prompt == null || prompt.isBlank()) {
+            return false;
+        }
+        String trimmed = prompt.trim();
+        if (trimmed.startsWith("/") || isChoiceElicitationRequest(trimmed)) {
+            return false;
+        }
+        String lower = trimmed.toLowerCase(Locale.ROOT);
+        if (lower.contains("reserve") || lower.contains("book ")) {
+            return false;
+        }
+        return detectExplicitOrRememberedCity(prompt, request) == null;
+    }
+
+    String detectExplicitOrRememberedCity(String prompt, AgentRunRequest request) {
         String raw = prompt == null ? "" : prompt.replaceFirst("^/[a-z]+\\s*", "").trim();
         String lower = raw.toLowerCase(Locale.ROOT);
         if (lower.contains("lisbon") || lower.contains("portugal") || lower.contains("fado") || lower.contains("alfama")) {
@@ -1220,8 +1379,8 @@ public class OpsPilotOrchestratorService {
         }
         if (request != null && request.threadId() != null) {
             List<Map<String, String>> mem = getConversationMemory(request.threadId());
-            if (!mem.isEmpty()) {
-                String lastCity = mem.getLast().get("city");
+            for (int i = mem.size() - 1; i >= 0; i--) {
+                String lastCity = mem.get(i).get("city");
                 if (lastCity != null && !lastCity.isBlank()) {
                     return lastCity.trim();
                 }
@@ -1237,11 +1396,105 @@ public class OpsPilotOrchestratorService {
                 return activeCity.trim();
             }
         }
+        return null;
+    }
+
+    private String detectNomadCity(String prompt, AgentRunRequest request) {
+        String explicitOrRemembered = detectExplicitOrRememberedCity(prompt, request);
+        if (explicitOrRemembered != null) {
+            return explicitOrRemembered;
+        }
         Map<String, Object> currentTrip = activeNomadTripState();
         if (currentTrip.get("activeCity") instanceof String currentCity && !currentCity.isBlank()) {
             return currentCity.trim();
         }
         return "Kyoto";
+    }
+
+    private String buildDestinationFreeConciergeReply(String userPrompt, Map<String, Object> prefs) {
+        String travelerName = prefs != null && prefs.get("travelerName") instanceof String tn && !tn.isBlank()
+                ? tn.trim()
+                : null;
+        String style = String.valueOf(prefs != null ? prefs.getOrDefault("style", "Architectural Minimalist & Slow Cultural Immersion") : "Architectural Minimalist & Slow Cultural Immersion");
+        String dietary = String.valueOf(prefs != null ? prefs.getOrDefault("dietary", "Seasonal Local Terroir") : "Seasonal Local Terroir");
+        String musicTaste = String.valueOf(prefs != null ? prefs.getOrDefault("musicTaste", "Analog Vinyl & Regional Acoustic") : "Analog Vinyl & Regional Acoustic");
+        String homeCurrency = String.valueOf(prefs != null ? prefs.getOrDefault("homeCurrency", "USD") : "USD");
+
+        StringBuilder md = new StringBuilder();
+        if (travelerName != null) {
+            md.append("### Welcome, ").append(travelerName).append(" — Traveler Profile Synced\n\n");
+            md.append("Pleasure to meet you, **").append(travelerName)
+                    .append("**. I have updated your live **Traveler Profile** (`traveler://preferences`) on the MCP Concierge (`:8081`).\n\n");
+        } else {
+            md.append("### Traveler Profile Synced — Awaiting Destination\n\n");
+            md.append("I have updated your live **Traveler Profile** (`traveler://preferences`) on the MCP Concierge (`:8081`).\n\n");
+        }
+        md.append("- **Architectural Style:** ").append(style).append("\n");
+        md.append("- **Culinary Terroir:** ").append(dietary).append("\n");
+        md.append("- **Sonic & Acoustic Profile:** ").append(musicTaste).append("\n");
+        md.append("- **Home Currency:** `").append(homeCurrency).append("`\n\n");
+        md.append("Which city or cultural landscape would you like to explore? Select a starter destination from the **Destination Picker** card or type any city in the world below.");
+        return md.toString();
+    }
+
+    private Map<String, Object> buildWelcomeDestinationPicker() {
+        return Map.of(
+                "id", "welcome-city-picker",
+                "mode", "single_select",
+                "prompt", "Choose a destination to initialize your live Trip Dossier:",
+                "options", List.of(
+                        Map.of(
+                                "id", "pick-beirut",
+                                "label", "Beirut, Lebanon",
+                                "description", "Levantine limestone arcades, Sursock modernism, coastal terroir & Oud acoustics",
+                                "badge", "LBP • Mediterranean",
+                                "prompt", "Curate a 4-day architectural and acoustic itinerary for Beirut, Lebanon"),
+                        Map.of(
+                                "id", "pick-kyoto",
+                                "label", "Kyoto, Japan",
+                                "description", "Arashiyama cedar pavilions, Gion machiya joinery, kaiseki & Koto strings",
+                                "badge", "JPY • East Asia",
+                                "prompt", "Curate a 4-night Kyoto architectural, culinary & Koto music itinerary"),
+                        Map.of(
+                                "id", "pick-lisbon",
+                                "label", "Lisbon, Portugal",
+                                "description", "Alfama azulejo terraces, Siza Vieira concrete geometry & acoustic Fado",
+                                "badge", "EUR • Atlantic",
+                                "prompt", "Plan a 4-night Lisbon Fado, azulejo atelier & coastal itinerary"),
+                        Map.of(
+                                "id", "pick-reykjavik",
+                                "label", "Reykjavik, Iceland",
+                                "description", "Harpa basalt facades, geothermal lagoons & Nordic chamber strings",
+                                "badge", "ISK • Sub-Arctic",
+                                "prompt", "Design a 4-night Reykjavik aurora, geothermal & chamber music escape")));
+    }
+
+    private List<String> buildAwaitingDestinationFollowUps() {
+        return List.of(
+                "Plan a 4-night architectural, culinary and music trip in Beirut",
+                "Curate a 4-night Kyoto architectural & Koto music escape",
+                "Compare 4 neighborhood culinary & music experiences in Lisbon",
+                "Design a 4-night Tokyo modernist architecture & vinyl kissaten itinerary");
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> awaitingDestinationClusterState() {
+        Map<String, Object> raw = new LinkedHashMap<>(mcpClient.readClusterState());
+        Map<String, Object> trip = new LinkedHashMap<>();
+        if (raw.get("nomadTrip") instanceof Map<?, ?> existingTrip) {
+            trip.putAll((Map<String, Object>) existingTrip);
+        }
+        trip.put("activeCity", null);
+        trip.put("country", null);
+        trip.put("currency", null);
+        trip.put("exchangeRate", null);
+        trip.put("temperatureC", null);
+        trip.put("weatherCondition", "Awaiting city selection");
+        trip.put("stopTitle", "Select or type any city to initialize live telemetry");
+        trip.put("allocatedUsd", 0);
+        trip.put("soundtrack", null);
+        raw.put("nomadTrip", trip);
+        return raw;
     }
 
     static Map<String, Object> evaluateInputGuardrail(String prompt) {
