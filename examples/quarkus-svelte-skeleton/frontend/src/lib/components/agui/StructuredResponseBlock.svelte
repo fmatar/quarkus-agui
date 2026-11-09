@@ -1,5 +1,6 @@
 <script>
 	import { ArrowUpRight, Check, Circle, Square, CheckSquare } from '@lucide/svelte';
+	import gsap from 'gsap';
 
 	let {
 		interaction = null,
@@ -12,10 +13,29 @@
 	let isMulti = $derived(interaction?.mode === 'multi_select');
 	let selected = $derived(interaction?.selectedValues ?? []);
 	let isLocked = $derived(Boolean(interaction?.submitted) || disabled);
+	let blockContainerEl = $state(null);
+
+	$effect(() => {
+		const count = interaction?.options?.length ?? 0;
+		if (!blockContainerEl || count === 0) return;
+		const prefersReduced =
+			typeof window !== 'undefined' &&
+			window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+		if (prefersReduced) return;
+
+		const cards = blockContainerEl.querySelectorAll('[data-choice-option]');
+		if (cards.length > 0) {
+			gsap.fromTo(
+				cards,
+				{ opacity: 0.88, y: 5 },
+				{ opacity: 1, y: 0, duration: 0.26, stagger: 0.045, ease: 'power3.out' }
+			);
+		}
+	});
 </script>
 
 {#if interaction?.options?.length || interaction?.actions?.length}
-	<div class="rounded-xl border border-[#E4E0D8] bg-[#FAF9F6] p-3.5 space-y-3">
+	<div bind:this={blockContainerEl} class="rounded-xl border border-[#E4E0D8] bg-[#FAF9F6] p-3.5 space-y-3">
 		{#if interaction?.options?.length}
 			<div>
 				<div class="mb-2 flex items-center justify-between text-xs">
@@ -32,6 +52,7 @@
 						{@const isSelected = selected.includes(opt.id)}
 						<button
 							type="button"
+							data-choice-option
 							disabled={isLocked}
 							onclick={() => onSelectOption?.(opt)}
 							class="flex w-full items-start justify-between gap-3 rounded-lg border p-3 text-left transition-all {isSelected
@@ -44,12 +65,12 @@
 										{#if isSelected}
 											<CheckSquare class="size-4" />
 										{:else}
-											<Square class="size-4 text-[#78756F]" />
+											<Square class="size-4 text-[#575551]" />
 										{/if}
 									{:else if isSelected}
 										<Check class="size-4" />
 									{:else}
-										<Circle class="size-4 text-[#78756F]" />
+										<Circle class="size-4 text-[#575551]" />
 									{/if}
 								</span>
 								<div class="min-w-0">

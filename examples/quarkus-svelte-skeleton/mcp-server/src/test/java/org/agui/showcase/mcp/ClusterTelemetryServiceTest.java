@@ -115,6 +115,25 @@ class ClusterTelemetryServiceTest {
 
         assertEquals("itinerary://active-trip", service.activeTripResource().uri());
         assertEquals("traveler://preferences", service.travelerPreferencesResource().uri());
+        assertEquals("itinerary://city/lisbon/dossier", service.cityDossierResourceTemplate("Lisbon").uri());
+        assertEquals("itinerary://city/beirut/dossier", service.cityDossierResourceTemplate("Beirut").uri());
+        assertEquals("itinerary://city/tokyo/dossier", service.cityDossierResourceTemplate("Tokyo").uri());
+        assertEquals("itinerary://city/oaxaca/dossier", service.cityDossierResourceTemplate("Oaxaca").uri());
+        assertEquals("itinerary://city/reykjavik/dossier", service.cityDossierResourceTemplate("Reykjavik").uri());
+        assertFalse(service.completeWeekendEscapeCity("Be").values().isEmpty());
+        assertFalse(service.completeMusicWalkCity("").values().isEmpty());
+        assertFalse(service.completeCityArgument("ZzzUnknownCity").isEmpty());
+
+        Map<String, Object> updatedPrefs = service.updateTravelerPreferences(Map.of(
+                "dietary", "Vegetarian",
+                "homeCurrency", "EUR"));
+        assertEquals("Vegetarian", updatedPrefs.get("dietary"));
+        assertEquals("EUR", updatedPrefs.get("homeCurrency"));
+
+        Map<String, Object> sampled = service.sampleAcousticMoodProfile("Lisbon", "Golden Sun", "fado");
+        assertEquals("mcp:sampling", sampled.get("protocol"));
+        assertEquals("Lisbon", sampled.get("city"));
+
         assertEquals(2, service.listPrompts().size());
         assertEquals(3, service.listTools().size());
         assertNotNull(service.weekendCulturalEscapePrompt("Kyoto"));

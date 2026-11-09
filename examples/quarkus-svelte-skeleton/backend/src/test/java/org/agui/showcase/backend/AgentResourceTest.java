@@ -94,5 +94,41 @@ class AgentResourceTest {
                 .body(containsString("TOOL_RESULT"))
                 .body(containsString("STATE_DELTA"))
                 .body(containsString("completed"));
+
+        given()
+                .contentType("application/json")
+                .body(Map.of("threadId", "thread-http-1", "nights", 5, "homeCurrency", "EUR"))
+                .when()
+                .post("/api/agent/params")
+                .then()
+                .statusCode(200)
+                .body("status", equalTo("params_updated"));
+
+        given()
+                .contentType("application/json")
+                .body(Map.of("threadId", "thread-http-1"))
+                .when()
+                .post("/api/agent/memory/reset")
+                .then()
+                .statusCode(200)
+                .body("status", equalTo("memory_reset"))
+                .body("memoryTurns", equalTo(0));
+
+        given()
+                .contentType("application/json")
+                .body(Map.of("threadId", "thread-http-1"))
+                .when()
+                .post("/api/agent/cancel")
+                .then()
+                .statusCode(200)
+                .body("status", equalTo("cancelled"));
+
+        given()
+                .queryParam("prefix", "Li")
+                .when()
+                .get("/api/agent/complete")
+                .then()
+                .statusCode(200)
+                .body("argument", equalTo("city"));
     }
 }

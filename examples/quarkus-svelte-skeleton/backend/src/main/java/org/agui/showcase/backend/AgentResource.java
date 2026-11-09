@@ -7,7 +7,9 @@ import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
+import java.util.List;
 import java.util.Map;
 import org.agui.core.adapters.AgUiSseFormatter;
 import org.jboss.resteasy.reactive.RestStreamElementType;
@@ -53,6 +55,37 @@ public class AgentResource {
     @RestStreamElementType(MediaType.TEXT_PLAIN)
     public Multi<String> approve(AgentApprovalRequest approval) {
         return orchestrator.approvePendingAction(approval).map(AgentResource::unwrapSseDataPayload);
+    }
+
+    @POST
+    @Path("/params")
+    public Map<String, Object> updateParams(Map<String, Object> body) {
+        String threadId = body != null && body.get("threadId") instanceof String t ? t : "thread-nomad-1";
+        Integer nights = body != null && body.get("nights") instanceof Number n ? n.intValue() : null;
+        String homeCurrency = body != null && body.get("homeCurrency") instanceof String c ? c : null;
+        return orchestrator.updateTripParams(threadId, nights, homeCurrency);
+    }
+
+    @POST
+    @Path("/memory/reset")
+    public Map<String, Object> resetMemory(Map<String, Object> body) {
+        String threadId = body != null && body.get("threadId") instanceof String t ? t : "thread-nomad-1";
+        return orchestrator.resetMemory(threadId);
+    }
+
+    @POST
+    @Path("/cancel")
+    public Map<String, Object> cancelRun(Map<String, Object> body) {
+        String threadId = body != null && body.get("threadId") instanceof String t ? t : "thread-nomad-1";
+        orchestrator.cancelRun(threadId);
+        return Map.of("threadId", threadId, "status", "cancelled");
+    }
+
+    @GET
+    @Path("/complete")
+    public Map<String, Object> completeCity(@QueryParam("prefix") String prefix) {
+        List<String> values = orchestrator.completeCityPrefix(prefix);
+        return Map.of("argument", "city", "values", values);
     }
 
     static String unwrapSseDataPayload(String rawFrame) {

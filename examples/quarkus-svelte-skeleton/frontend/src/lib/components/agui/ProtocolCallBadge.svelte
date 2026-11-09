@@ -1,5 +1,6 @@
 <script>
 	import {
+		BookOpen,
 		Compass,
 		Cpu,
 		Database,
@@ -9,6 +10,8 @@
 		LayoutGrid,
 		Network,
 		ShieldAlert,
+		ShieldCheck,
+		Sparkles,
 		Wrench
 	} from '@lucide/svelte';
 	import { resolveProtocolCallMeta } from '$lib/agui-client.js';
@@ -19,7 +22,7 @@
 </script>
 
 <span
-	class="inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-medium tracking-tight {meta.badgeClass}"
+	class="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2 py-0.5 text-[11px] font-medium tracking-tight {meta.badgeClass}"
 	title="{meta.family} • {meta.callType}"
 >
 	{#if meta.iconName === 'Hammer'}
@@ -38,6 +41,12 @@
 		<FileCheck2 class="size-3 shrink-0" />
 	{:else if meta.iconName === 'ShieldAlert'}
 		<ShieldAlert class="size-3 shrink-0" />
+	{:else if meta.iconName === 'ShieldCheck'}
+		<ShieldCheck class="size-3 shrink-0" />
+	{:else if meta.iconName === 'BookOpen'}
+		<BookOpen class="size-3 shrink-0" />
+	{:else if meta.iconName === 'Sparkles'}
+		<Sparkles class="size-3 shrink-0" />
 	{:else if meta.iconName === 'LayoutGrid'}
 		<LayoutGrid class="size-3 shrink-0" />
 	{:else}

@@ -66,5 +66,38 @@ class McpServerResourceTest {
             .then()
             .statusCode(200)
             .body("prompts.size()", equalTo(2));
+
+        given()
+            .when().get("/api/mcp/resources/city/Beirut")
+            .then()
+            .statusCode(200)
+            .body("city", equalTo("Beirut"))
+            .body("uri", equalTo("itinerary://city/beirut/dossier"));
+
+        given()
+            .contentType(ContentType.JSON)
+            .body(Map.of("dietary", "Vegan", "homeCurrency", "EUR"))
+            .when().post("/api/mcp/resources/preferences")
+            .then()
+            .statusCode(200)
+            .body("dietary", equalTo("Vegan"))
+            .body("homeCurrency", equalTo("EUR"));
+
+        given()
+            .queryParam("prefix", "Ky")
+            .when().get("/api/mcp/prompts/complete")
+            .then()
+            .statusCode(200)
+            .body("argument", equalTo("city"))
+            .body("values[0]", equalTo("Kyoto"));
+
+        given()
+            .contentType(ContentType.JSON)
+            .body(Map.of("city", "Tokyo", "weatherCondition", "Clear Horizon", "genre", "jazz"))
+            .when().post("/api/mcp/sampling")
+            .then()
+            .statusCode(200)
+            .body("protocol", equalTo("mcp:sampling"))
+            .body("city", equalTo("Tokyo"));
     }
 }

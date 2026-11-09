@@ -201,6 +201,34 @@ export const PROTOCOL_CALL_TAXONOMY = {
 		family: 'HITL',
 		iconName: 'ShieldAlert',
 		badgeClass: 'badge-hitl'
+	},
+	'guardrail:input': {
+		callType: 'guardrail:input',
+		label: 'Input Guardrail',
+		family: 'GUARDRAIL',
+		iconName: 'ShieldCheck',
+		badgeClass: 'badge-a2a'
+	},
+	'guardrail:output': {
+		callType: 'guardrail:output',
+		label: 'Output Guardrail',
+		family: 'GUARDRAIL',
+		iconName: 'ShieldCheck',
+		badgeClass: 'badge-a2a'
+	},
+	'rag:retrieval': {
+		callType: 'rag:retrieval',
+		label: 'Cultural RAG',
+		family: 'RAG',
+		iconName: 'BookOpen',
+		badgeClass: 'badge-mcp'
+	},
+	'agentic:specialist': {
+		callType: 'agentic:specialist',
+		label: 'Specialist Council',
+		family: 'AGENTIC',
+		iconName: 'Sparkles',
+		badgeClass: 'badge-ui'
 	}
 };
 
@@ -209,6 +237,15 @@ export function resolveProtocolCallMeta(callType, fallbackProtocol = 'MCP') {
 		return PROTOCOL_CALL_TAXONOMY[callType];
 	}
 	const upper = String(fallbackProtocol ?? 'MCP').toUpperCase();
+	if (upper.includes('GUARDRAIL')) {
+		return PROTOCOL_CALL_TAXONOMY['guardrail:input'];
+	}
+	if (upper.includes('RAG')) {
+		return PROTOCOL_CALL_TAXONOMY['rag:retrieval'];
+	}
+	if (upper.includes('AGENTIC')) {
+		return PROTOCOL_CALL_TAXONOMY['agentic:specialist'];
+	}
 	if (upper.includes('A2A')) {
 		return PROTOCOL_CALL_TAXONOMY['a2a:task'];
 	}
@@ -238,6 +275,9 @@ function createEmptyActiveTurn() {
 export function createInitialWorkbenchState(threadId = 'thread-nomad-1') {
 	return {
 		threadId,
+		transportMode: 'ws',
+		wsConnected: false,
+		memoryTurns: 0,
 		isStreaming: false,
 		statusText: 'Ready — Nomad Concierge & Tri-Protocol Studio',
 		streamBuffer: '',
@@ -257,12 +297,21 @@ export function createInitialWorkbenchState(threadId = 'thread-nomad-1') {
 				stopTitle: 'Hoshinoya Arashiyama Pavilion',
 				budgetUsd: 3200,
 				allocatedUsd: 1680,
+				homeCurrency: 'USD',
 				soundtrack: {
 					trackName: 'Four Seasons in Kyoto (Koto & Shakuhachi)',
 					artistName: 'Chikatoyo Tsujimoto',
 					previewUrl:
 						'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/9b/27/76/9b2776c5-65cd-87f1-3f33-ccbccc642285/mzaf_16549365214060917501.plus.aac.p.m4a'
 				}
+			},
+			preferences: {
+				uri: 'traveler://preferences',
+				style: 'Architectural Minimalist & Slow Cultural Immersion',
+				dietary: 'Seasonal Local Terroir',
+				musicTaste: 'Analog Vinyl & Regional Acoustic',
+				pace: 'Unrushed (2 curated stops per day)',
+				homeCurrency: 'USD'
 			}
 		},
 		messages: [
@@ -385,11 +434,23 @@ export function parseSseChunk(buffer) {
 export function reduceAgUiEvent(state, event) {
 	if (!event || !event.type) return state;
 
-	const nextEvents = [...state.events, event];
+	const taggedEvent = event.direction ? event : { ...event, direction: 'server' };
+	const nextEvents = [...state.events, taggedEvent];
 	const payload = event.payload ?? {};
 	const currentTurn = state.activeTurn ?? createEmptyActiveTurn();
 
 	switch (event.type) {
+		case 'WS_CONNECTED':
+			return {
+				...state,
+				wsConnected: true,
+				transportMode: 'ws',
+				memoryTurns: payload.memoryTurns ?? state.memoryTurns ?? 0,
+				clusterState: payload.clusterState ?? state.clusterState,
+				statusText: 'WebSocket Full-Duplex Connected (/api/agent/ws)',
+				events: nextEvents
+			};
+
 		case 'RUN_STARTED':
 			return {
 				...state,
@@ -405,6 +466,30 @@ export function reduceAgUiEvent(state, event) {
 
 		case 'STATE_SNAPSHOT':
 		case 'STATE_DELTA': {
+			if (payload.status === 'memory_reset') {
+				const initial = createInitialWorkbenchState(state.threadId);
+				return {
+					...state,
+					clusterState: payload.clusterState ?? initial.clusterState,
+					memoryTurns: 0,
+					isStreaming: false,
+					pendingApproval: null,
+					streamBuffer: '',
+					activeTurn: createEmptyActiveTurn(),
+					messages: initial.messages,
+					statusText: 'Conversational memory & traveler profile reset',
+					events: nextEvents
+				};
+			}
+			if (payload.status === 'params_updated') {
+				return {
+					...state,
+					clusterState: payload.clusterState ?? state.clusterState,
+					memoryTurns: payload.memoryTurns ?? state.memoryTurns ?? 0,
+					statusText: 'Trip parameters updated via live WebSocket (<50ms)',
+					events: nextEvents
+				};
+			}
 			const nextInteraction = payload.interaction
 				? {
 						...payload.interaction,
@@ -415,6 +500,7 @@ export function reduceAgUiEvent(state, event) {
 			return {
 				...state,
 				clusterState: payload.clusterState ?? state.clusterState,
+				memoryTurns: payload.memoryTurns ?? state.memoryTurns ?? 0,
 				activeTurn: {
 					...currentTurn,
 					media: payload.media ?? currentTurn.media,
@@ -671,6 +757,7 @@ export function reduceAgUiEvent(state, event) {
 				...state,
 				isStreaming: false,
 				pendingApproval: null,
+				memoryTurns: payload.memoryTurns ?? state.memoryTurns ?? 0,
 				statusText: `Completed (${payload.status ?? 'completed'})`,
 				streamBuffer: '',
 				activeTurn: createEmptyActiveTurn(),
@@ -698,11 +785,26 @@ function summarizeToolResult(tool, result) {
 	if (tool === 'updateTripItinerary' && result.stopTitle) {
 		return `Reserved ${result.stopTitle} (${result.nights} nights • $${result.allocatedUsd} USD)`;
 	}
+	if (tool === 'TravelSafetyAndInjectionGuardrail') {
+		return result.reason ?? 'OWASP-LLM01 Input Guardrail Verified';
+	}
+	if (tool === 'CurrencyAndGroundingGuardrail') {
+		return `Verified ${result.verifiedCity} • ${result.verifiedIsoCurrency} (${result.verifiedTemperatureC}°C)`;
+	}
+	if (tool === 'retrieveCulturalFieldNotes') {
+		return `${result.chunksRetrieved ?? 3} field notes retrieved (cosine similarity ${result.topSimilarity ?? 0.98})`;
+	}
+	if (tool === 'sampleAcousticMoodProfile') {
+		return result.sampledMood ?? 'Sampled acoustic twilight mood';
+	}
+	if (result.architecturalHighlight) {
+		return `${result.city} — ${result.architecturalHighlight}`;
+	}
 	if (result.expandedPrompt) {
 		return result.expandedPrompt;
 	}
 	if (result.style) {
-		return `${result.style} • ${result.pace ?? ''}`;
+		return `${result.style} • ${result.dietary ?? result.pace ?? ''}`;
 	}
 	return '';
 }
@@ -776,6 +878,9 @@ export function filterInspectorEvents(events, filter = 'ALL') {
 	if (!Array.isArray(events) || filter === 'ALL') {
 		return events ?? [];
 	}
+	if (filter === 'CLIENT') {
+		return events.filter((e) => e.direction === 'client');
+	}
 	if (filter === 'MCP') {
 		return events.filter((e) => e.type === 'TOOL_CALL' || e.type === 'TOOL_RESULT');
 	}
@@ -799,11 +904,71 @@ export function filterInspectorEvents(events, filter = 'ALL') {
  */
 export function updateTripNightsInState(clusterState, delta) {
 	if (!clusterState?.nomadTrip) return clusterState;
+	const nextNights = Math.max(1, Math.min(30, (clusterState.nomadTrip.nights ?? 4) + delta));
 	return {
 		...clusterState,
 		nomadTrip: {
 			...clusterState.nomadTrip,
-			nights: Math.max(1, (clusterState.nomadTrip.nights ?? 4) + delta)
+			nights: nextNights,
+			allocatedUsd: Math.round(nextNights * 420)
 		}
 	};
+}
+
+/**
+ * Records an outbound client-to-server WebSocket command frame in the Wire Telemetry log.
+ */
+export function recordClientOutboundEvent(state, commandType, payload = {}) {
+	if (!state) return state;
+	const evt = {
+		id: `ws-up-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+		type: commandType,
+		direction: 'client',
+		payload
+	};
+	return {
+		...state,
+		events: [...(state.events ?? []), evt]
+	};
+}
+
+/**
+ * Formats the active Trip Dossier, Traveler Profile (`traveler://preferences`), and latest itinerary
+ * into a downloadable Markdown document (`.md`).
+ */
+export function formatTripDossierMarkdown(clusterState, messages = []) {
+	const trip = clusterState?.nomadTrip ?? {};
+	const prefs = clusterState?.preferences ?? {};
+	const city = trip.activeCity ?? 'Kyoto';
+	const country = trip.country ?? 'Japan';
+	const currency = trip.currency ?? 'JPY';
+	const rate = trip.exchangeRate ?? 151.4;
+	const nights = trip.nights ?? 4;
+	const allocatedUsd = trip.allocatedUsd ?? 1680;
+	const budgetUsd = trip.budgetUsd ?? 3200;
+	const localAllocated = Math.round(allocatedUsd * rate).toLocaleString();
+	const lastAssistant = [...(messages ?? [])].reverse().find((m) => m.role === 'assistant');
+
+	const lines = [
+		`# Nomad Cultural & Architectural Dossier — ${city}, ${country}`,
+		``,
+		`- **Sanctuary Allocation**: ${trip.stopTitle ?? `${city} Architectural Sanctuary`} (${nights} Nights)`,
+		`- **Live Open-Meteo Telemetry**: ${trip.temperatureC ?? 18.4}°C — ${trip.weatherCondition ?? 'Clear Sky'}`,
+		`- **Frankfurter FX Settlement**: $${allocatedUsd} / $${budgetUsd} USD (${localAllocated} ${currency} @ 1 USD = ${rate} ${currency})`,
+		`- **Home Currency**: ${prefs.homeCurrency ?? trip.homeCurrency ?? 'USD'}`,
+		`- **Soundtrack Preview**: ${trip.soundtrack?.trackName ?? 'Regional Acoustic Session'} — ${trip.soundtrack?.artistName ?? 'Local Ensemble'}`,
+		``,
+		`## Traveler Profile (\`traveler://preferences\`)`,
+		`- **Architectural Style**: ${prefs.style ?? 'Architectural Minimalist & Slow Cultural Immersion'}`,
+		`- **Dietary Terroir**: ${prefs.dietary ?? 'Seasonal Local Terroir'}`,
+		`- **Acoustic & Music Taste**: ${prefs.musicTaste ?? 'Analog Vinyl & Regional Acoustic'}`,
+		`- **Cadence & Pace**: ${prefs.pace ?? 'Unrushed (2 curated stops per day)'}`,
+		``
+	];
+
+	if (lastAssistant?.content) {
+		lines.push(`## Curated Concierge Briefing`, ``, lastAssistant.content.trim(), ``);
+	}
+
+	return lines.join('\n');
 }

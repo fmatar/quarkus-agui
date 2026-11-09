@@ -1,9 +1,21 @@
 <script>
-	import { ExternalLink, FileText, Film, Image as ImageIcon, Music } from '@lucide/svelte';
+	import { ExternalLink, FileText, Film, Image as ImageIcon, Music, Radio } from '@lucide/svelte';
 
 	let { media = [] } = $props();
 	let lightboxImage = $state(null);
+
+	const WAVEFORM_BARS = [
+		28, 52, 74, 42, 88, 64, 36, 94, 58, 46, 82, 70, 38, 90, 62, 48, 76, 54, 84, 40, 68, 50, 34, 60
+	];
+
+	function handleWindowKeydown(event) {
+		if (event.key === 'Escape' && lightboxImage) {
+			lightboxImage = null;
+		}
+	}
 </script>
+
+<svelte:window onkeydown={handleWindowKeydown} />
 
 {#if media?.length}
 	<div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -45,9 +57,28 @@
 									<div class="truncate text-[11px] text-[#575551]">{item.subtitle}</div>
 								</div>
 							</div>
-							<span class="rounded bg-[#EFECE6] px-2 py-0.5 font-mono text-[10px] font-medium text-[#575551] tabular-nums">
+							<span class="rounded bg-[#EFECE6] px-2 py-0.5 font-mono text-[11px] font-medium text-[#575551] tabular-nums">
 								{item.durationSeconds ?? 30}s
 							</span>
+						</div>
+
+						<!-- Editorial Acoustic Waveform & Archive Telemetry Strip -->
+						<div class="mt-3 rounded-lg border border-[#E4E0D8] bg-[#FAF9F6] px-3 py-2">
+							<div class="flex items-center justify-between text-[11px] text-[#575551]">
+								<span class="inline-flex items-center gap-1 font-medium text-[#141413]">
+									<Radio class="size-3 text-[#C84B31]" />
+									<span>Regional Acoustic Master</span>
+								</span>
+								<span class="font-mono text-[10px] tabular-nums">AAC 256kbps • Stereo</span>
+							</div>
+							<div class="mt-2 flex h-7 items-end justify-between gap-1" aria-hidden="true">
+								{#each WAVEFORM_BARS as heightPct, idx (idx)}
+									<span
+										class="flex-1 rounded-full {idx % 3 === 0 ? 'bg-[#C84B31]/65' : 'bg-[#CFCAC0]'}"
+										style="height: {heightPct}%"
+									></span>
+								{/each}
+							</div>
 						</div>
 					</div>
 
@@ -106,11 +137,19 @@
 {/if}
 
 {#if lightboxImage}
+	<!-- svelte-ignore a11y_click_events_have_key_events -->
+	<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 	<div
 		class="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-6"
 		role="dialog"
 		aria-modal="true"
 		aria-label={lightboxImage.title}
+		tabindex="-1"
+		onclick={(e) => {
+			if (e.target === e.currentTarget) {
+				lightboxImage = null;
+			}
+		}}
 	>
 		<div class="max-w-3xl overflow-hidden rounded-2xl bg-white shadow-2xl">
 			<img src={lightboxImage.url} alt={lightboxImage.title} class="max-h-[72vh] w-full object-contain bg-[#141413]" />
@@ -124,7 +163,7 @@
 					onclick={() => (lightboxImage = null)}
 					class="rounded-lg border border-[#E4E0D8] px-3 py-1.5 text-xs font-medium text-[#141413] hover:bg-[#F6F5F2]"
 				>
-					Close Preview
+					Close Preview (Esc)
 				</button>
 			</div>
 		</div>
