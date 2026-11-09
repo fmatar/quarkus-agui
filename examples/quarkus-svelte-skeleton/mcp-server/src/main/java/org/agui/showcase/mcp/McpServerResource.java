@@ -18,80 +18,83 @@ import java.util.Map;
 @Consumes(MediaType.APPLICATION_JSON)
 public class McpServerResource {
 
-    private final ClusterTelemetryService telemetryService;
+    private final NomadMcpConciergeService conciergeService;
 
     @Inject
-    public McpServerResource(ClusterTelemetryService telemetryService) {
-        this.telemetryService = telemetryService;
+    public McpServerResource(NomadMcpConciergeService conciergeService) {
+        this.conciergeService = conciergeService;
+    }
+
+    @GET
+    @Path("/health")
+    public Map<String, Object> health() {
+        return conciergeService.checkHealth();
     }
 
     @GET
     @Path("/tools")
     public Map<String, Object> listTools() {
         return Map.of(
-            "serverName", ClusterTelemetryService.SERVER_NAME,
-            "protocol", "mcp/1.0",
-            "tools", telemetryService.listTools()
-        );
+                "serverName", NomadMcpConciergeService.SERVER_NAME,
+                "protocol", "mcp/2025-03-26",
+                "tools", conciergeService.listTools());
     }
 
     @POST
     @Path("/tools/call")
     public McpToolInvocationResponse callTool(McpToolInvocationRequest request) {
-        return telemetryService.dispatchTool(request);
+        return conciergeService.dispatchTool(request);
     }
 
     @GET
     @Path("/resources/itinerary")
     public Map<String, Object> getItinerary() {
-        return telemetryService.getActiveTripSnapshot();
+        return conciergeService.getActiveTripSnapshot();
     }
 
     @GET
     @Path("/resources/city/{city}")
     public Map<String, Object> getCityDossier(@PathParam("city") String city) {
-        return telemetryService.getCityDossier(city);
+        return conciergeService.getCityDossier(city);
     }
 
     @GET
     @Path("/resources/preferences")
     public Map<String, Object> getPreferences() {
-        return telemetryService.getTravelerPreferences();
+        return conciergeService.getTravelerPreferences();
     }
 
     @POST
     @Path("/resources/preferences")
     public Map<String, Object> updatePreferences(Map<String, Object> updates) {
-        return telemetryService.updateTravelerPreferences(updates);
+        return conciergeService.updateTravelerPreferences(updates);
     }
 
     @GET
     @Path("/prompts")
     public Map<String, Object> listPrompts() {
         return Map.of(
-            "serverName", ClusterTelemetryService.SERVER_NAME,
-            "prompts", telemetryService.listPrompts()
-        );
+                "serverName", NomadMcpConciergeService.SERVER_NAME,
+                "prompts", conciergeService.listPrompts());
     }
 
     @GET
     @Path("/prompts/complete")
     public Map<String, Object> completePromptArgument(@QueryParam("prefix") String prefix) {
-        List<String> values = telemetryService.completeCityArgument(prefix);
+        List<String> values = conciergeService.completeCityArgument(prefix);
         return Map.of(
-            "serverName", ClusterTelemetryService.SERVER_NAME,
-            "argument", "city",
-            "values", values,
-            "total", values.size()
-        );
+                "serverName", NomadMcpConciergeService.SERVER_NAME,
+                "argument", "city",
+                "values", values,
+                "total", values.size());
     }
 
     @POST
     @Path("/sampling")
     public Map<String, Object> sampleAcousticMood(Map<String, Object> request) {
-        String city = request == null ? "Kyoto" : String.valueOf(request.getOrDefault("city", "Kyoto"));
-        String condition = request == null ? "Clear Sky" : String.valueOf(request.getOrDefault("weatherCondition", "Clear Sky"));
-        String genre = request == null ? "traditional" : String.valueOf(request.getOrDefault("genre", "traditional"));
-        return telemetryService.sampleAcousticMoodProfile(city, condition, genre);
+        String city = request == null || request.get("city") == null ? null : String.valueOf(request.get("city"));
+        String condition = request == null || request.get("weatherCondition") == null ? null : String.valueOf(request.get("weatherCondition"));
+        String genre = request == null || request.get("genre") == null ? null : String.valueOf(request.get("genre"));
+        return conciergeService.sampleAcousticMoodProfile(city, condition, genre);
     }
 }
