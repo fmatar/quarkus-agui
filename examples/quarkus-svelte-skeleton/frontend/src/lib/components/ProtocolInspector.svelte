@@ -1,5 +1,5 @@
 <script>
-	import { ChevronDown, ChevronRight, Terminal, Trash2, X, Zap } from '@lucide/svelte';
+	import { ArrowDownLeft, ArrowUpRight, ChevronDown, ChevronRight, Terminal, Trash2, X, Zap } from '@lucide/svelte';
 	import { filterInspectorEvents } from '$lib/agui-client.js';
 	import ProtocolCallBadge from './agui/ProtocolCallBadge.svelte';
 
@@ -14,14 +14,17 @@
 		expandedEventId = expandedEventId === id ? null : id;
 	}
 
-	function getEventBadgeStyle(type) {
+	function getEventBadgeStyle(type, direction) {
+		if (direction === 'client') {
+			return 'badge-ui';
+		}
 		if (type?.startsWith('STEP_')) {
 			return 'badge-a2a';
 		}
 		if (type?.startsWith('TOOL_')) {
 			return 'badge-mcp';
 		}
-		if (type?.includes('RUN_')) {
+		if (type?.includes('RUN_') || type === 'WS_CONNECTED') {
 			return 'badge-hitl';
 		}
 		return 'badge-local';
@@ -31,6 +34,7 @@
 {#if isOpen}
 	<aside
 		class="workbench-inspector nomad-panel flex flex-col justify-between overflow-hidden rounded-2xl p-4 h-full min-h-0"
+		aria-label="Wire Telemetry Inspector"
 	>
 		<div class="flex flex-col h-full min-h-0">
 			<div class="flex items-center justify-between border-b border-[#E4E0D8] pb-3 mb-3 shrink-0">
@@ -91,44 +95,59 @@
 			<div class="scrollable-region flex-1 min-h-0 space-y-1.5 pr-1">
 				{#if visibleEvents.length === 0}
 					<div class="flex h-40 flex-col items-center justify-center text-center text-[#575551] text-xs px-4">
-						<Zap class="size-5 text-[#78756F] mb-2" />
-						<p class="font-medium text-[#141413]">No SSE frames captured for {activeFilter}</p>
+						<Zap class="size-5 text-[#575551] mb-2" />
+						<p class="font-medium text-[#141413]">No wire frames captured for {activeFilter}</p>
 						<p class="text-[11px] text-[#575551] mt-1">
-							Select a destination or submit a prompt to inspect live AG-UI, MCP, and A2A wire events.
+							Select a destination or submit a prompt to inspect live full-duplex WebSocket & AG-UI wire frames.
 						</p>
 					</div>
 				{/if}
 
 				{#each visibleEvents as evt, idx (`${evt.id ?? evt.type}-${idx}`)}
+					{@const isClient = evt.direction === 'client'}
 					<div class="overflow-hidden rounded-xl border border-[#E4E0D8] bg-[#FAF9F6]">
 						<button
 							type="button"
-							onclick={() => toggleExpand(evt.id)}
-							class="flex w-full items-center justify-between p-2.5 text-left font-mono text-xs transition-colors hover:bg-[#EFECE6]/60"
+							onclick={() => toggleExpand(evt.id ?? `${evt.type}-${idx}`)}
+							class="flex w-full items-center justify-between gap-2 p-2.5 text-left font-mono text-xs transition-colors hover:bg-[#EFECE6]/60"
 						>
-							<div class="flex items-center gap-2 overflow-hidden">
-								{#if expandedEventId === evt.id}
+							<div class="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
+								{#if expandedEventId === (evt.id ?? `${evt.type}-${idx}`)}
 									<ChevronDown class="size-3 text-[#575551] shrink-0" />
 								{:else}
 									<ChevronRight class="size-3 text-[#575551] shrink-0" />
 								{/if}
-								<span class="rounded px-1.5 py-0.5 text-[10px] font-bold uppercase shrink-0 {getEventBadgeStyle(evt.type)}">
+								<span
+									class="inline-flex items-center gap-0.5 rounded px-1 py-0.5 font-mono text-[9px] font-bold shrink-0 {isClient
+										? 'bg-[#FBEEE9] text-[#C84B31]'
+										: 'bg-[#EFECE6] text-[#141413]'}"
+									title={isClient ? 'Client to Server (Outbound WebSocket Frame)' : 'Server to Client (Inbound WebSocket Frame)'}
+								>
+									{#if isClient}
+										<ArrowUpRight class="size-2.5" />
+										<span>OUT</span>
+									{:else}
+										<ArrowDownLeft class="size-2.5" />
+										<span>IN</span>
+									{/if}
+								</span>
+								<span class="rounded px-1.5 py-0.5 text-[10px] font-bold shrink-0 {getEventBadgeStyle(evt.type, evt.direction)}">
 									{evt.type}
 								</span>
 								{#if evt.payload?.callType}
 									<ProtocolCallBadge callType={evt.payload.callType} />
 								{:else}
 									<span class="truncate text-[11px] text-[#575551]">
-										{evt.payload?.stepId ?? evt.payload?.tool ?? evt.payload?.phase ?? ''}
+										{evt.payload?.stepId ?? evt.payload?.tool ?? evt.payload?.phase ?? evt.payload?.status ?? ''}
 									</span>
 								{/if}
 							</div>
-							<span class="font-mono text-[10px] text-[#78756F] shrink-0 tabular-nums">
-								{evt.id?.slice(-6)}
+							<span class="font-mono text-[10px] text-[#575551] shrink-0 tabular-nums">
+								{evt.id?.slice(-4) ?? idx}
 							</span>
 						</button>
 
-						{#if expandedEventId === evt.id}
+						{#if expandedEventId === (evt.id ?? `${evt.type}-${idx}`)}
 							<div class="border-t border-[#E4E0D8] bg-white p-2.5">
 								<pre class="overflow-x-auto rounded bg-[#F6F5F2] p-2 text-[10px] text-[#141413] leading-relaxed font-mono"><code>{JSON.stringify(evt.payload, null, 2)}</code></pre>
 							</div>

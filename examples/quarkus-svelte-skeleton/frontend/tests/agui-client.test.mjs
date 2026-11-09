@@ -7,8 +7,10 @@ import {
 	SLASH_COMMANDS,
 	createInitialWorkbenchState,
 	filterInspectorEvents,
+	formatTripDossierMarkdown,
 	lockTurnInteraction,
 	parseSseChunk,
+	recordClientOutboundEvent,
 	reduceAgUiEvent,
 	resolveProtocolCallMeta,
 	selectTurnOption,
@@ -412,4 +414,79 @@ test('Nomad AG-UI Component Kit reducer populates timeline callTypes, reasoning,
 	assert.equal(streamState.events.length, 2);
 	assert.equal(streamState.events[1].payload.content, 'Hello Oaxaca world!');
 	assert.equal(streamState.events[1].payload.chunks, 3);
+});
+
+test('WebSocket transport, conversational memory, LangChain4j guardrails/RAG/specialists, and Trip Dossier Markdown export', () => {
+	assert.equal(resolveProtocolCallMeta('guardrail:input').family, 'GUARDRAIL');
+	assert.equal(resolveProtocolCallMeta('guardrail:output').family, 'GUARDRAIL');
+	assert.equal(resolveProtocolCallMeta('rag:retrieval').family, 'RAG');
+	assert.equal(resolveProtocolCallMeta('agentic:specialist').family, 'AGENTIC');
+	assert.equal(resolveProtocolCallMeta(null, 'GUARDRAIL').callType, 'guardrail:input');
+	assert.equal(resolveProtocolCallMeta(null, 'RAG').callType, 'rag:retrieval');
+	assert.equal(resolveProtocolCallMeta(null, 'AGENTIC').callType, 'agentic:specialist');
+
+	let state = createInitialWorkbenchState('thread-ws');
+	state = reduceAgUiEvent(state, {
+		id: 'ws-1',
+		type: 'WS_CONNECTED',
+		payload: { transport: 'websocket', endpoint: '/api/agent/ws', memoryTurns: 2 }
+	});
+	assert.equal(state.wsConnected, true);
+	assert.equal(state.transportMode, 'ws');
+	assert.equal(state.memoryTurns, 2);
+
+	state = reduceAgUiEvent(state, {
+		id: 'ws-pong',
+		type: 'PONG',
+		payload: { timestamp: 12345 }
+	});
+	assert.equal(state.wsConnected, true);
+
+	state = recordClientOutboundEvent(state, 'UPDATE_TRIP_PARAMS', { nights: 6, homeCurrency: 'EUR' });
+	assert.equal(state.events.at(-1).direction, 'client');
+	assert.equal(filterInspectorEvents(state.events, 'CLIENT').length, 1);
+
+	state = reduceAgUiEvent(state, {
+		id: 'sd-params',
+		type: 'STATE_DELTA',
+		payload: {
+			status: 'params_updated',
+			memoryTurns: 4,
+			clusterState: {
+				uri: 'itinerary://active-trip',
+				nomadTrip: {
+					activeCity: 'Lisbon',
+					country: 'Portugal',
+					nights: 6,
+					homeCurrency: 'EUR',
+					allocatedUsd: 2640,
+					budgetUsd: 3200
+				},
+				preferences: {
+					dietary: 'Seasonal Vegetarian & Shojin Ryori',
+					style: 'Modernist Concrete & Tadao Ando Sanctuaries',
+					homeCurrency: 'EUR'
+				}
+			}
+		}
+	});
+	assert.equal(state.memoryTurns, 4);
+	assert.equal(state.clusterState.preferences.homeCurrency, 'EUR');
+	assert.equal(state.clusterState.nomadTrip.nights, 6);
+	assert.ok(state.statusText.includes('WebSocket'));
+
+	const md = formatTripDossierMarkdown(state.clusterState, state.messages);
+	assert.ok(md.includes('# Nomad Cultural & Architectural Dossier — Lisbon, Portugal'));
+	assert.ok(md.includes('Seasonal Vegetarian & Shojin Ryori'));
+
+	state = reduceAgUiEvent(state, {
+		id: 'sd-reset',
+		type: 'STATE_DELTA',
+		payload: {
+			status: 'memory_reset',
+			memoryTurns: 0
+		}
+	});
+	assert.equal(state.memoryTurns, 0);
+	assert.equal(state.statusText, 'Conversational memory & traveler profile reset');
 });

@@ -3,10 +3,15 @@ package org.agui.showcase.mcp;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.quarkiverse.mcp.server.CompleteArg;
+import io.quarkiverse.mcp.server.CompletePrompt;
+import io.quarkiverse.mcp.server.CompletionResponse;
 import io.quarkiverse.mcp.server.Prompt;
 import io.quarkiverse.mcp.server.PromptArg;
 import io.quarkiverse.mcp.server.PromptMessage;
 import io.quarkiverse.mcp.server.Resource;
+import io.quarkiverse.mcp.server.ResourceTemplate;
+import io.quarkiverse.mcp.server.ResourceTemplateArg;
 import io.quarkiverse.mcp.server.TextContent;
 import io.quarkiverse.mcp.server.TextResourceContents;
 import io.quarkiverse.mcp.server.Tool;
@@ -30,7 +35,8 @@ import java.util.function.Function;
 
 /**
  * Quarkus MCP Server (:8081) for the Nomad Travel, Weather, Local Culture & Itinerary Concierge.
- * Exposes MCP Tools (@Tool), Resources (@Resource), and Prompt Templates (@Prompt)
+ * Exposes MCP Tools (@Tool), Resources (@Resource), Resource Templates (@ResourceTemplate),
+ * Prompt Templates (@Prompt), Prompt Completions (@CompletePrompt), and Sampling endpoints
  * backed by Open-Meteo Geocoding & Forecast APIs, Wikipedia REST API v1, and Apple iTunes Search API.
  */
 @ApplicationScoped
@@ -38,7 +44,14 @@ public class ClusterTelemetryService {
 
     public static final String SERVER_NAME = "nomad-mcp-concierge";
 
+    private static final List<String> CURATED_GLOBAL_CITIES = List.of(
+        "Kyoto", "Lisbon", "Reykjavik", "Tokyo", "Beirut", "Oaxaca", "Paris", "Rome",
+        "Barcelona", "Marrakech", "Copenhagen", "Vienna", "Berlin", "Seoul", "Istanbul",
+        "Buenos Aires", "Amman", "Cairo", "Athens", "Rio de Janeiro"
+    );
+
     private final Map<String, Object> activeTrip = new ConcurrentHashMap<>();
+    private final Map<String, Object> travelerPreferences = new ConcurrentHashMap<>();
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final HttpClient httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofMillis(1500))
@@ -74,6 +87,15 @@ public class ClusterTelemetryService {
             "previewUrl", "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/9b/27/76/9b2776c5-65cd-87f1-3f33-ccbccc642285/mzaf_16549365214060917501.plus.aac.p.m4a",
             "durationSeconds", 30
         ));
+
+        travelerPreferences.clear();
+        travelerPreferences.put("uri", "traveler://preferences");
+        travelerPreferences.put("style", "Architectural Minimalist & Slow Cultural Immersion");
+        travelerPreferences.put("dietary", "Seasonal Local Terroir");
+        travelerPreferences.put("musicTaste", "Analog Vinyl & Regional Acoustic");
+        travelerPreferences.put("pace", "Unrushed (2 curated stops per day)");
+        travelerPreferences.put("audioPreference", "Authentic regional acoustic & chamber traditions (30s iTunes preview)");
+        travelerPreferences.put("homeCurrency", "USD");
     }
 
     private String fetchUrlViaHttp(String url) {
@@ -114,6 +136,47 @@ public class ClusterTelemetryService {
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("Failed to serialize traveler preferences resource", e);
         }
+    }
+
+    @ResourceTemplate(
+        uriTemplate = "itinerary://city/{city}/dossier",
+        description = "Parameterized destination architectural, meteorological, and acoustic dossier"
+    )
+    public TextResourceContents cityDossierResourceTemplate(
+            @ResourceTemplateArg(name = "city") String city) {
+        String resolvedCity = normalizeCity(city);
+        String uri = "itinerary://city/" + resolvedCity.toLowerCase(Locale.ROOT).replace(" ", "-") + "/dossier";
+        try {
+            return new TextResourceContents(
+                uri,
+                objectMapper.writeValueAsString(getCityDossier(resolvedCity)),
+                "application/json"
+            );
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Failed to serialize city dossier resource template", e);
+        }
+    }
+
+    @CompletePrompt("weekend-cultural-escape")
+    public CompletionResponse completeWeekendEscapeCity(@CompleteArg(name = "city") String prefix) {
+        return CompletionResponse.create(completeCityArgument(prefix));
+    }
+
+    @CompletePrompt("local-music-and-food-walk")
+    public CompletionResponse completeMusicWalkCity(@CompleteArg(name = "city") String prefix) {
+        return CompletionResponse.create(completeCityArgument(prefix));
+    }
+
+    public List<String> completeCityArgument(String prefix) {
+        String normalized = prefix == null ? "" : prefix.trim().toLowerCase(Locale.ROOT);
+        if (normalized.isEmpty()) {
+            return CURATED_GLOBAL_CITIES.subList(0, 8);
+        }
+        List<String> matches = CURATED_GLOBAL_CITIES.stream()
+                .filter(c -> c.toLowerCase(Locale.ROOT).startsWith(normalized) || c.toLowerCase(Locale.ROOT).contains(normalized))
+                .limit(8)
+                .toList();
+        return matches.isEmpty() ? List.of(normalizeCity(prefix)) : matches;
     }
 
     @Prompt(name = "weekend-cultural-escape", description = "Synthesize a 3-day architectural, culinary, and musical itinerary for a target city")
@@ -402,12 +465,66 @@ public class ClusterTelemetryService {
     }
 
     public Map<String, Object> getTravelerPreferences() {
+        return new LinkedHashMap<>(travelerPreferences);
+    }
+
+    public Map<String, Object> updateTravelerPreferences(Map<String, Object> updates) {
+        if (updates != null) {
+            for (Map.Entry<String, Object> entry : updates.entrySet()) {
+                if (entry.getKey() != null && entry.getValue() != null && !String.valueOf(entry.getValue()).isBlank()) {
+                    travelerPreferences.put(entry.getKey(), entry.getValue());
+                }
+            }
+        }
+        travelerPreferences.put("uri", "traveler://preferences");
+        return getTravelerPreferences();
+    }
+
+    public Map<String, Object> getCityDossier(String city) {
+        String resolvedCity = normalizeCity(city);
+        String slug = resolvedCity.toLowerCase(Locale.ROOT).replace(" ", "-");
+        Map<String, Object> weather = fetchCityWeather(resolvedCity);
+        Map<String, Object> dossier = new LinkedHashMap<>();
+        dossier.put("uri", "itinerary://city/" + slug + "/dossier");
+        dossier.put("city", resolvedCity);
+        dossier.put("country", weather.getOrDefault("country", "Japan"));
+        dossier.put("temperatureC", weather.getOrDefault("temperatureC", 18.4));
+        dossier.put("condition", weather.getOrDefault("condition", "Clear Sky"));
+        dossier.put("architecturalHighlight", switch (resolvedCity.toLowerCase(Locale.ROOT)) {
+            case "lisbon" -> "Alfama Azulejo Terraces, Chiado Pombaline Ironwork & MAAT Riverfront";
+            case "reykjavik" -> "Harpa Basalt Columns, Hallgrímskirkja Concrete Vault & Turf Sanctuaries";
+            case "beirut" -> "Sursock Museum Ottoman-Venetian Arches, Mar Mikhael Heritage Stairs & Corniche";
+            case "tokyo" -> "Tadao Ando Concrete Galleries, Omotesando Modernism & Yanaka Timber Alleys";
+            case "oaxaca" -> "Santo Domingo Cantera Stone Courtyards & Contemporary Adobe Ateliers";
+            default -> "Sukiya-zukuri Cedar Machiya, Katsura Imperial Joinery & Zen Dry-Landscape Gardens";
+        });
+        dossier.put("acousticProfile", sampleAcousticMoodProfile(
+            resolvedCity,
+            String.valueOf(weather.getOrDefault("condition", "Clear Sky")),
+            "traditional"
+        ));
+        return dossier;
+    }
+
+    public Map<String, Object> sampleAcousticMoodProfile(String city, String weatherCondition, String genre) {
+        String resolvedCity = normalizeCity(city);
+        String cond = (weatherCondition == null || weatherCondition.isBlank()) ? "Clear Sky" : weatherCondition;
+        String resolvedGenre = (genre == null || genre.isBlank()) ? "traditional" : genre;
+        String moodDistillation = switch (resolvedCity.toLowerCase(Locale.ROOT)) {
+            case "lisbon" -> "Warm 12-string Portuguese guitarra resonance paired with Atlantic twilight breeze (" + cond + ").";
+            case "reykjavik" -> "Intimate bowed cello harmonics and sub-Arctic chamber acoustics inside basalt walls (" + cond + ").";
+            case "beirut" -> "Levantine oud and Fairuz orchestral nostalgia drifting across Mediterranean limestone courtyards (" + cond + ").";
+            case "tokyo" -> "Tube-amplified modal jazz vinyl warmth in a subterranean Shibuya kissaten (" + cond + ").";
+            default -> "Contemplative silk-stringed koto and bamboo shakuhachi phrasing tuned to cedar courtyard mist (" + cond + ").";
+        };
         return Map.of(
-            "uri", "traveler://preferences",
-            "style", "Architectural Minimalist & Slow Cultural Immersion",
-            "pace", "Unrushed (2 curated stops per day)",
-            "audioPreference", "Authentic regional acoustic & chamber traditions (30s iTunes preview)",
-            "homeCurrency", "USD"
+            "protocol", "mcp:sampling",
+            "server", SERVER_NAME,
+            "city", resolvedCity,
+            "genre", resolvedGenre,
+            "weatherCondition", cond,
+            "sampledMood", moodDistillation,
+            "recommendedListeningWindow", "19:30 – 22:00 Local Twilight"
         );
     }
 

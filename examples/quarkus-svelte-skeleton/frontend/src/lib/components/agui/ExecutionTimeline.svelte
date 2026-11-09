@@ -1,17 +1,43 @@
 <script>
 	import { Check, ChevronDown, ChevronRight, Loader2, ShieldAlert } from '@lucide/svelte';
+	import gsap from 'gsap';
 	import ProtocolCallBadge from './ProtocolCallBadge.svelte';
 
 	let { timeline = [] } = $props();
 	let expandedId = $state(null);
+	let spineContainerEl = $state(null);
+	let lastAnimatedCount = 0;
 
 	function toggleRow(id) {
 		expandedId = expandedId === id ? null : id;
 	}
+
+	$effect(() => {
+		const count = timeline?.length ?? 0;
+		if (!spineContainerEl || count === 0 || count === lastAnimatedCount) {
+			return;
+		}
+		lastAnimatedCount = count;
+		const prefersReduced =
+			typeof window !== 'undefined' &&
+			window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+		if (prefersReduced) {
+			return;
+		}
+		const rows = spineContainerEl.querySelectorAll('[data-spine-row]');
+		const latest = rows[rows.length - 1];
+		if (latest) {
+			gsap.fromTo(
+				latest,
+				{ opacity: 0.85, y: 4 },
+				{ opacity: 1, y: 0, duration: 0.24, ease: 'power3.out' }
+			);
+		}
+	});
 </script>
 
 {#if timeline?.length}
-	<div class="rounded-xl border border-[#E4E0D8] bg-[#FAF9F6] p-3">
+	<div bind:this={spineContainerEl} class="rounded-xl border border-[#E4E0D8] bg-[#FAF9F6] p-3">
 		<div class="mb-2 flex items-center justify-between text-xs text-[#575551]">
 			<span class="font-semibold text-[#141413]">Tri-Protocol Execution Spine</span>
 			<span class="font-mono text-[11px] tabular-nums">{timeline.length} steps</span>
@@ -21,7 +47,7 @@
 			{#each timeline as step, idx (`${step.id ?? step.title}-${idx}`)}
 				{@const rowKey = `${step.id ?? step.title}-${idx}`}
 				{@const isExpanded = expandedId === rowKey}
-				<div class="rounded-lg border border-[#E4E0D8] bg-white">
+				<div data-spine-row class="rounded-lg border border-[#E4E0D8] bg-white">
 					<button
 						type="button"
 						onclick={() => toggleRow(rowKey)}

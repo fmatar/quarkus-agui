@@ -50,9 +50,10 @@
 					type="button"
 					disabled={disabled}
 					onclick={() => onSelectFollowUp?.(chip)}
-					class="inline-flex items-center gap-1 rounded-full border border-[#E4E0D8] bg-white px-2.5 py-1 text-[11px] font-medium text-[#141413] transition-colors hover:border-[#C84B31] hover:bg-[#FBEEE9]/50 disabled:opacity-40"
+					title={chip}
+					class="inline-flex items-center gap-1.5 rounded-full border border-[#E4E0D8] bg-white px-3 py-1 text-left text-[11px] font-medium text-[#141413] transition-colors hover:border-[#C84B31] hover:bg-[#FBEEE9]/50 disabled:opacity-40"
 				>
-					<span class="truncate max-w-[260px]">{chip}</span>
+					<span>{chip}</span>
 					<ArrowRight class="size-3 text-[#C84B31] shrink-0" />
 				</button>
 			{/each}

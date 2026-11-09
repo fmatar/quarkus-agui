@@ -26,7 +26,13 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 @ApplicationScoped
 public class McpGatewayClient {
 
+    private static final List<String> CURATED_CITIES = List.of(
+            "Kyoto", "Lisbon", "Reykjavik", "Tokyo", "Beirut", "Oaxaca", "Paris", "Rome",
+            "Barcelona", "Marrakech", "Copenhagen", "Vienna", "Berlin", "Seoul", "Istanbul",
+            "Buenos Aires", "Amman", "Cairo", "Athens", "Rio de Janeiro");
+
     private final Map<String, Object> nomadTrip = new ConcurrentHashMap<>();
+    private final Map<String, Object> travelerPreferences = new ConcurrentHashMap<>();
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final HttpClient httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofMillis(1200))
@@ -54,10 +60,19 @@ public class McpGatewayClient {
         nomadTrip.put("stopTitle", "Hoshinoya Arashiyama Pavilion");
         nomadTrip.put("budgetUsd", 3200.0);
         nomadTrip.put("allocatedUsd", 1680.0);
+        nomadTrip.put("homeCurrency", "USD");
         nomadTrip.put("soundtrack", Map.of(
                 "trackName", "Haru no Umi (Spring Sea — Koto & Shakuhachi)",
                 "artistName", "Kyoto Koto Consort",
                 "previewUrl", "https://www.w3schools.com/html/horse.mp3"));
+
+        travelerPreferences.clear();
+        travelerPreferences.put("uri", "traveler://preferences");
+        travelerPreferences.put("style", "Architectural Minimalist & Slow Cultural Immersion");
+        travelerPreferences.put("dietary", "Seasonal Local Terroir");
+        travelerPreferences.put("musicTaste", "Analog Vinyl & Regional Acoustic");
+        travelerPreferences.put("pace", "Unrushed (2 curated stops per day)");
+        travelerPreferences.put("homeCurrency", "USD");
     }
 
     public List<Map<String, Object>> listTools() {
@@ -85,13 +100,146 @@ public class McpGatewayClient {
 
     public Map<String, Object> readResource(String uri) {
         if ("traveler://preferences".equals(uri)) {
-            return Map.of(
-                    "uri", "traveler://preferences",
-                    "style", "Architectural Minimalist & Slow Cultural Immersion",
-                    "pace", "Unrushed (2 curated stops per day)",
-                    "homeCurrency", "USD");
+            return new LinkedHashMap<>(travelerPreferences);
+        }
+        if (uri != null && uri.startsWith("itinerary://city/")) {
+            String withoutPrefix = uri.substring("itinerary://city/".length());
+            int slashIdx = withoutPrefix.indexOf('/');
+            String rawCity = slashIdx > 0 ? withoutPrefix.substring(0, slashIdx) : withoutPrefix;
+            return readCityDossier(rawCity.replace("-", " "));
         }
         return new LinkedHashMap<>(nomadTrip);
+    }
+
+    public Map<String, Object> updateTravelerPreferences(Map<String, Object> updates) {
+        if (updates != null) {
+            for (Map.Entry<String, Object> entry : updates.entrySet()) {
+                if (entry.getKey() != null && entry.getValue() != null && !String.valueOf(entry.getValue()).isBlank()) {
+                    travelerPreferences.put(entry.getKey(), entry.getValue());
+                }
+            }
+            if (updates.get("homeCurrency") instanceof String hc && !hc.isBlank()) {
+                nomadTrip.put("homeCurrency", hc.trim().toUpperCase(Locale.ROOT));
+            }
+            syncRemotePreferences(updates);
+        }
+        travelerPreferences.put("uri", "traveler://preferences");
+        return new LinkedHashMap<>(travelerPreferences);
+    }
+
+    public Map<String, Object> updateTripParameters(Integer nights, String homeCurrency) {
+        if (nights != null) {
+            int clamped = Math.max(1, Math.min(30, nights));
+            nomadTrip.put("nights", clamped);
+            nomadTrip.put("allocatedUsd", Math.round(clamped * 420.0));
+        }
+        if (homeCurrency != null && !homeCurrency.isBlank()) {
+            String normalizedCurrency = homeCurrency.trim().toUpperCase(Locale.ROOT);
+            nomadTrip.put("homeCurrency", normalizedCurrency);
+            travelerPreferences.put("homeCurrency", normalizedCurrency);
+        }
+        return readClusterState();
+    }
+
+    public Map<String, Object> readCityDossier(String city) {
+        String resolvedCity = normalizeCity(city);
+        String slug = resolvedCity.toLowerCase(Locale.ROOT).replace(" ", "-");
+        String country = A2aGatewayClient.resolveCountryForCity(resolvedCity);
+        Map<String, Object> fallback = new LinkedHashMap<>();
+        fallback.put("uri", "itinerary://city/" + slug + "/dossier");
+        fallback.put("city", resolvedCity);
+        fallback.put("country", country);
+        fallback.put("temperatureC", nomadTrip.getOrDefault("temperatureC", 18.4));
+        fallback.put("condition", nomadTrip.getOrDefault("weatherCondition", "Clear Sky"));
+        fallback.put("architecturalHighlight", switch (resolvedCity.toLowerCase(Locale.ROOT)) {
+            case "lisbon" -> "Alfama Azulejo Terraces, Chiado Pombaline Ironwork & MAAT Riverfront";
+            case "reykjavik" -> "Harpa Basalt Columns, Hallgrímskirkja Concrete Vault & Turf Sanctuaries";
+            case "beirut" -> "Sursock Museum Ottoman-Venetian Arches, Mar Mikhael Heritage Stairs & Corniche";
+            case "tokyo" -> "Tadao Ando Concrete Galleries, Omotesando Modernism & Yanaka Timber Alleys";
+            case "oaxaca" -> "Santo Domingo Cantera Stone Courtyards & Contemporary Adobe Ateliers";
+            default -> "Sukiya-zukuri Cedar Machiya, Katsura Imperial Joinery & Zen Dry-Landscape Gardens";
+        });
+        try {
+            HttpRequest req = HttpRequest.newBuilder(URI.create(mcpBaseUrl + "/api/mcp/resources/city/" + slug))
+                    .timeout(Duration.ofMillis(1200))
+                    .GET()
+                    .build();
+            HttpResponse<String> res = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
+            if (res.statusCode() == 200 && res.body() != null) {
+                Map<String, Object> remote = objectMapper.readValue(res.body(), new TypeReference<Map<String, Object>>() {});
+                if (remote != null && !remote.isEmpty()) {
+                    fallback.putAll(remote);
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return fallback;
+    }
+
+    public Map<String, Object> sampleAcousticMood(String city, String weatherCondition, String genre) {
+        String resolvedCity = normalizeCity(city);
+        String cond = (weatherCondition == null || weatherCondition.isBlank()) ? "Clear Sky" : weatherCondition;
+        String resolvedGenre = (genre == null || genre.isBlank()) ? "traditional" : genre;
+        String moodDistillation = switch (resolvedCity.toLowerCase(Locale.ROOT)) {
+            case "lisbon" -> "Warm 12-string Portuguese guitarra resonance paired with Atlantic twilight breeze (" + cond + ").";
+            case "reykjavik" -> "Intimate bowed cello harmonics and sub-Arctic chamber acoustics inside basalt walls (" + cond + ").";
+            case "beirut" -> "Levantine oud and Fairuz orchestral nostalgia drifting across Mediterranean limestone courtyards (" + cond + ").";
+            case "tokyo" -> "Tube-amplified modal jazz vinyl warmth in a subterranean Shibuya kissaten (" + cond + ").";
+            default -> "Contemplative silk-stringed koto and bamboo shakuhachi phrasing tuned to cedar courtyard mist (" + cond + ").";
+        };
+        Map<String, Object> fallback = new LinkedHashMap<>();
+        fallback.put("protocol", "mcp:sampling");
+        fallback.put("server", "nomad-mcp-concierge (:8081)");
+        fallback.put("city", resolvedCity);
+        fallback.put("genre", resolvedGenre);
+        fallback.put("weatherCondition", cond);
+        fallback.put("sampledMood", moodDistillation);
+        fallback.put("recommendedListeningWindow", "19:30 – 22:00 Local Twilight");
+        try {
+            String bodyJson = objectMapper.writeValueAsString(Map.of(
+                    "city", resolvedCity,
+                    "weatherCondition", cond,
+                    "genre", resolvedGenre));
+            HttpRequest req = HttpRequest.newBuilder(URI.create(mcpBaseUrl + "/api/mcp/sampling"))
+                    .timeout(Duration.ofMillis(1200))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(bodyJson))
+                    .build();
+            HttpResponse<String> res = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
+            if (res.statusCode() == 200 && res.body() != null) {
+                Map<String, Object> remote = objectMapper.readValue(res.body(), new TypeReference<Map<String, Object>>() {});
+                if (remote != null && !remote.isEmpty()) {
+                    fallback.putAll(remote);
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return fallback;
+    }
+
+    public List<String> completePromptArgument(String prefix) {
+        String normalized = prefix == null ? "" : prefix.trim().toLowerCase(Locale.ROOT);
+        if (normalized.isEmpty()) {
+            return CURATED_CITIES.subList(0, 8);
+        }
+        List<String> localMatches = CURATED_CITIES.stream()
+                .filter(c -> c.toLowerCase(Locale.ROOT).startsWith(normalized) || c.toLowerCase(Locale.ROOT).contains(normalized))
+                .limit(8)
+                .toList();
+        return localMatches.isEmpty() ? List.of(normalizeCity(prefix)) : localMatches;
+    }
+
+    private void syncRemotePreferences(Map<String, Object> updates) {
+        try {
+            String bodyJson = objectMapper.writeValueAsString(updates);
+            HttpRequest req = HttpRequest.newBuilder(URI.create(mcpBaseUrl + "/api/mcp/resources/preferences"))
+                    .timeout(Duration.ofMillis(900))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(bodyJson))
+                    .build();
+            httpClient.send(req, HttpResponse.BodyHandlers.discarding());
+        } catch (Exception ignored) {
+        }
     }
 
     public Map<String, Object> getPromptTemplate(String promptName, Map<String, Object> args) {
