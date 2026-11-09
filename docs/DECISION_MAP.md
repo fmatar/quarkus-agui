@@ -37,7 +37,8 @@ flowchart TD
   ADR_002["ADR-002: Example-First Tri-Protocol (AG-UI + MCP + A2A) Evolution on Java 25, Quarkus 3.40.1.1 & pnpm"]
   _2["Ticket #2 (feature/issue-#2-mcp-a2a-servers-and-adr-002)"]
   ADR_003["ADR-003: Multi-Extension BOM and Concentric Transport Architecture (Core, SSE, WebSockets)"]
-  _30["Ticket #30"]
+  _30["Ticket #30 (feat/bom-multi-extension-clean-arch)"]
+  ADR_004["ADR-004: ADR-004: Nomad Cultural Concierge Showcase & Modular Svelte 5 AG-UI Component Kit"]
   CAP_01 -->|specified_by| SPEC_01
   CAP_02 -->|specified_by| SPEC_02
   CAP_01 -->|depends_on| CAP_02
@@ -107,7 +108,7 @@ flowchart TD
 | **ADR-001** | Multi-Module Maven & SvelteKit Clean Architecture for AG-UI Protocol | `technical` | `accepted` | #1 | CAP-01, CAP-03, CAP-04, CAP-07 |
 | **ADR-002** | Example-First Tri-Protocol (AG-UI + MCP + A2A) Evolution on Java 25, Quarkus 3.40.1.1 & pnpm | `product` | `accepted` | #2 | CAP-01, CAP-02, CAP-03, CAP-04, CAP-05, CAP-06, CAP-07, CAP-08 |
 | **ADR-003** | Multi-Extension BOM and Concentric Transport Architecture (Core, SSE, WebSockets) | `technical` | `accepted` | #30 | CAP-06, CAP-07 |
-| **ADR-004** | Nomad Cultural Concierge Showcase & Modular Svelte 5 AG-UI Component Kit | `product` | `accepted` | #32 | CAP-01, CAP-02, CAP-03, CAP-04, CAP-08 |
+| **ADR-004** | ADR-004: Nomad Cultural Concierge Showcase & Modular Svelte 5 AG-UI Component Kit | `technical` | `accepted` | N/A | None |
 
 ---
 
