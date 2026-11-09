@@ -36,28 +36,19 @@ node .agent/scripts/sdlc-engine.mjs product status
 
 ### 3. Explore the Tri-Protocol Reference Showcase (`examples/quarkus-svelte-skeleton`)
 
-#### Option A: One-Command Docker Compose Stack (Recommended)
+#### Option A: One-Command Jib + Quinoa Docker Compose Stack (Recommended)
 ```bash
-# Build & launch all 4 services (:8081 MCP, :8082 A2A, :8080 Orchestrator, :5173 Studio UI)
-docker compose -f examples/quarkus-svelte-skeleton/docker-compose.yml up --build
+# Build all 3 Jib layered containers (with SvelteKit 5 SPA bundled via Quarkus Quinoa) & launch on :8080
+./examples/quarkus-svelte-skeleton/run-showcase.sh --docker
 
-# Or use the showcase launcher script (--docker default, or --local for host dev mode):
-./examples/quarkus-svelte-skeleton/run-showcase.sh
+# Or build GraalVM/Mandrel native Jib containers via the opt-in -Pnative profile:
+./examples/quarkus-svelte-skeleton/run-showcase.sh --docker-native
 ```
 
-#### Option B: Local Hot-Reload Dev Mode (4 Terminals)
+#### Option B: Local Hot-Reload Dev Mode (Quinoa Auto-Managed Vite Proxy)
 ```bash
-# Terminal 1: Start the Quarkus MCP Server (Port 8081)
-./mvnw -f examples/quarkus-svelte-skeleton/mcp-server/pom.xml quarkus:dev
-
-# Terminal 2: Start the Quarkus A2A Specialist Auditor Server (Port 8082)
-./mvnw -f examples/quarkus-svelte-skeleton/a2a-server/pom.xml quarkus:dev
-
-# Terminal 3: Start the OpsPilot Quarkus Orchestrator Backend (Port 8080)
-./mvnw -f examples/quarkus-svelte-skeleton/backend/pom.xml quarkus:dev
-
-# Terminal 4: Start the SvelteKit + Skeleton UI + @lucide/svelte Workbench (Port 5173)
-cd examples/quarkus-svelte-skeleton/frontend && pnpm install && pnpm run dev
+# Launch all 3 Quarkus services in quarkus:dev (Quinoa auto-manages & proxies Vite on :8080):
+./examples/quarkus-svelte-skeleton/run-showcase.sh --local
 ```
 
 Verify the MCP Server (`:8081`) and A2A Specialist Server (`:8082`) directly from your terminal:
@@ -108,10 +99,10 @@ To expose any LangChain4j `TokenStream`, MCP tool client, or A2A sub-agent over 
 | **`quarkus-ag-ui-runtime`** | [`quarkus-extension/runtime/`](quarkus-extension/runtime/pom.xml) | Quarkus 3.40.1.1 Starter aggregating Core + SSE + WebSockets | Zero-config starter |
 | **`quarkus-ag-ui-deployment`** | [`quarkus-extension/deployment/`](quarkus-extension/deployment/pom.xml) | Quarkus Build-Time Processor + Dev UI + GraalVM 25 | $< 50\text{MB}$ Native Image RSS |
 | **`quarkus-ag-ui-integration-tests`** | [`quarkus-extension/integration-tests/`](quarkus-extension/integration-tests/pom.xml) | `@QuarkusTest` & `@QuarkusIntegrationTest` | Ephemeral port `0` isolation |
-| **`mcp-server` (`:8081`)** | [`examples/quarkus-svelte-skeleton/mcp-server/`](examples/quarkus-svelte-skeleton/mcp-server/pom.xml) | Quarkus 3.40.1.1 Nomad & Cluster MCP Server | `fetchCityWeather`, `discoverLocalCultureAndMedia`, `updateTripItinerary`, MCP Resources & Prompts |
-| **`a2a-server` (`:8082`)** | [`examples/quarkus-svelte-skeleton/a2a-server/`](examples/quarkus-svelte-skeleton/a2a-server/pom.xml) | Quarkus 3.40.1.1 A2A Specialist Server (`Sentinel-A2A-Auditor`) | `convert-and-audit-budget` (Frankfurter FX), `verify-travel-advisory` (REST Countries), Architecture & Security Audits |
-| **`backend` (`:8080`)** | [`examples/quarkus-svelte-skeleton/backend/`](examples/quarkus-svelte-skeleton/backend/pom.xml) | Quarkus 3.40.1.1 Nomad Concierge & OpsPilot Orchestrator | Enriched AG-UI SSE streaming (`callType` taxonomy, `media`, `interaction`, `sources`, `followUps`, HITL) |
-| **`frontend` (`:5173`)** | [`examples/quarkus-svelte-skeleton/frontend/`](examples/quarkus-svelte-skeleton/frontend/) | `pnpm` + SvelteKit (Svelte 5 Runes) + Modular AG-UI Component Kit (`src/lib/components/agui/*`) | 3-Pane Nomad Concierge Studio + Wire Telemetry Inspector |
+| **`mcp-server` (`:8081`)** | [`examples/quarkus-svelte-skeleton/mcp-server/`](examples/quarkus-svelte-skeleton/mcp-server/pom.xml) | Quarkus 3.40.1.1 Nomad MCP Server + Jib Container (`nomad-agui-showcase/mcp-server:latest`) | `fetchCityWeather`, `discoverLocalCultureAndMedia`, `updateTripItinerary`, MCP Resources & Prompts |
+| **`a2a-server` (`:8082`)** | [`examples/quarkus-svelte-skeleton/a2a-server/`](examples/quarkus-svelte-skeleton/a2a-server/pom.xml) | Quarkus 3.40.1.1 A2A Specialist Server + Jib Container (`nomad-agui-showcase/a2a-server:latest`) | `convert-and-audit-budget` (Frankfurter FX), `verify-travel-advisory` (REST Countries) |
+| **`backend` (`:8080`)** | [`examples/quarkus-svelte-skeleton/backend/`](examples/quarkus-svelte-skeleton/backend/pom.xml) | Quarkus 3.40.1.1 Orchestrator + **Quarkus Quinoa** + Jib Container (`nomad-agui-showcase/backend:latest`) | Serves both SvelteKit 5 SPA (`@sveltejs/adapter-static`) and AG-UI WebSocket (`/api/agent/ws`) + SSE (`/api/agent/run`) on `:8080` |
+| **`frontend` (Quinoa SPA)** | [`examples/quarkus-svelte-skeleton/frontend/`](examples/quarkus-svelte-skeleton/frontend/) | `pnpm` + SvelteKit 5 (`@sveltejs/adapter-static`) packaged into `backend` via `quarkus-quinoa` | 3-Pane Nomad Concierge Studio + Wire Telemetry Inspector served from `:8080` |
 
 ---
 

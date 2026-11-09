@@ -13,7 +13,7 @@
 
 | 📥 Backlog | 📋 Ready | ⚡ In Progress | 🔍 In Review | ✅ Done |
 | :--- | :--- | :--- | :--- | :--- |
-|  |  |  |  | [#57 feat(ui): Wide-Resolution Editorial Layout & Deep-Linked Verified Sources](https://github.com/fmatar/quarkus-agui/issues/57) |
+|  |  | [#59 feat(showcase): Package SvelteKit Frontend with Quarkus Quinoa & Build Containers with Jib](https://github.com/fmatar/quarkus-agui/issues/59) |  | [#57 feat(ui): Wide-Resolution Editorial Layout & Deep-Linked Verified Sources](https://github.com/fmatar/quarkus-agui/issues/57) |
 |  |  |  |  | [#55 feat(ui): GSAP Choreography & 40/40 Impeccable Design Polish](https://github.com/fmatar/quarkus-agui/issues/55) |
 |  |  |  |  | [#54 feat(mcp): Quarkus MCP @ResourceTemplate, @CompletePrompt & Sampling](https://github.com/fmatar/quarkus-agui/issues/54) |
 |  |  |  |  | [#53 feat(langchain4j): Input/Output Guardrails, Cultural RAG & Specialist Council](https://github.com/fmatar/quarkus-agui/issues/53) |
