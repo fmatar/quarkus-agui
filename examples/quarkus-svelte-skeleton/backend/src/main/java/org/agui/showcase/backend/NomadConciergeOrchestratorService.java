@@ -25,16 +25,16 @@ import org.agui.core.adapters.AgUiSseFormatter;
 import org.agui.core.domain.AgUiEvent;
 import org.agui.core.domain.AgUiEventType;
 import org.agui.core.domain.TextDeltaPayload;
-import org.agui.quarkus.langchain4j.runtime.adapters.AgUiLangChain4jBridge;
-import org.agui.quarkus.langchain4j.runtime.adapters.AgUiRunOptions;
-import org.agui.quarkus.langchain4j.runtime.adapters.AgUiToolClassifier;
+import org.agui.langchain4j.adapters.AgUiRunOptions;
+import org.agui.langchain4j.adapters.AgUiToolClassifier;
+import org.agui.quarkus.adapters.AgUiQuarkusLangChain4jBridge;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 /**
  * Idiomatic Quarkus LangChain4j + MCP + A2A + AG-UI Orchestrator ({@code :8080}).
  * Delegates conversational reasoning and MCP tool execution to {@link NomadConciergeAiService}
  * (`@RegisterAiService` + `@McpToolBox("nomad")`) and adapts {@code Multi<ChatEvent>} streams
- * via {@link AgUiLangChain4jBridge}.
+ * via {@link AgUiQuarkusLangChain4jBridge}.
  */
 @ApplicationScoped
 public class NomadConciergeOrchestratorService {
@@ -42,7 +42,7 @@ public class NomadConciergeOrchestratorService {
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
 
     private final NomadConciergeAiService aiService;
-    private final AgUiLangChain4jBridge langChain4jBridge;
+    private final AgUiQuarkusLangChain4jBridge langChain4jBridge;
     private final McpClient nomadMcpClient;
     private final A2aGatewayClient a2aClient;
     private final TripDossierStore dossierStore;
@@ -57,7 +57,7 @@ public class NomadConciergeOrchestratorService {
     @Inject
     public NomadConciergeOrchestratorService(
             NomadConciergeAiService aiService,
-            AgUiLangChain4jBridge langChain4jBridge,
+            AgUiQuarkusLangChain4jBridge langChain4jBridge,
             @McpClientName("nomad") McpClient nomadMcpClient,
             A2aGatewayClient a2aClient,
             TripDossierStore dossierStore,
@@ -102,7 +102,7 @@ public class NomadConciergeOrchestratorService {
         String prompt = (request == null || request.prompt() == null) ? "" : request.prompt();
         String llmMode = resolveMode(request == null ? null : request.mode());
 
-        dossierStore.beginTurn(threadId);
+        dossierStore.beginTurn(threadId, prompt);
         int turns = prompt.isBlank()
                 ? getMemoryTurnCount(threadId)
                 : memoryTurnCounts.computeIfAbsent(threadId, k -> new AtomicInteger()).addAndGet(2);
@@ -116,7 +116,7 @@ public class NomadConciergeOrchestratorService {
                         "memoryTurns", turns),
                 this::classifyToolExecution,
                 exec -> dossierStore.onToolExecuted(threadId, exec),
-                null,
+                () -> dossierStore.finalizeTurnDossier(threadId, a2aClient),
                 () -> buildRunFinishedMetadata(threadId));
 
         Multi<ChatEvent> guardedStream = Multi.createFrom()

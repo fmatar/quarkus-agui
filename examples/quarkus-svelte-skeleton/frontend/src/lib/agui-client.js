@@ -298,6 +298,7 @@ export function createInitialWorkbenchState(threadId = 'thread-nomad-1') {
 			budgetUsd: null,
 			allocatedUsd: null,
 			homeCurrency: null,
+			heroImageUrl: null,
 			soundtrack: null
 		},
 		preferences: {
@@ -506,6 +507,7 @@ export function reduceAgUiEvent(state, event) {
 									weatherCondition: null,
 									stopTitle: null,
 									allocatedUsd: null,
+									heroImageUrl: null,
 									soundtrack: null
 								}
 							};
@@ -532,6 +534,7 @@ export function reduceAgUiEvent(state, event) {
 							nights: null,
 							stopTitle: null,
 							allocatedUsd: null,
+							heroImageUrl: null,
 							soundtrack: null
 						}
 					}
@@ -550,10 +553,19 @@ export function reduceAgUiEvent(state, event) {
 				memoryTurns: payload.memoryTurns ?? state.memoryTurns ?? 0,
 				activeTurn: {
 					...currentTurn,
-					media: payload.media ?? currentTurn.media,
+					media:
+						Array.isArray(payload.media) && payload.media.length > 0
+							? payload.media
+							: currentTurn.media,
 					interaction: nextInteraction,
-					sources: payload.sources ?? currentTurn.sources,
-					followUps: payload.followUps ?? currentTurn.followUps
+					sources:
+						Array.isArray(payload.sources) && payload.sources.length > 0
+							? payload.sources
+							: currentTurn.sources,
+					followUps:
+						Array.isArray(payload.followUps) && payload.followUps.length > 0
+							? payload.followUps
+							: currentTurn.followUps
 				},
 				events: nextEvents
 			};
@@ -651,8 +663,54 @@ export function reduceAgUiEvent(state, event) {
 						}
 					: item
 			);
+			const extractedMedia =
+				!isError && resolvedTool === 'discoverLocalCultureAndMedia'
+					? extractCultureMediaItems(payload.result)
+					: [];
+			const nextMedia =
+				extractedMedia.length > 0 && (!currentTurn.media || currentTurn.media.length === 0)
+					? extractedMedia
+					: currentTurn.media;
+			const currentDossier = state.tripDossierState ?? state.clusterState;
+			const nextDossier =
+				!isError &&
+				resolvedTool === 'discoverLocalCultureAndMedia' &&
+				payload.result &&
+				typeof payload.result === 'object'
+					? {
+							...currentDossier,
+							nomadTrip: {
+								...(currentDossier?.nomadTrip ?? {}),
+								activeCity:
+									currentDossier?.nomadTrip?.activeCity ??
+									(typeof payload.result.destination === 'string' &&
+									payload.result.destination.trim().length > 0
+										? payload.result.destination.trim()
+										: null),
+								heroImageUrl:
+									typeof payload.result.heroImageUrl === 'string' &&
+									payload.result.heroImageUrl.trim().length > 0
+										? payload.result.heroImageUrl.trim()
+										: (currentDossier?.nomadTrip?.heroImageUrl ?? null),
+								soundtrack:
+									payload.result.audioTrack &&
+									typeof payload.result.audioTrack === 'object' &&
+									typeof payload.result.audioTrack.previewUrl === 'string' &&
+									payload.result.audioTrack.previewUrl.trim().length > 0
+										? {
+												trackName: payload.result.audioTrack.trackName ?? 'Regional Track',
+												artistName: payload.result.audioTrack.artistName ?? 'Regional Artist',
+												previewUrl: payload.result.audioTrack.previewUrl.trim(),
+												durationSeconds: 30
+											}
+										: (currentDossier?.nomadTrip?.soundtrack ?? null)
+							}
+						}
+					: currentDossier;
 			return {
 				...state,
+				tripDossierState: nextDossier,
+				clusterState: nextDossier,
 				statusText: isError ? `Tool Error: ${errorText}` : state.statusText,
 				mcpCalls: state.mcpCalls.map((c) =>
 					c.callId === resolvedCallId || c.tool === resolvedTool
@@ -661,7 +719,8 @@ export function reduceAgUiEvent(state, event) {
 				),
 				activeTurn: {
 					...currentTurn,
-					timeline: updatedTimeline
+					timeline: updatedTimeline,
+					media: nextMedia
 				},
 				events: nextEvents
 			};
@@ -839,6 +898,31 @@ export function reduceAgUiEvent(state, event) {
 				events: nextEvents
 			};
 	}
+}
+
+function extractCultureMediaItems(result) {
+	if (!result || typeof result !== 'object') return [];
+	const city = result.destination ?? 'Destination';
+	const items = [];
+	if (typeof result.heroImageUrl === 'string' && result.heroImageUrl.trim()) {
+		items.push({
+			type: 'image',
+			title: `${city} Cultural & Architectural Plate`,
+			subtitle: 'Wikipedia REST API v1 • Verified Landmark Photography',
+			url: result.heroImageUrl.trim()
+		});
+	}
+	const track = result.audioTrack;
+	if (track && typeof track.previewUrl === 'string' && track.previewUrl.trim()) {
+		items.push({
+			type: 'audio',
+			title: track.trackName ?? `${city} Acoustic Session`,
+			subtitle: track.artistName ?? 'Regional Artist',
+			url: track.previewUrl.trim(),
+			durationSeconds: track.durationSeconds ?? 30
+		});
+	}
+	return items;
 }
 
 function isErrorPayload(payload) {

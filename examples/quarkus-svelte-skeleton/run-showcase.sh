@@ -10,8 +10,8 @@ if [[ -f "${ROOT_DIR}/.env" ]]; then
 fi
 
 if [[ "${MODE}" == "--docker" ]]; then
-  echo "📦 Building Quarkus AG-UI extensions & Jib layered containers (with Quinoa SPA bundled)..."
-  (cd "${ROOT_DIR}" && ./mvnw clean install -DskipTests -pl :quarkus-ag-ui-deployment,:quarkus-ag-ui-langchain4j-deployment,:quarkus-ag-ui-bom -am)
+  echo "📦 Building AG-UI modules & Jib layered containers (with Quinoa SPA bundled)..."
+  (cd "${ROOT_DIR}" && ./mvnw clean install -DskipTests -pl ag-ui-bom,ag-ui-core,ag-ui-a2a,ag-ui-langchain4j,ag-ui-quarkus -am)
   (cd "${ROOT_DIR}" && ./mvnw -f examples/quarkus-svelte-skeleton/pom.xml clean package -Dquarkus.container-image.build=true -DskipTests)
 
   echo "🚀 Starting Nomad Tri-Protocol Showcase via Docker Compose (Jib + Quinoa + SmallRye Health)..."
@@ -20,8 +20,8 @@ if [[ "${MODE}" == "--docker" ]]; then
   echo "   • Nomad Studio UI + AG-UI Backend:   http://localhost:8080/q/health/ready"
   docker compose -f "${SCRIPT_DIR}/docker-compose.yml" "${ENV_FILE_ARGS[@]}" up --remove-orphans
 elif [[ "${MODE}" == "--docker-native" ]]; then
-  echo "📦 Building Quarkus AG-UI extensions & GraalVM/Mandrel Native Jib containers (-Pnative)..."
-  (cd "${ROOT_DIR}" && ./mvnw clean install -DskipTests -pl :quarkus-ag-ui-deployment,:quarkus-ag-ui-langchain4j-deployment,:quarkus-ag-ui-bom -am)
+  echo "📦 Building AG-UI modules & GraalVM/Mandrel Native Jib containers (-Pnative)..."
+  (cd "${ROOT_DIR}" && ./mvnw clean install -DskipTests -pl ag-ui-bom,ag-ui-core,ag-ui-a2a,ag-ui-langchain4j,ag-ui-quarkus -am)
   (cd "${ROOT_DIR}" && ./mvnw -f examples/quarkus-svelte-skeleton/pom.xml clean package -Pnative -Dquarkus.container-image.build=true -DskipTests)
 
   echo "🚀 Starting Nomad Tri-Protocol Native Showcase via Docker Compose..."
@@ -30,8 +30,8 @@ elif [[ "${MODE}" == "--docker-native" ]]; then
   echo "   • Nomad Studio UI + AG-UI Backend:   http://localhost:8080/q/health/ready"
   docker compose -f "${SCRIPT_DIR}/docker-compose.yml" "${ENV_FILE_ARGS[@]}" up --remove-orphans
 elif [[ "${MODE}" == "--local" ]]; then
-  echo "🔧 Building Quarkus AG-UI extensions locally..."
-  (cd "${ROOT_DIR}" && ./mvnw clean install -DskipTests -pl :quarkus-ag-ui-deployment,:quarkus-ag-ui-langchain4j-deployment,:quarkus-ag-ui-bom -am)
+  echo "🔧 Building AG-UI modules locally..."
+  (cd "${ROOT_DIR}" && ./mvnw clean install -DskipTests -pl ag-ui-bom,ag-ui-core,ag-ui-a2a,ag-ui-langchain4j,ag-ui-quarkus -am)
 
   if [[ -f "${ROOT_DIR}/.env" ]]; then
     set -a

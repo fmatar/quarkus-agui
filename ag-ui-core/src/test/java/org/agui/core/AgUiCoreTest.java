@@ -6,17 +6,31 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Flow;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import org.agui.core.adapters.AgUiBridge;
 import org.agui.core.adapters.AgUiFlowAdapter;
+import org.agui.core.adapters.AgUiMcpBridge;
+import org.agui.core.adapters.AgUiSseBridge;
 import org.agui.core.adapters.AgUiSseFormatter;
+import org.agui.core.adapters.AgUiSseTransportSession;
+import org.agui.core.adapters.AgUiWebSocketTransportSession;
+import org.agui.core.application.AgUiSessionRegistry;
 import org.agui.core.application.AgUiSessionRunner;
+import org.agui.core.application.AgUiTransportSession;
 import org.agui.core.domain.A2aHandoffPayload;
 import org.agui.core.domain.AgUiEvent;
 import org.agui.core.domain.AgUiEventType;
+import org.agui.core.domain.AgUiTransportType;
 import org.agui.core.domain.McpToolMetadata;
 import org.agui.core.domain.RunFinishedPayload;
 import org.agui.core.domain.RunStartedPayload;
@@ -185,5 +199,157 @@ class AgUiCoreTest {
             }
         });
         assertThrows(IllegalStateException.class, () -> AgUiFlowAdapter.collectAll(incompletePub));
+    }
+
+    @Test
+    void agUiBridgeStreamsTokenEventsAndSseFramesViaFlowPublisher() {
+        AgUiBridge bridge = new AgUiBridge();
+        assertNotNull(bridge.formatter());
+
+        List<AgUiEvent<?>> events = AgUiFlowAdapter.collectAll(
+                bridge.streamTokens("thread-core-1", Arrays.asList("Hello ", "", null, "World!")));
+        assertEquals(4, events.size());
+        assertEquals("RUN_STARTED", events.getFirst().type());
+        assertEquals("TEXT_DELTA", events.get(1).type());
+        assertEquals("RUN_FINISHED", events.getLast().type());
+
+        List<String> frames = AgUiFlowAdapter.collectAll(bridge.streamSseFrames(events));
+        assertEquals(4, frames.size());
+        assertTrue(frames.getFirst().startsWith("data: {"));
+        assertTrue(frames.getFirst().endsWith("}\n\n"));
+
+        AgUiEvent<TextDeltaPayload> single = AgUiEvent.of(
+                AgUiEventType.TEXT_DELTA,
+                "thread-core-1",
+                new TextDeltaPayload("token"));
+        String json = bridge.toSseServerSentEventData(single);
+        assertTrue(json.contains("\"content\":\"token\""));
+    }
+
+    @Test
+    void agUiMcpBridgeRecordsToolCallAndResultEvents() {
+        AgUiMcpBridge mcpBridge = new AgUiMcpBridge();
+        McpToolMetadata meta = new McpToolMetadata("nomad-mcp (:8081)", "fetchCityWeather", "http-sse");
+
+        List<AgUiEvent<?>> events = mcpBridge.recordToolExecution(
+                "thread-mcp",
+                "call-101",
+                meta,
+                Map.of("city", "Kyoto"),
+                Map.of("status", "OK"));
+        assertEquals(2, events.size());
+        assertEquals("TOOL_CALL", events.getFirst().type());
+        ToolCallPayload callPayload = (ToolCallPayload) events.getFirst().payload();
+        assertEquals("nomad-mcp (:8081)", callPayload.args().get("_mcpServer"));
+        assertEquals("http-sse", callPayload.args().get("_mcpTransport"));
+        assertEquals("Kyoto", callPayload.args().get("city"));
+        assertEquals("TOOL_RESULT", events.getLast().type());
+
+        List<AgUiEvent<?>> nullArgsEvents = mcpBridge.recordToolExecution("thread-mcp", "call-102", meta, null, "OK");
+        assertEquals(2, nullArgsEvents.size());
+    }
+
+    @Test
+    void sessionRegistryAndSseAndWebSocketTransportSessionsHandleLifecycle() {
+        AgUiSessionRegistry registry = new AgUiSessionRegistry();
+        assertEquals(0, registry.activeCount());
+        registry.register(null);
+        registry.unregister(null);
+        assertFalse(registry.find(null).isPresent());
+
+        AgUiSseBridge sseBridge = new AgUiSseBridge(registry);
+        assertEquals(AgUiTransportType.SSE, sseBridge.transportType());
+        assertTrue(sseBridge.isEnabled());
+
+        AgUiSseTransportSession sseSession = sseBridge.createSession("sse-1");
+        assertEquals("sse-1", sseSession.sessionId());
+        assertEquals(AgUiTransportType.SSE, sseSession.transportType());
+        assertTrue(sseSession.isOpen());
+
+        List<String> sseFrames = new ArrayList<>();
+        sseSession.toPublisher().subscribe(new Flow.Subscriber<>() {
+            @Override
+            public void onSubscribe(Flow.Subscription subscription) {
+                subscription.request(Long.MAX_VALUE);
+            }
+
+            @Override
+            public void onNext(String item) {
+                sseFrames.add(item);
+            }
+
+            @Override
+            public void onError(Throwable throwable) {
+            }
+
+            @Override
+            public void onComplete() {
+            }
+        });
+
+        AtomicBoolean wsOpen = new AtomicBoolean(true);
+        List<String> wsFrames = new ArrayList<>();
+        AgUiWebSocketTransportSession wsSession = new AgUiWebSocketTransportSession(
+                "ws-1",
+                wsFrames::add,
+                wsOpen::get,
+                () -> wsOpen.set(false));
+        registry.register(wsSession);
+
+        assertEquals(2, registry.activeCount());
+        assertEquals(2, registry.allSessions().size());
+        assertTrue(registry.find("ws-1").isPresent());
+
+        AgUiEvent<TextDeltaPayload> evt = AgUiEvent.of(AgUiEventType.TEXT_DELTA, "th-1", new TextDeltaPayload("broadcast"));
+        registry.broadcast(null);
+        registry.broadcast(evt);
+        assertEquals(1, sseFrames.size());
+        assertTrue(sseFrames.getFirst().startsWith("data: {"));
+        assertEquals(1, wsFrames.size());
+        assertTrue(wsFrames.getFirst().contains("broadcast"));
+
+        registry.broadcastToTransport(null, evt);
+        registry.broadcastToTransport(AgUiTransportType.SSE, null);
+        registry.broadcastToTransport(AgUiTransportType.SSE, evt);
+        assertEquals(2, sseFrames.size());
+        assertEquals(1, wsFrames.size());
+
+        sseSession.emit(null);
+        wsSession.emit(null);
+        sseSession.close();
+        wsSession.close();
+        assertFalse(sseSession.isOpen());
+        assertFalse(wsSession.isOpen());
+
+        sseSession.emit(evt);
+        wsSession.emit(evt);
+        wsSession.close();
+        assertEquals(2, sseFrames.size());
+        assertEquals(1, wsFrames.size());
+
+        AgUiWebSocketTransportSession nullCallbacks = new AgUiWebSocketTransportSession("ws-null", null, null, null);
+        assertFalse(nullCallbacks.isOpen());
+        nullCallbacks.emit(evt);
+        nullCallbacks.close();
+
+        registry.unregister("sse-1");
+        registry.unregister("ws-1");
+        assertEquals(0, registry.activeCount());
+    }
+
+    @Test
+    void shipsCdiBeansXmlAndGraalVmReflectConfigResources() throws Exception {
+        try (InputStream beansStream = getClass().getClassLoader().getResourceAsStream("META-INF/beans.xml")) {
+            assertNotNull(beansStream, "META-INF/beans.xml must be present");
+            String beansXml = new String(beansStream.readAllBytes(), StandardCharsets.UTF_8);
+            assertTrue(beansXml.contains("bean-discovery-mode=\"annotated\""));
+        }
+        try (InputStream reflectStream = getClass().getClassLoader()
+                .getResourceAsStream("META-INF/native-image/org.agui/ag-ui-core/reflect-config.json")) {
+            assertNotNull(reflectStream, "reflect-config.json must be present for GraalVM native image");
+            String reflectJson = new String(reflectStream.readAllBytes(), StandardCharsets.UTF_8);
+            assertTrue(reflectJson.contains("org.agui.core.domain.AgUiEvent"));
+            assertTrue(reflectJson.contains("org.agui.core.domain.AgUiTransportType"));
+        }
     }
 }

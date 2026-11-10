@@ -9,8 +9,8 @@
     <version>0.1.0-SNAPSHOT</version>
     <packaging>pom</packaging>
 
-    <name>AG-UI Java 25 &amp; Quarkus 3.40.1.1 Extension Parent</name>
-    <description>Java 25 Core Library, Quarkus 3.40.1.1 Extension, and Tri-Protocol (AG-UI + MCP + A2A) Showcase</description>
+    <name>AG-UI Java 25 Multi-Module Parent</name>
+    <description>Framework-Agnostic Java 25 AG-UI Core, A2A, LangChain4j, Quarkus Adapter, and Tri-Protocol Showcase</description>
 
     <licenses>
         <license>
@@ -42,9 +42,11 @@
     </properties>
 
     <modules>
-        <module>quarkus-ag-ui-bom</module>
+        <module>ag-ui-bom</module>
         <module>ag-ui-core</module>
-        <module>quarkus-extension</module>
+        <module>ag-ui-a2a</module>
+        <module>ag-ui-langchain4j</module>
+        <module>ag-ui-quarkus</module>
         <module>examples/quarkus-svelte-skeleton</module>
     </modules>
 
@@ -136,52 +138,17 @@
             </dependency>
             <dependency>
                 <groupId>org.agui</groupId>
-                <artifactId>quarkus-ag-ui-core</artifactId>
+                <artifactId>ag-ui-a2a</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.agui</groupId>
-                <artifactId>quarkus-ag-ui-core-deployment</artifactId>
+                <artifactId>ag-ui-langchain4j</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.agui</groupId>
-                <artifactId>quarkus-ag-ui-sse</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.agui</groupId>
-                <artifactId>quarkus-ag-ui-sse-deployment</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.agui</groupId>
-                <artifactId>quarkus-ag-ui-websockets</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.agui</groupId>
-                <artifactId>quarkus-ag-ui-websockets-deployment</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.agui</groupId>
-                <artifactId>quarkus-ag-ui-langchain4j</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.agui</groupId>
-                <artifactId>quarkus-ag-ui-langchain4j-deployment</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.agui</groupId>
-                <artifactId>quarkus-ag-ui</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.agui</groupId>
-                <artifactId>quarkus-ag-ui-deployment</artifactId>
+                <artifactId>ag-ui-quarkus</artifactId>
                 <version>${project.version}</version>
             </dependency>
         </dependencies>

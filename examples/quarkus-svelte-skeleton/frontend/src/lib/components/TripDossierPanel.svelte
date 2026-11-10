@@ -48,6 +48,7 @@
 			budgetUsd: null,
 			allocatedUsd: null,
 			homeCurrency: null,
+			heroImageUrl: null,
 			soundtrack: null
 		}
 	);
@@ -258,6 +259,20 @@
 				</div>
 			</div>
 
+			{#if hasActiveCity && nomadTrip.heroImageUrl}
+				<div class="overflow-hidden rounded-lg border border-[#E4E0D8] bg-[#FAF9F6]">
+					<img
+						src={nomadTrip.heroImageUrl}
+						alt="{nomadTrip.activeCity} landmark photography"
+						loading="lazy"
+						class="h-28 w-full object-cover"
+					/>
+					<div class="border-t border-[#E4E0D8] bg-white px-2.5 py-1 text-[10px] font-medium text-[#575551]">
+						Wikipedia REST API v1 • {nomadTrip.activeCity} Landmark Plate
+					</div>
+				</div>
+			{/if}
+
 			<div class="grid grid-cols-2 gap-2 pt-1">
 				<div class="rounded-lg bg-[#F6F5F2] p-2.5">
 					<div class="flex items-center gap-1.5 text-[11px] font-medium text-[#575551]">
@@ -343,12 +358,23 @@
 			</div>
 
 			{#if nomadTrip.soundtrack}
-				<div class="flex items-center gap-2 rounded-lg border border-[#E4E0D8] bg-[#FAF9F6] px-2.5 py-2 text-[11px]">
-					<Music class="size-3.5 text-[#C84B31] shrink-0" />
-					<div class="min-w-0">
-						<div class="truncate font-semibold text-[#141413]">{nomadTrip.soundtrack.trackName}</div>
-						<div class="truncate text-[11px] text-[#575551]">{nomadTrip.soundtrack.artistName}</div>
+				<div class="space-y-1.5 rounded-lg border border-[#E4E0D8] bg-[#FAF9F6] px-2.5 py-2 text-[11px]">
+					<div class="flex items-center gap-2">
+						<Music class="size-3.5 text-[#C84B31] shrink-0" />
+						<div class="min-w-0">
+							<div class="truncate font-semibold text-[#141413]">{nomadTrip.soundtrack.trackName}</div>
+							<div class="truncate text-[11px] text-[#575551]">{nomadTrip.soundtrack.artistName}</div>
+						</div>
 					</div>
+					{#if nomadTrip.soundtrack.previewUrl}
+						<audio
+							controls
+							preload="none"
+							src={nomadTrip.soundtrack.previewUrl}
+							aria-label={`Play 30-second audio preview for ${nomadTrip.soundtrack.trackName}`}
+							class="h-8 w-full"
+						></audio>
+					{/if}
 				</div>
 			{/if}
 		</div>

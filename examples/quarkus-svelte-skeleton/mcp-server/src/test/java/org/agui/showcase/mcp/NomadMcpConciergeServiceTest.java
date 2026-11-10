@@ -295,6 +295,80 @@ class NomadMcpConciergeServiceTest {
         assertEquals("Erik Satie piano", parisData.get("genre"));
         assertEquals("Gymnopédie No. 1", ((Map<?, ?>) parisData.get("audioTrack")).get("trackName"));
 
+        // Destination with country suffix ("Beirut, Lebanon") and multi-word travel focus ("architecture and oud music")
+        ToolResponse beirutWithCountry = service.discoverLocalCultureAndMedia("Beirut, Lebanon", "architecture and oud music");
+        assertFalse(beirutWithCountry.isError());
+        Map<String, Object> beirutCulture = (Map<String, Object>) beirutWithCountry.structuredContent();
+        assertEquals("Beirut", beirutCulture.get("destination"));
+        assertEquals("Fairuz", beirutCulture.get("genre"));
+        assertNotNull(beirutCulture.get("heroImageUrl"));
+        assertNotNull(beirutCulture.get("audioTrack"));
+
+        // Custom genre returning 0 iTunes tracks automatically falls back to city curated regional music query
+        service.setHttpProbe(url -> {
+            if (url.contains("/api/rest_v1/page/summary/Kyoto")) {
+                return new NomadMcpConciergeService.UpstreamHttpResult(
+                        200,
+                        "{\"title\":\"Kyoto\",\"extract\":\"Kyoto wooden machiya architecture.\",\"originalimage\":{\"source\":\"https://upload.wikimedia.org/kyoto.jpg\"}}",
+                        null,
+                        15L);
+            }
+            if (url.contains("term=ObscureNonexistentGenre")) {
+                return new NomadMcpConciergeService.UpstreamHttpResult(200, "{\"resultCount\":0,\"results\":[]}", null, 15L);
+            }
+            if (url.contains("term=koto+shakuhachi")) {
+                return new NomadMcpConciergeService.UpstreamHttpResult(
+                        200,
+                        "{\"resultCount\":1,\"results\":[{\"trackName\":\"Rokudan no Shirabe\",\"artistName\":\"Yatsuhashi Kengyo\",\"previewUrl\":\"https://audio-ssl.itunes.apple.com/koto.m4a\",\"artworkUrl100\":\"https://is1-ssl.mzstatic.com/100x100bb.jpg\"}]}",
+                        null,
+                        15L);
+            }
+            if (url.contains("/v1/forecast")) {
+                return new NomadMcpConciergeService.UpstreamHttpResult(
+                        200,
+                        "{\"current\":{\"temperature_2m\":18.2,\"wind_speed_10m\":6.1,\"weather_code\":1}}",
+                        null,
+                        15L);
+            }
+            if (url.contains("/api/rest_v1/page/summary/")) {
+                return new NomadMcpConciergeService.UpstreamHttpResult(
+                        200,
+                        "{\"title\":\"Paris\",\"extract\":\"Paris is renowned for Haussmannian boulevards.\",\"originalimage\":{\"source\":\"https://upload.wikimedia.org/paris-hd.jpg\"}}",
+                        null,
+                        15L);
+            }
+            if (url.contains("/search")) {
+                return new NomadMcpConciergeService.UpstreamHttpResult(
+                        200,
+                        "{\"resultCount\":1,\"results\":[{\"trackName\":\"Gymnopédie No. 1\",\"artistName\":\"Erik Satie\",\"previewUrl\":\"https://audio-ssl.itunes.apple.com/satie.m4a\",\"artworkUrl100\":\"https://is1-ssl.mzstatic.com/100x100bb.jpg\"}]}",
+                        null,
+                        15L);
+            }
+            return new NomadMcpConciergeService.UpstreamHttpResult(404, null, "Not found", 5L);
+        });
+        ToolResponse kyotoFallback = service.discoverLocalCultureAndMedia("Kyoto, Japan", "ObscureNonexistentGenre");
+        assertFalse(kyotoFallback.isError());
+        Map<String, Object> kyotoCulture = (Map<String, Object>) kyotoFallback.structuredContent();
+        assertEquals("Kyoto", kyotoCulture.get("destination"));
+        assertEquals("koto shakuhachi", kyotoCulture.get("genre"));
+        assertEquals("https://upload.wikimedia.org/kyoto.jpg", kyotoCulture.get("heroImageUrl"));
+        assertEquals("https://upload.wikimedia.org/kyoto.jpg", service.getActiveTripSnapshot().get("heroImageUrl"));
+        assertEquals("Rokudan no Shirabe", ((Map<?, ?>) kyotoCulture.get("audioTrack")).get("trackName"));
+
+        // Placeholder genre ("empty string", "none") must be sanitized and resolved to curated regional music
+        ToolResponse kyotoEmptyStringGenre = service.discoverLocalCultureAndMedia("Kyoto", "empty string");
+        assertFalse(kyotoEmptyStringGenre.isError());
+        Map<String, Object> kyotoEmptyGenreData = (Map<String, Object>) kyotoEmptyStringGenre.structuredContent();
+        assertEquals("koto shakuhachi", kyotoEmptyGenreData.get("genre"));
+        assertEquals("Rokudan no Shirabe", ((Map<?, ?>) kyotoEmptyGenreData.get("audioTrack")).get("trackName"));
+
+        // Misrouted destination city in saveTravelerPreferences(travelerName = "Kyoto") must not pollute travelerName
+        service.resetState();
+        ToolResponse misroutedCityPref = service.saveTravelerPreferences("Kyoto", null, null, null, null, null);
+        assertFalse(misroutedCityPref.isError());
+        assertNull(service.getTravelerPreferences().get("travelerName"));
+        assertEquals("Kyoto", service.getActiveTripSnapshot().get("activeCity"));
+
         McpToolInvocationResponse weatherDispatch = resource.callTool(
                 new McpToolInvocationRequest("fetchCityWeather", Map.of("city", "Kyoto")));
         assertFalse(weatherDispatch.isError());

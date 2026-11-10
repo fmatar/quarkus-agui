@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- feat(arch,showcase): factor out framework-agnostic AG-UI modules (`ag-ui-core`, `ag-ui-a2a`, `ag-ui-langchain4j`) and plain Quarkus adapter (`ag-ui-quarkus`) managed by `ag-ui-bom`, eliminate all 5 Quarkus build-time `-deployment` extension modules in favor of standard `META-INF/beans.xml` + GraalVM `META-INF/native-image/.../reflect-config.json`, sanitize placeholder music genres and resolve curated destination soundtracks in `NomadMcpConciergeService`, auto-enrich `TripDossierStore.finalizeTurnDossier` with Wikipedia landmark photography (`heroImageUrl`), 30s Apple iTunes audio preview (`soundtrack`), weather, and FX rates, and render the landmark plate & audio player in `TripDossierPanel.svelte` (`ADR-006`, [#74](https://github.com/fmatar/quarkus-agui/issues/74))
+
 ### Added
 - feat(langchain4j,mcp,health,a2a): introduce `quarkus-ag-ui-langchain4j` + `-deployment` extension (`AgUiLangChain4jBridge`, `AgUiRunOptions`, `AgUiToolClassifier`) in `quarkus-ag-ui-bom`, refactor showcase `backend` to idiomatic `@ApplicationScoped @RegisterAiService` (`NomadConciergeAiService`) + `@McpToolBox("nomad")` (`QuarkusStreamableHttpMcpTransport`) + `@McpClientName("nomad")` (deleting custom `McpGatewayClient.java` and `deterministic` engine), wire MicroProfile SmallRye Health (`/q/health/ready`) across `mcp-server`, `a2a-server`, `backend`, and Svelte Top-Bar Health Pill, and migrate `NomadTravelAdvisorService` from deprecated `restcountries.com/v3.1` to authenticated REST Countries v5 (`api.restcountries.com/countries/v5/names.common/{country}` with `RESTCOUNTRIES_API_KEY`) (`ADR-005`, [#68](https://github.com/fmatar/quarkus-agui/issues/68))
 
