@@ -449,11 +449,20 @@ class NomadMcpConciergeServiceTest {
         assertFalse(service.dispatchTool(new McpToolInvocationRequest(
                 "sampleAcousticMood", Map.of("city", "Lisbon", "weatherCondition", "Sunny", "genre", "fado"))).isError());
 
-        assertTrue(service.saveTravelerPreferences(null, " ", null, "", null, "   ").isError());
+        ToolResponse noopPrefs = service.saveTravelerPreferences(
+                null, " ", "empty string", "not provided", "Beirut, Lebanon", "   ");
+        assertFalse(noopPrefs.isError());
+        Map<String, Object> noopPrefsMap = (Map<String, Object>) noopPrefs.structuredContent();
+        assertEquals("OK", noopPrefsMap.get("status"));
+        assertEquals(false, noopPrefsMap.get("updated"));
+        assertEquals("Fady", noopPrefsMap.get("travelerName"));
+
         ToolResponse savedPrefsTool = service.saveTravelerPreferences(
                 "Fady", "Architecture", "Mediterranean", "Oud & Jazz", "Unhurried", "EUR");
         assertFalse(savedPrefsTool.isError());
         Map<String, Object> savedPrefsMap = (Map<String, Object>) savedPrefsTool.structuredContent();
+        assertEquals("OK", savedPrefsMap.get("status"));
+        assertEquals(true, savedPrefsMap.get("updated"));
         assertEquals("Fady", savedPrefsMap.get("travelerName"));
         assertEquals("Architecture", savedPrefsMap.get("style"));
         assertEquals("EUR", savedPrefsMap.get("homeCurrency"));

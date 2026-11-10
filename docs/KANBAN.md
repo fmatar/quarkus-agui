@@ -13,7 +13,8 @@
 
 | 📥 Backlog | 📋 Ready | ⚡ In Progress | 🔍 In Review | ✅ Done |
 | :--- | :--- | :--- | :--- | :--- |
-|  |  | [#76 fix(a2a,showcase): support non-ECB currencies (LBP, MAD, EGP, JOD) via open.er-api.com fallback & trailing currency symbols](https://github.com/fmatar/quarkus-agui/issues/76) |  | [#74 feat(arch,showcase): factor out framework-agnostic ag-ui modules & enrich Nomad destination media/music](https://github.com/fmatar/quarkus-agui/issues/74) |
+|  |  | [#78 fix(mcp,showcase): prevent saveTravelerPreferences false Service Error when LLM passes empty or placeholder args](https://github.com/fmatar/quarkus-agui/issues/78) |  | [#76 fix(a2a,showcase): support non-ECB currencies (LBP, MAD, EGP, JOD) via open.er-api.com fallback & trailing currency symbols](https://github.com/fmatar/quarkus-agui/issues/76) |
+|  |  |  |  | [#74 feat(arch,showcase): factor out framework-agnostic ag-ui modules & enrich Nomad destination media/music](https://github.com/fmatar/quarkus-agui/issues/74) |
 |  |  |  |  | [#72 fix(showcase): eliminate 10s restcountries healthcheck polling and harden tool elicitation prompts](https://github.com/fmatar/quarkus-agui/issues/72) |
 |  |  |  |  | [#70 chore(kanban): sync merged develop issues (#38-#68) to Done & prune stale branches](https://github.com/fmatar/quarkus-agui/issues/70) |
 |  |  |  |  | [#68 feat(langchain4j-mcp): Idiomatic quarkus-langchain4j-mcp, Multi<ChatEvent> AG-UI Bridge, SmallRye Health & REST Countries v5](https://github.com/fmatar/quarkus-agui/issues/68) |
@@ -58,7 +59,8 @@
 
 | Issue | Status | Priority | Component | Quality Gate | Spec Link |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| [#76 fix(a2a,showcase): support non-ECB currencies (LBP, MAD, EGP, JOD) via open.er-api.com fallback & trailing currency symbols](https://github.com/fmatar/quarkus-agui/issues/76) | `status:in-progress` | P1 - High | Backend | `Passed` | — |
+| [#78 fix(mcp,showcase): prevent saveTravelerPreferences false Service Error when LLM passes empty or placeholder args](https://github.com/fmatar/quarkus-agui/issues/78) | `status:in-progress` | P1 - High | Backend | `Passed` | — |
+| [#76 fix(a2a,showcase): support non-ECB currencies (LBP, MAD, EGP, JOD) via open.er-api.com fallback & trailing currency symbols](https://github.com/fmatar/quarkus-agui/issues/76) | `status:done` | P1 - High | Backend | `Passed` | — |
 | [#74 feat(arch,showcase): factor out framework-agnostic ag-ui modules & enrich Nomad destination media/music](https://github.com/fmatar/quarkus-agui/issues/74) | `status:done` | P1 - High | Architecture | `Passed` | [ADR-006](docs/adr/ADR-006-framework-agnostic-module-topology-ag-ui-core-ag.md) |
 | [#72 fix(showcase): eliminate 10s restcountries healthcheck polling and harden tool elicitation prompts](https://github.com/fmatar/quarkus-agui/issues/72) | `status:done` | P2 - Medium | Architecture | `Passed` | — |
 |  |  | [#70 chore(kanban): sync merged develop issues (#38-#68) to Done & prune stale branches](https://github.com/fmatar/quarkus-agui/issues/70) |  |  |

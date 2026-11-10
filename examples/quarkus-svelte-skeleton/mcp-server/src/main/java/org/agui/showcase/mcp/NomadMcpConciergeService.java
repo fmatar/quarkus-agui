@@ -478,7 +478,7 @@ public class NomadMcpConciergeService {
         return successToolResponse(result);
     }
 
-    @Tool(description = "Persist explicit human traveler profile preferences (personal given name when the user introduces themselves, architectural/travel style, dietary needs, music taste, pace, home currency) into the MCP traveler://preferences resource. Never call this tool with a destination city name as travelerName.")
+    @Tool(description = "Persist explicit human traveler profile preferences (personal given name when the user introduces themselves, architectural/travel style, dietary needs, music taste, pace, home currency) into the MCP traveler://preferences resource. Do NOT call this tool when the traveler only names a destination city, and never pass a destination city name as travelerName.")
     public ToolResponse saveTravelerPreferences(
             @ToolArg(description = "Human traveler's personal given name ONLY when they introduce themselves (never pass a destination city name like Kyoto, Lisbon, Paris, or Beirut)", required = false) String travelerName,
             @ToolArg(description = "Travel or architectural style if explicitly stated", required = false) String style,
@@ -488,27 +488,22 @@ public class NomadMcpConciergeService {
             @ToolArg(description = "3-letter ISO home currency code if explicitly stated", required = false) String homeCurrency) {
         Map<String, Object> updates = new LinkedHashMap<>();
         String sanitizedName = sanitizeOptionalText(travelerName);
-        boolean cityMisroutedAsName = false;
         if (!sanitizedName.isEmpty()) {
             if (isKnownCityName(sanitizedName)) {
                 activeTrip.putIfAbsent("activeCity", normalizeCity(sanitizedName));
-                cityMisroutedAsName = true;
             } else {
                 updates.put("travelerName", sanitizedName);
             }
         }
-        putIfNonBlank(updates, "style", sanitizeOptionalText(style));
-        putIfNonBlank(updates, "dietary", sanitizeOptionalText(dietary));
-        putIfNonBlank(updates, "musicTaste", sanitizeOptionalText(musicTaste));
-        putIfNonBlank(updates, "pace", sanitizeOptionalText(pace));
-        putIfNonBlank(updates, "homeCurrency", sanitizeOptionalText(homeCurrency));
-        if (updates.isEmpty() && !cityMisroutedAsName) {
-            return errorToolResponse(
-                    "MISSING_REQUIRED_ARGUMENTS",
-                    "saveTravelerPreferences requires at least one non-blank preference stated by the traveler.",
-                    SERVER_NAME);
-        }
-        return successToolResponse(updateTravelerPreferences(updates));
+        putIfNonBlankAndNotCity(updates, "style", sanitizeOptionalText(style));
+        putIfNonBlankAndNotCity(updates, "dietary", sanitizeOptionalText(dietary));
+        putIfNonBlankAndNotCity(updates, "musicTaste", sanitizeOptionalText(musicTaste));
+        putIfNonBlankAndNotCity(updates, "pace", sanitizeOptionalText(pace));
+        putIfNonBlankAndNotCity(updates, "homeCurrency", sanitizeOptionalText(homeCurrency));
+        Map<String, Object> payload = new LinkedHashMap<>(updateTravelerPreferences(updates));
+        payload.put("status", "OK");
+        payload.put("updated", !updates.isEmpty());
+        return successToolResponse(payload);
     }
 
     @Tool(description = "Reset the active MCP trip itinerary and traveler preferences when starting a brand-new conversation or clearing memory.")
@@ -522,10 +517,15 @@ public class NomadMcpConciergeService {
         return successToolResponse(payload);
     }
 
-    private static void putIfNonBlank(Map<String, Object> target, String key, String value) {
-        if (value != null && !value.isBlank()) {
-            target.put(key, value.trim());
+    private void putIfNonBlankAndNotCity(Map<String, Object> target, String key, String value) {
+        if (value == null || value.isBlank()) {
+            return;
         }
+        if (isKnownCityName(value)) {
+            activeTrip.putIfAbsent("activeCity", normalizeCity(value));
+            return;
+        }
+        target.put(key, value.trim());
     }
 
     public Map<String, Object> checkHealth() {
@@ -873,6 +873,12 @@ public class NomadMcpConciergeService {
                 || lower.equals("na")
                 || lower.equals("unspecified")
                 || lower.equals("not specified")
+                || lower.equals("not provided")
+                || lower.equals("no preference")
+                || lower.equals("no preferences")
+                || lower.equals("not applicable")
+                || lower.equals("undecided")
+                || lower.equals("tbd")
                 || lower.equals("unknown")
                 || lower.equals("default")
                 || lower.equals("optional")
