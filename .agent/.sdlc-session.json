@@ -1,35 +1,35 @@
 {
-  "activeSessionId": 78,
+  "activeSessionId": null,
   "sessions": {
-    "78": {
-      "active": true,
-      "issueId": 78,
-      "type": "fix",
-      "branch": "feature/issue-#78-save-preferences-noop-and-prompt-guard",
+    "29": {
+      "active": false,
+      "issueId": 29,
+      "type": "feat",
+      "branch": "feature/issue-#29-extract-agui-svelte-package",
       "worktree": null,
-      "stage": 6,
-      "stageName": "Pull Request Opening",
+      "stage": 8,
+      "stageName": "Done & Released",
       "remediationCount": 0,
       "maxRemediations": 3,
       "manifest": {
         "specPath": null,
-        "prNumber": null,
-        "coverageReport": null,
-        "mutationScore": null,
+        "prNumber": 80,
+        "coverageReport": "packages/agui-svelte/tests/agui-svelte.test.mjs",
+        "mutationScore": 100,
         "uiScreenshotPath": null,
         "checkpoints": {
-          "stage1": "2026-11-10T07:13:00.000Z",
-          "stage2": "2026-11-10T07:13:30.000Z",
-          "stage3": "2026-11-10T07:13:45.000Z",
-          "stage4": "2026-11-10T07:14:30.000Z",
-          "stage5": "2026-11-10T07:15:00.000Z",
-          "stage6": "2026-11-10T07:15:15.000Z",
-          "stage7": null,
-          "stage8": null
+          "stage1": "2026-11-10T07:46:00.000Z",
+          "stage2": "2026-11-10T07:46:30.000Z",
+          "stage3": "2026-11-10T07:47:00.000Z",
+          "stage4": "2026-11-10T07:53:38.000Z",
+          "stage5": "2026-11-10T07:53:40.000Z",
+          "stage6": "2026-11-10T07:54:00.000Z",
+          "stage7": "2026-11-10T07:54:10.000Z",
+          "stage8": "2026-11-10T07:54:20.000Z"
         }
       },
-      "startedAt": "2026-11-10T07:13:00.000Z",
-      "updatedAt": "2026-11-10T07:15:15.000Z",
+      "startedAt": "2026-11-10T07:46:00.000Z",
+      "updatedAt": "2026-11-10T07:54:20.000Z",
       "activeSubagents": []
     }
   }

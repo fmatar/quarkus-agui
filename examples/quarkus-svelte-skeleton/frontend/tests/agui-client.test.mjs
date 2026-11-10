@@ -18,7 +18,8 @@ import {
 	resolveProtocolCallMeta,
 	selectTurnOption,
 	summarizeHealthReport,
-	updateTripNightsInState
+	updateTripNightsInState,
+	useAgUiAgent
 } from '../src/lib/agui-client.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -760,4 +761,37 @@ test('Zero assumed defaults, honest upstream error surfacing, summarizeHealthRep
 	assert.ok(containerSource.includes("fetch('/q/health/ready')"));
 	assert.ok(containerSource.includes('res.status === 503'));
 	assert.ok(!containerSource.includes("value: 'deterministic'"));
+});
+
+test('Standalone @agui/svelte package integration and useAgUiAgent controller (#29)', async () => {
+	const pkgDir = path.resolve(__dirname, '../../../../packages/agui-svelte');
+	assert.equal(fs.existsSync(path.join(pkgDir, 'package.json')), true);
+	assert.equal(fs.existsSync(path.join(pkgDir, 'src/index.js')), true);
+	assert.equal(fs.existsSync(path.join(pkgDir, 'src/index.d.ts')), true);
+
+	const encoder = new TextEncoder();
+	const ssePayload =
+		'data: {"id":"1","type":"RUN_STARTED","payload":{"llmMode":"ollama:llama3.2:latest"}}\n\n' +
+		'data: {"id":"2","type":"TEXT_DELTA","payload":{"content":"Marhaba from Beirut"}}\n\n' +
+		'data: {"id":"3","type":"RUN_FINISHED","payload":{"status":"completed"}}\n\n';
+
+	const agent = useAgUiAgent({
+		threadId: 'thread-29',
+		fetchImpl: async () => ({
+			ok: true,
+			status: 200,
+			body: new ReadableStream({
+				start(controller) {
+					controller.enqueue(encoder.encode(ssePayload));
+					controller.close();
+				}
+			})
+		})
+	});
+
+	assert.equal(agent.state.threadId, 'thread-29');
+	await agent.sendPrompt('I want to plan a trip to Beirut, Lebanon');
+	assert.equal(agent.state.statusText, 'Completed (completed)');
+	assert.equal(agent.state.isStreaming, false);
+	assert.equal(agent.state.messages.at(-1).content, 'Marhaba from Beirut');
 });

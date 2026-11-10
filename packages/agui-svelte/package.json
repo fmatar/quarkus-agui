@@ -1,0 +1,19 @@
+{
+  "name": "@agui/svelte",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Standalone AG-UI Protocol SSE stream parser, Tri-Protocol (AG-UI + MCP + A2A) event reducer, TypeScript definitions, and Svelte 5 Runes agent store composable (useAgUiAgent).",
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "default": "./src/index.js"
+    }
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.mjs"
+  },
+  "peerDependencies": {
+    "svelte": "^5.0.0"
+  }
+}

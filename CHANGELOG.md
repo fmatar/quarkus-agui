@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- feat(client): extract standalone AG-UI Svelte 5 library (`packages/agui-svelte` / `@agui/svelte`) with SSE chunk parser (`parseSseChunk`), 10-type protocol call taxonomy (`PROTOCOL_CALL_TAXONOMY`, `resolveProtocolCallMeta`), inspector event filter (`filterInspectorEvents`), outbound WebSocket telemetry recorder (`recordClientOutboundEvent`), interactive turn choice helpers (`selectTurnOption`, `lockTurnInteraction`), TypeScript event declarations (`src/index.d.ts`), and reactive `useAgUiAgent` composable ([#29](https://github.com/fmatar/quarkus-agui/issues/29))
+
 ### Fixed
 - fix(mcp,showcase): make `NomadMcpConciergeService.saveTravelerPreferences` idempotent when an LLM invokes it with empty or placeholder arguments (`"empty string"`, `"none"`, `"not provided"`, or misrouted city names) so it returns the current `traveler://preferences` snapshot (`status: "OK"`, `updated: false`) instead of a false `Service Error`, and harden `NomadConciergeAiService` prompt instructions ([#78](https://github.com/fmatar/quarkus-agui/issues/78))
 - fix(a2a,showcase): support non-ECB currencies (`LBP`, `MAD`, `EGP`, `JOD`, `AED`, `ARS`, `COP`, `PEN`, `CLP`, `VND`, `TWD`) via keyless ISO 4217 `open.er-api.com` fallback when `api.frankfurter.dev` returns `404 not found`, accept both `currency` and `targetCurrency` context keys in `NomadTravelAdvisorService.performCurrencyAndBudgetAudit`, and parse trailing currency symbols (e.g. `2000$`, `1500€`, `1000£`) in `TripDossierStore.extractBudgetFromPrompt` & `NomadTravelAdvisorService` ([#76](https://github.com/fmatar/quarkus-agui/issues/76))
