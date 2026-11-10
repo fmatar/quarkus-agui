@@ -5,7 +5,7 @@
 > To refresh this board: `.agent/skills/sdlc-kanban/scripts/kanban-sync.sh`
 
 > **Repository**: `fmatar/quarkus-agui`  
-> **Last Synced**: `2026-11-09 20:14:04 UTC`
+> **Last Synced**: `2026-11-10 00:56:47 UTC`
 
 ---
 
@@ -13,15 +13,26 @@
 
 | 📥 Backlog | 📋 Ready | ⚡ In Progress | 🔍 In Review | ✅ Done |
 | :--- | :--- | :--- | :--- | :--- |
+|  | [#29 feat(client): extract standalone AG-UI Svelte 5 library (packages/agui-svelte)](https://github.com/fmatar/quarkus-agui/issues/29) |  |  | [#70 chore(kanban): sync merged develop issues (#38-#68) to Done & prune stale branches](https://github.com/fmatar/quarkus-agui/issues/70) |
 |  |  |  |  | [#68 feat(langchain4j-mcp): Idiomatic quarkus-langchain4j-mcp, Multi<ChatEvent> AG-UI Bridge, SmallRye Health & REST Countries v5](https://github.com/fmatar/quarkus-agui/issues/68) |
-| [#62 feat(ui): Replace hardcoded Kyoto initial state with interactive Destination Picker & Awaiting Destination Dossier](https://github.com/fmatar/quarkus-agui/issues/62) |  |  |  | [#59 feat(showcase): Package SvelteKit Frontend with Quarkus Quinoa & Build Containers with Jib](https://github.com/fmatar/quarkus-agui/issues/59) |
-| [#57 feat(ui): Wide-Resolution Editorial Layout & Deep-Linked Verified Sources](https://github.com/fmatar/quarkus-agui/issues/57) |  |  |  | [#55 feat(ui): GSAP motion choreography across AG-UI studio & /impeccable critique 40/40 score](https://github.com/fmatar/quarkus-agui/issues/55) |
-| [#48 feat(showcase): On-demand LLM-generated interactive single-select and multi-select choice surface (tool:ui)](https://github.com/fmatar/quarkus-agui/issues/48) |  |  |  | [#54 feat(mcp): @ResourceTemplate city dossiers, @CompletePrompt argument completion, real mcp:sampling step & .md export](https://github.com/fmatar/quarkus-agui/issues/54) |
-| [#46 fix(showcase): Dynamic global country & currency resolution from Open-Meteo Geocoding and REST Countries v3.1 (eliminating JPY fallback)](https://github.com/fmatar/quarkus-agui/issues/46) |  |  |  | [#53 feat(langchain4j): input/output guardrails, in-memory cultural & acoustic field notes RAG, and specialist sub-agent personas](https://github.com/fmatar/quarkus-agui/issues/53) |
-| [#44 fix(showcase): Live Local Ollama LLM tri-protocol parity, verified model roster, and wire telemetry coalescing](https://github.com/fmatar/quarkus-agui/issues/44) |  |  |  | [#52 feat(memory): multi-turn conversational memory (@MemoryId sliding window) & live traveler://preferences profile extraction](https://github.com/fmatar/quarkus-agui/issues/52) |
-| [#42 refactor(showcase): purge all legacy SRE/OpsPilot code across mcp-server, a2a-server, backend, and frontend](https://github.com/fmatar/quarkus-agui/issues/42) |  |  |  | [#51 feat(websockets): full-duplex Quarkus WebSockets Next transport, bidirectional Wire Telemetry & instant Dossier state updates](https://github.com/fmatar/quarkus-agui/issues/51) |
-| [#40 feat(showcase): remove legacy cluster SRE remnants & static UI labels, wire global Open-Meteo geocoding/FX, and upgrade Nomad Concierge agent](https://github.com/fmatar/quarkus-agui/issues/40) |  |  |  | [#36 fix(showcase): include pnpm-workspace.yaml and frontend .dockerignore in Docker build](https://github.com/fmatar/quarkus-agui/issues/36) |
-| [#38 fix(showcase): resolve Svelte duplicate-key crash on A2A steps, wire live MCP/A2A container endpoints, and support free-form Nomad chat](https://github.com/fmatar/quarkus-agui/issues/38) |  |  |  | [#34 feat(showcase): add Docker Compose stack, Dockerfiles, and single-command launcher for Nomad Concierge](https://github.com/fmatar/quarkus-agui/issues/34) |
+|  |  |  |  | [#66 feat(showcase): honest upstream error surfacing, live healthchecks, native quarkus-mcp, intent-driven travel chatbot & domain naming cleanup](https://github.com/fmatar/quarkus-agui/issues/66) |
+|  |  |  |  | [#64 fix(orchestrator): Handle destination-free greetings & profile updates without defaulting to Kyoto (#64)](https://github.com/fmatar/quarkus-agui/issues/64) |
+|  |  |  |  | [#62 feat(ui): Replace hardcoded Kyoto initial state with interactive Destination Picker & Awaiting Destination Dossier](https://github.com/fmatar/quarkus-agui/issues/62) |
+|  |  |  |  | [#59 feat(showcase): Package SvelteKit Frontend with Quarkus Quinoa & Build Containers with Jib](https://github.com/fmatar/quarkus-agui/issues/59) |
+|  |  |  |  | [#57 feat(ui): Wide-Resolution Editorial Layout & Deep-Linked Verified Sources](https://github.com/fmatar/quarkus-agui/issues/57) |
+|  |  |  |  | [#55 feat(ui): GSAP motion choreography across AG-UI studio & /impeccable critique 40/40 score](https://github.com/fmatar/quarkus-agui/issues/55) |
+|  |  |  |  | [#54 feat(mcp): @ResourceTemplate city dossiers, @CompletePrompt argument completion, real mcp:sampling step & .md export](https://github.com/fmatar/quarkus-agui/issues/54) |
+|  |  |  |  | [#53 feat(langchain4j): input/output guardrails, in-memory cultural & acoustic field notes RAG, and specialist sub-agent personas](https://github.com/fmatar/quarkus-agui/issues/53) |
+|  |  |  |  | [#52 feat(memory): multi-turn conversational memory (@MemoryId sliding window) & live traveler://preferences profile extraction](https://github.com/fmatar/quarkus-agui/issues/52) |
+|  |  |  |  | [#51 feat(websockets): full-duplex Quarkus WebSockets Next transport, bidirectional Wire Telemetry & instant Dossier state updates](https://github.com/fmatar/quarkus-agui/issues/51) |
+|  |  |  |  | [#48 feat(showcase): On-demand LLM-generated interactive single-select and multi-select choice surface (tool:ui)](https://github.com/fmatar/quarkus-agui/issues/48) |
+|  |  |  |  | [#46 fix(showcase): Dynamic global country & currency resolution from Open-Meteo Geocoding and REST Countries v3.1 (eliminating JPY fallback)](https://github.com/fmatar/quarkus-agui/issues/46) |
+|  |  |  |  | [#44 fix(showcase): Live Local Ollama LLM tri-protocol parity, verified model roster, and wire telemetry coalescing](https://github.com/fmatar/quarkus-agui/issues/44) |
+|  |  |  |  | [#42 refactor(showcase): purge all legacy SRE/OpsPilot code across mcp-server, a2a-server, backend, and frontend](https://github.com/fmatar/quarkus-agui/issues/42) |
+|  |  |  |  | [#40 feat(showcase): remove legacy cluster SRE remnants & static UI labels, wire global Open-Meteo geocoding/FX, and upgrade Nomad Concierge agent](https://github.com/fmatar/quarkus-agui/issues/40) |
+|  |  |  |  | [#38 fix(showcase): resolve Svelte duplicate-key crash on A2A steps, wire live MCP/A2A container endpoints, and support free-form Nomad chat](https://github.com/fmatar/quarkus-agui/issues/38) |
+|  |  |  |  | [#36 fix(showcase): include pnpm-workspace.yaml and frontend .dockerignore in Docker build](https://github.com/fmatar/quarkus-agui/issues/36) |
+|  |  |  |  | [#34 feat(showcase): add Docker Compose stack, Dockerfiles, and single-command launcher for Nomad Concierge](https://github.com/fmatar/quarkus-agui/issues/34) |
 |  |  |  |  | [#32 feat(showcase): Nomad AI Travel & Culture Concierge with modular Svelte 5 AG-UI Component Kit and commercial minimalist UI](https://github.com/fmatar/quarkus-agui/issues/32) |
 |  |  |  |  | [#30 feat(arch): refactor extensions with BOM and concentric Clean Architecture (Core, SSE, WebSockets)](https://github.com/fmatar/quarkus-agui/issues/30) |
 |  |  |  |  | [#27 fix(workbench): enforce deterministic service card order and contextualize A2A incident remediation](https://github.com/fmatar/quarkus-agui/issues/27) |
@@ -45,23 +56,24 @@
 
 | Issue | Status | Priority | Component | Quality Gate | Spec Link |
 | :--- | :--- | :--- | :--- | :--- | :--- |
+| [#70 chore(kanban): sync merged develop issues (#38-#68) to Done & prune stale branches](https://github.com/fmatar/quarkus-agui/issues/70) | `status:done` | P2 - Medium | Architecture | `Passed` | — |
 | [#68 feat(langchain4j-mcp): Idiomatic quarkus-langchain4j-mcp, Multi<ChatEvent> AG-UI Bridge, SmallRye Health & REST Countries v5](https://github.com/fmatar/quarkus-agui/issues/68) | `status:done` | P1 - High | Architecture | `Passed` | [ADR-005](docs/adr/ADR-005-quarkus-langchain4j-mcp-and-smallrye-health.md) |
 | [#66 feat(showcase): honest upstream error surfacing, live healthchecks, native quarkus-mcp, intent-driven travel chatbot & domain naming cleanup](https://github.com/fmatar/quarkus-agui/issues/66) | `status:done` | P2 - Medium | Architecture | `Pending` | — |
-| [#64 fix(orchestrator): Handle destination-free greetings & profile updates without defaulting to Kyoto (#64)](https://github.com/fmatar/quarkus-agui/issues/64) | `status:backlog` | P2 - Medium | Architecture | `Pending` | — |
-| [#62 feat(ui): Replace hardcoded Kyoto initial state with interactive Destination Picker & Awaiting Destination Dossier](https://github.com/fmatar/quarkus-agui/issues/62) | `status:backlog` | P2 - Medium | Architecture | `Pending` | — |
+| [#64 fix(orchestrator): Handle destination-free greetings & profile updates without defaulting to Kyoto (#64)](https://github.com/fmatar/quarkus-agui/issues/64) | `status:done` | P2 - Medium | Architecture | `Pending` | — |
+| [#62 feat(ui): Replace hardcoded Kyoto initial state with interactive Destination Picker & Awaiting Destination Dossier](https://github.com/fmatar/quarkus-agui/issues/62) | `status:done` | P2 - Medium | Architecture | `Pending` | — |
 | [#59 feat(showcase): Package SvelteKit Frontend with Quarkus Quinoa & Build Containers with Jib](https://github.com/fmatar/quarkus-agui/issues/59) | `status:done` | P2 - Medium | Architecture | `Pending` | — |
-| [#57 feat(ui): Wide-Resolution Editorial Layout & Deep-Linked Verified Sources](https://github.com/fmatar/quarkus-agui/issues/57) | `status:backlog` | P2 - Medium | Architecture | `Pending` | — |
+| [#57 feat(ui): Wide-Resolution Editorial Layout & Deep-Linked Verified Sources](https://github.com/fmatar/quarkus-agui/issues/57) | `status:done` | P2 - Medium | Architecture | `Pending` | — |
 | [#55 feat(ui): GSAP motion choreography across AG-UI studio & /impeccable critique 40/40 score](https://github.com/fmatar/quarkus-agui/issues/55) | `status:done` | P2 - Medium | Architecture | `Pending` | — |
 | [#54 feat(mcp): @ResourceTemplate city dossiers, @CompletePrompt argument completion, real mcp:sampling step & .md export](https://github.com/fmatar/quarkus-agui/issues/54) | `status:done` | P2 - Medium | Architecture | `Pending` | — |
 | [#53 feat(langchain4j): input/output guardrails, in-memory cultural & acoustic field notes RAG, and specialist sub-agent personas](https://github.com/fmatar/quarkus-agui/issues/53) | `status:done` | P2 - Medium | Architecture | `Pending` | — |
 | [#52 feat(memory): multi-turn conversational memory (@MemoryId sliding window) & live traveler://preferences profile extraction](https://github.com/fmatar/quarkus-agui/issues/52) | `status:done` | P2 - Medium | Architecture | `Pending` | — |
 | [#51 feat(websockets): full-duplex Quarkus WebSockets Next transport, bidirectional Wire Telemetry & instant Dossier state updates](https://github.com/fmatar/quarkus-agui/issues/51) | `status:done` | P2 - Medium | Architecture | `Pending` | — |
-| [#48 feat(showcase): On-demand LLM-generated interactive single-select and multi-select choice surface (tool:ui)](https://github.com/fmatar/quarkus-agui/issues/48) | `status:backlog` | P2 - Medium | Architecture | `Pending` | — |
-| [#46 fix(showcase): Dynamic global country & currency resolution from Open-Meteo Geocoding and REST Countries v3.1 (eliminating JPY fallback)](https://github.com/fmatar/quarkus-agui/issues/46) | `status:backlog` | P2 - Medium | Architecture | `Pending` | — |
-| [#44 fix(showcase): Live Local Ollama LLM tri-protocol parity, verified model roster, and wire telemetry coalescing](https://github.com/fmatar/quarkus-agui/issues/44) | `status:backlog` | P2 - Medium | Architecture | `Pending` | — |
-| [#42 refactor(showcase): purge all legacy SRE/OpsPilot code across mcp-server, a2a-server, backend, and frontend](https://github.com/fmatar/quarkus-agui/issues/42) | `status:backlog` | P2 - Medium | Architecture | `Pending` | — |
-| [#40 feat(showcase): remove legacy cluster SRE remnants & static UI labels, wire global Open-Meteo geocoding/FX, and upgrade Nomad Concierge agent](https://github.com/fmatar/quarkus-agui/issues/40) | `status:backlog` | P2 - Medium | Architecture | `Pending` | — |
-| [#38 fix(showcase): resolve Svelte duplicate-key crash on A2A steps, wire live MCP/A2A container endpoints, and support free-form Nomad chat](https://github.com/fmatar/quarkus-agui/issues/38) | `status:backlog` | P2 - Medium | Architecture | `Pending` | — |
+| [#48 feat(showcase): On-demand LLM-generated interactive single-select and multi-select choice surface (tool:ui)](https://github.com/fmatar/quarkus-agui/issues/48) | `status:done` | P2 - Medium | Architecture | `Pending` | — |
+| [#46 fix(showcase): Dynamic global country & currency resolution from Open-Meteo Geocoding and REST Countries v3.1 (eliminating JPY fallback)](https://github.com/fmatar/quarkus-agui/issues/46) | `status:done` | P2 - Medium | Architecture | `Pending` | — |
+| [#44 fix(showcase): Live Local Ollama LLM tri-protocol parity, verified model roster, and wire telemetry coalescing](https://github.com/fmatar/quarkus-agui/issues/44) | `status:done` | P2 - Medium | Architecture | `Pending` | — |
+| [#42 refactor(showcase): purge all legacy SRE/OpsPilot code across mcp-server, a2a-server, backend, and frontend](https://github.com/fmatar/quarkus-agui/issues/42) | `status:done` | P2 - Medium | Architecture | `Pending` | — |
+| [#40 feat(showcase): remove legacy cluster SRE remnants & static UI labels, wire global Open-Meteo geocoding/FX, and upgrade Nomad Concierge agent](https://github.com/fmatar/quarkus-agui/issues/40) | `status:done` | P2 - Medium | Architecture | `Pending` | — |
+| [#38 fix(showcase): resolve Svelte duplicate-key crash on A2A steps, wire live MCP/A2A container endpoints, and support free-form Nomad chat](https://github.com/fmatar/quarkus-agui/issues/38) | `status:done` | P2 - Medium | Architecture | `Pending` | — |
 | [#36 fix(showcase): include pnpm-workspace.yaml and frontend .dockerignore in Docker build](https://github.com/fmatar/quarkus-agui/issues/36) | `status:done` | P2 - Medium | Architecture | `Pending` | — |
 | [#34 feat(showcase): add Docker Compose stack, Dockerfiles, and single-command launcher for Nomad Concierge](https://github.com/fmatar/quarkus-agui/issues/34) | `status:done` | P2 - Medium | Architecture | `Pending` | — |
 | [#32 feat(showcase): Nomad AI Travel & Culture Concierge with modular Svelte 5 AG-UI Component Kit and commercial minimalist UI](https://github.com/fmatar/quarkus-agui/issues/32) | `status:done` | P2 - Medium | Architecture | `Pending` | — |
