@@ -141,6 +141,28 @@ test('applyJsonPatch applies RFC 6902 add, replace, and remove immutably with RF
 	assert.equal(applyJsonPatchOperation(original, null), original);
 	assert.equal(applyJsonPatchOperation(original, { op: 123, path: '/a' }), original);
 	assert.equal(applyJsonPatchOperation(original, { op: 'add' }), original);
+	// CWE-1321: reject prototype-chain pointer segments (__proto__, constructor, prototype)
+	const cleanTarget = { safe: 1, a: { nested: true } };
+	assert.equal(
+		applyJsonPatch(cleanTarget, [{ op: 'add', path: '/__proto__/polluted', value: 'pwned' }]),
+		cleanTarget
+	);
+	assert.equal(
+		applyJsonPatch(cleanTarget, [{ op: 'replace', path: '/__proto__', value: null }]),
+		cleanTarget
+	);
+	assert.equal(
+		applyJsonPatch(cleanTarget, [
+			{ op: 'add', path: '/constructor/prototype/polluted', value: 'pwned' }
+		]),
+		cleanTarget
+	);
+	assert.equal(
+		applyJsonPatch(cleanTarget, [{ op: 'remove', path: '/a/prototype/b' }]),
+		cleanTarget
+	);
+	assert.equal(Object.getPrototypeOf(cleanTarget), Object.prototype);
+	assert.equal(({}).polluted, undefined);
 	const withNullBranch = { nullBranch: null, primitiveLeaf: 7 };
 	assert.deepEqual(
 		applyJsonPatch(withNullBranch, [{ op: 'remove', path: '/nullBranch/deep' }]),
@@ -316,7 +338,11 @@ test('WebSocketAgent extends AbstractAgent, streams over shared & dedicated sock
 	assert.equal(wsAgent.isConnected, true);
 	assert.deepEqual(connectionChanges, [true]);
 
-	const passThroughMw = (_input, next) => next.run(_input);
+	let mwInvocations = 0;
+	const passThroughMw = (input, next) => {
+		mwInvocations += 1;
+		return next.run(input);
+	};
 	wsAgent.use(passThroughMw);
 
 	assert.equal(wsAgent.sendPing(), true);
@@ -346,9 +372,10 @@ test('WebSocketAgent extends AbstractAgent, streams over shared & dedicated sock
 	// Dedicated per-run socket mode (when shared socket is disconnected)
 	const cloned = wsAgent.clone();
 	assert.ok(cloned instanceof WebSocketAgent);
-	assert.equal(cloned.middlewares.length, 1);
+	let clonedDedicatedSocket = null;
 	cloned.webSocketFactory = (url) => {
 		const sock = new FakeWebSocket(url);
+		clonedDedicatedSocket = sock;
 		sock.onClientSend = (raw, s) => {
 			const input = JSON.parse(raw);
 			s.emitServerJson({ type: EventType.RUN_STARTED, threadId: input.threadId, runId: input.runId });
@@ -362,7 +389,11 @@ test('WebSocketAgent extends AbstractAgent, streams over shared & dedicated sock
 		queueMicrotask(() => sock.openServer());
 		return sock;
 	};
-	await cloned.runAgent();
+	const mwBeforeCloneRun = mwInvocations;
+	const clonedResult = await cloned.runAgent();
+	assert.equal(mwInvocations, mwBeforeCloneRun + 1);
+	assert.deepEqual(clonedResult.newMessages, []);
+	assert.equal(clonedDedicatedSocket.readyState, FakeWebSocket.CLOSED);
 });
 
 test('WebSocketAgent surfaces connection errors and supports abortRun / disconnectSocket', async () => {
@@ -427,6 +458,52 @@ test('WebSocketAgent surfaces connection errors and supports abortRun / disconne
 	sharedErrAgent.disconnectSocket();
 	assert.equal(sharedErrAgent.isConnected, false);
 	assert.deepEqual(sharedChanges, [true, false]);
+
+	// Asynchronous W3C WebSocket.close() race: stale onclose from old shared socket must NOT kill a fresh run
+	let asyncSharedSocket = null;
+	let freshDedicatedSocket = null;
+	const asyncRaceAgent = new WebSocketAgent({
+		url: 'ws://127.0.0.1:8080/api/agent/ws',
+		webSocketFactory: (url) => {
+			const sock = new FakeWebSocket(url);
+			if (!asyncSharedSocket) {
+				sock.close = function asyncBrowserClose(code = 1000, reason = 'closing') {
+					this.readyState = FakeWebSocket.CLOSING;
+					setTimeout(() => {
+						this.readyState = FakeWebSocket.CLOSED;
+						this.onclose?.({ code, reason });
+					}, 5);
+				};
+				asyncSharedSocket = sock;
+			} else {
+				sock.onClientSend = (raw, s) => {
+					const input = JSON.parse(raw);
+					setTimeout(() => {
+						s.emitServerJson({
+							type: EventType.RUN_STARTED,
+							threadId: input.threadId,
+							runId: input.runId
+						});
+						s.emitServerJson({
+							type: EventType.RUN_FINISHED,
+							threadId: input.threadId,
+							runId: input.runId,
+							outcome: { type: 'success' }
+						});
+					}, 15);
+				};
+				queueMicrotask(() => sock.openServer());
+				freshDedicatedSocket = sock;
+			}
+			return sock;
+		}
+	});
+	asyncRaceAgent.connectSocket();
+	asyncSharedSocket.openServer();
+	asyncRaceAgent.disconnectSocket();
+	const raceRes = await asyncRaceAgent.runAgent();
+	assert.deepEqual(raceRes.newMessages, []);
+	assert.equal(freshDedicatedSocket.readyState, FakeWebSocket.CLOSED);
 });
 
 test('createAgUiStore / useAgUiAgent drives HttpAgent canonical SSE stream, InterruptOutcome, and Resume round-trip', async () => {
@@ -711,6 +788,61 @@ test('backward compatibility: parseSseChunk, interaction helpers, and fetch fall
 		fetchImpl: async () => ({ ok: true, status: 200, body: null })
 	});
 	await assert.rejects(() => bodylessAgent.sendPrompt('hi'), /status 200/);
+
+	// Mid-stream transport failure resets isStreaming=false, records lastError, and releases reader lock
+	let readerReleased = false;
+	const midStreamFailStore = useAgUiAgent({
+		fetchImpl: async () => ({
+			ok: true,
+			status: 200,
+			body: {
+				getReader() {
+					let step = 0;
+					return {
+						async read() {
+							step += 1;
+							if (step === 1) {
+								return {
+									done: false,
+									value: encoder.encode(
+										'data: {"type":"RUN_STARTED","threadId":"th-mid","runId":"r-mid"}\n\n'
+									)
+								};
+							}
+							throw new Error('SSE connection reset mid-stream');
+						},
+						releaseLock() {
+							readerReleased = true;
+						}
+					};
+				}
+			}
+		})
+	});
+	await assert.rejects(() => midStreamFailStore.sendPrompt('hi'), /SSE connection reset mid-stream/);
+	assert.equal(midStreamFailStore.state.isStreaming, false);
+	assert.equal(midStreamFailStore.state.lastError.message, 'SSE connection reset mid-stream');
+	assert.equal(readerReleased, true);
+
+	const sdkMidStreamFailAgent = new HttpAgent({
+		url: 'http://127.0.0.1:8080/api/agent/run',
+		fetch: async () =>
+			new Response(
+				new ReadableStream({
+					start(controller) {
+						controller.enqueue(
+							encoder.encode('data: {"type":"RUN_STARTED","threadId":"t","runId":"r"}\n\n')
+						);
+						controller.error(new Error('SDK stream broken'));
+					}
+				}),
+				{ status: 200, headers: { 'Content-Type': 'text/event-stream' } }
+			)
+	});
+	const sdkFailStore = createAgUiStore({ agent: sdkMidStreamFailAgent });
+	await assert.rejects(() => sdkFailStore.runAgent('test'), /SDK stream broken/);
+	assert.equal(sdkFailStore.state.isStreaming, false);
+	assert.equal(sdkFailStore.state.lastError.message, 'SDK stream broken');
 
 	agent.dispatch({ id: 'd0', type: 'CUSTOM', name: 'info', value: 1 });
 	agent.ingestSseChunk(

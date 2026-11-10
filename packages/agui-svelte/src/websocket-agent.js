@@ -10,6 +10,13 @@ function defaultWebSocketFactory(url, protocols) {
 	return protocols ? new globalThis.WebSocket(url, protocols) : new globalThis.WebSocket(url);
 }
 
+function detachSocketHandlers(socket) {
+	socket.onopen = null;
+	socket.onmessage = null;
+	socket.onerror = null;
+	socket.onclose = null;
+}
+
 /**
  * Full-duplex WebSocket transport implementation of `@ag-ui/client`'s `AbstractAgent`.
  * Sends canonical `RunAgentInput` JSON frames and decodes inbound canonical `Event` JSON frames.
@@ -42,14 +49,19 @@ export class WebSocketAgent extends AbstractAgent {
 		}
 		const socket = this.webSocketFactory(this.url, this.protocols);
 		this.#sharedSocket = socket;
-		socket.onopen = () => this.onConnectionChange?.(true);
-		socket.onmessage = (evt) => this.#routeSocketMessage(socket, evt);
-		socket.onerror = (err) => this.#failActiveObserver(err);
+		socket.onopen = () => {
+			if (this.#sharedSocket === socket) this.onConnectionChange?.(true);
+		};
+		socket.onmessage = (evt) => {
+			if (this.#sharedSocket === socket) this.#routeSocketMessage(socket, evt);
+		};
+		socket.onerror = (err) => {
+			if (this.#sharedSocket === socket) this.#failActiveObserver(err);
+		};
 		socket.onclose = () => {
-			if (this.#sharedSocket === socket) {
-				this.#sharedSocket = null;
-				this.onConnectionChange?.(false);
-			}
+			if (this.#sharedSocket !== socket) return;
+			this.#sharedSocket = null;
+			this.onConnectionChange?.(false);
 			this.#failActiveObserver(new Error('WebSocket closed before run finished'));
 		};
 		return socket;
@@ -57,11 +69,14 @@ export class WebSocketAgent extends AbstractAgent {
 
 	disconnectSocket() {
 		const sock = this.#sharedSocket;
+		if (!sock) return;
 		this.#sharedSocket = null;
-		if (sock) {
-			sock.close(1000, 'client disconnect');
-			this.onConnectionChange?.(false);
+		if (!this.#activeRunSocket) {
+			this.#failActiveObserver(new Error('WebSocket disconnected by client'));
 		}
+		detachSocketHandlers(sock);
+		sock.close(1000, 'client disconnect');
+		this.onConnectionChange?.(false);
 	}
 
 	sendPing() {
@@ -87,8 +102,9 @@ export class WebSocketAgent extends AbstractAgent {
 	abortRun() {
 		const dedicated = this.#activeRunSocket;
 		this.#activeRunSocket = null;
-		this.#activeObserver = null;
+		this.#failActiveObserver(new Error('WebSocket run aborted'));
 		if (dedicated) {
+			detachSocketHandlers(dedicated);
 			dedicated.close(1000, 'run aborted');
 		}
 		super.abortRun();
@@ -154,8 +170,13 @@ export class WebSocketAgent extends AbstractAgent {
 
 			return () => {
 				completed = true;
-				this.#activeObserver = null;
-				this.#activeRunSocket = null;
+				if (this.#activeObserver === subscriber) {
+					this.#activeObserver = null;
+				}
+				if (this.#activeRunSocket === socket) {
+					this.#activeRunSocket = null;
+				}
+				detachSocketHandlers(socket);
 				if (socket.readyState === WS_OPEN || socket.readyState === WS_CONNECTING) {
 					socket.close(1000, 'subscription closed');
 				}
@@ -174,6 +195,10 @@ export class WebSocketAgent extends AbstractAgent {
 			this.onControlEvent?.(parsed);
 			return false;
 		}
+		return this.#forwardToActiveObserver(parsed);
+	}
+
+	#forwardToActiveObserver(parsed) {
 		if (!this.#activeObserver) {
 			this.#applySpontaneousState(parsed);
 			return false;

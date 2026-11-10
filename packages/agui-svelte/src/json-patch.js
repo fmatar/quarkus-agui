@@ -2,6 +2,8 @@
  * Immutable RFC 6902 JSON Patch (`add`, `replace`, `remove`) & RFC 6901 JSON Pointer helpers.
  */
 
+const FORBIDDEN_POINTER_TOKENS = new Set(['__proto__', 'constructor', 'prototype']);
+
 export function unescapeJsonPointerToken(token) {
 	const raw = String(token ?? '');
 	return raw.includes('~') ? raw.replace(/~1/g, '/').replace(/~0/g, '~') : raw;
@@ -62,6 +64,9 @@ export function applyJsonPatchOperation(state, operation) {
 		return state;
 	}
 	const segments = parsePointerSegments(operation.path);
+	if (segments.some((segment) => FORBIDDEN_POINTER_TOKENS.has(segment))) {
+		return state;
+	}
 	if (segments.length === 0) {
 		return operation.op === 'remove' ? {} : operation.value;
 	}

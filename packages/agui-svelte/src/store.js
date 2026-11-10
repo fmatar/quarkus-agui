@@ -130,6 +130,14 @@ function buildAssistantMessage(event, reply) {
 	return { id: `msg-${suffix}`, role: 'assistant', status: 'completed', content: reply };
 }
 
+function appendStreamChunk(state, event, events) {
+	return {
+		...state,
+		streamBuffer: state.streamBuffer + extractTextChunk(event),
+		events
+	};
+}
+
 const EVENT_HANDLERS = new Map([
 	[
 		EventType.RUN_STARTED,
@@ -142,22 +150,8 @@ const EVENT_HANDLERS = new Map([
 			events
 		})
 	],
-	[
-		EventType.TEXT_MESSAGE_CONTENT,
-		(state, event, events) => ({
-			...state,
-			streamBuffer: state.streamBuffer + extractTextChunk(event),
-			events
-		})
-	],
-	[
-		'TEXT_DELTA',
-		(state, event, events) => ({
-			...state,
-			streamBuffer: state.streamBuffer + extractTextChunk(event),
-			events
-		})
-	],
+	[EventType.TEXT_MESSAGE_CONTENT, appendStreamChunk],
+	['TEXT_DELTA', appendStreamChunk],
 	[
 		EventType.REASONING_MESSAGE_CONTENT,
 		(state, event, events) => ({
@@ -404,12 +398,17 @@ class AgUiStoreController {
 			return this.sendPrompt(prompt ?? '', parameters);
 		}
 		this.#appendPromptIfPresent(prompt);
-		await this.#sdkAgent.runAgent(parameters, {
-			onEvent: ({ event }) => {
-				this.dispatch(event);
-			}
-		});
-		return this.#currentState;
+		try {
+			await this.#sdkAgent.runAgent(parameters, {
+				onEvent: ({ event }) => {
+					this.dispatch(event);
+				}
+			});
+			return this.#currentState;
+		} catch (err) {
+			this.#recordTransportFailure(err);
+			throw err;
+		}
 	}
 
 	resumeInterrupt(interruptId, status = 'resolved', payload = undefined, parameters = {}) {
@@ -475,18 +474,34 @@ class AgUiStoreController {
 		}
 	}
 
+	#recordTransportFailure(err) {
+		const message = err instanceof Error ? err.message : String(err);
+		this.#setState({
+			...this.#currentState,
+			isStreaming: false,
+			lastError: { message, code: null }
+		});
+	}
+
 	async #consumeSseStream(response) {
 		if (!response.ok || !response.body) {
 			throw new Error(`AG-UI stream request failed with status ${response.status}`);
 		}
 		const reader = response.body.getReader();
 		const decoder = new TextDecoder();
-		while (true) {
-			const { value, done } = await reader.read();
-			if (done) break;
-			this.ingestSseChunk(decoder.decode(value, { stream: true }));
+		try {
+			while (true) {
+				const { value, done } = await reader.read();
+				if (done) break;
+				this.ingestSseChunk(decoder.decode(value, { stream: true }));
+			}
+			return this.#currentState;
+		} catch (err) {
+			this.#recordTransportFailure(err);
+			throw err;
+		} finally {
+			reader.releaseLock?.();
 		}
-		return this.#currentState;
 	}
 }
 
