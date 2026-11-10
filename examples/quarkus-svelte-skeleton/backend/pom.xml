@@ -17,10 +17,6 @@
     <dependencies>
         <dependency>
             <groupId>org.agui</groupId>
-            <artifactId>ag-ui-core</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.agui</groupId>
             <artifactId>ag-ui-a2a</artifactId>
         </dependency>
         <dependency>
@@ -30,6 +26,10 @@
         <dependency>
             <groupId>org.agui</groupId>
             <artifactId>ag-ui-quarkus</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.agui</groupId>
+            <artifactId>ag-ui-quarkus-langchain4j</artifactId>
         </dependency>
         <dependency>
             <groupId>io.quarkus</groupId>

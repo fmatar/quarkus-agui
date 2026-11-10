@@ -19,6 +19,7 @@
 	--border-hairline: #e4e0d8;
 	--border-strong: #cfcac0;
 	--accent-terracotta: #c84b31;
+	--accent-terracotta-ink: #9e331d;
 	--accent-terracotta-soft: #fbeee9;
 	--accent-emerald: #1f6e50;
 	--accent-emerald-soft: #eaf4ef;
@@ -238,8 +239,8 @@ a {
 
 .badge-hitl {
 	background: var(--accent-terracotta-soft);
-	color: var(--accent-terracotta);
-	border: 1px solid rgba(200, 75, 49, 0.28);
+	color: var(--accent-terracotta-ink);
+	border: 1px solid rgba(158, 51, 29, 0.28);
 }
 
 .badge-local {

@@ -68,10 +68,10 @@ curl -s -X POST http://localhost:8082/api/a2a/audit \
   -H "Content-Type: application/json" \
   -d '{"skillId":"verify-travel-advisory","prompt":"Verify Paris advisory","context":{"city":"Paris","country":"France"}}' | jq .
 
-# Stream AG-UI SSE events from the Nomad Concierge Orchestrator (:8080)
+# Stream canonical AG-UI SSE events from the Nomad Concierge Orchestrator (:8080)
 curl -N -X POST http://localhost:8080/api/agent/run \
   -H "Content-Type: application/json" \
-  -d '{"threadId":"thread-demo-1","prompt":"Plan a 4-night architecture and tea trip in Kyoto with a $2,400 USD budget"}'
+  -d '{"threadId":"thread-demo-1","runId":"run-demo-1","state":{},"messages":[{"id":"u-1","role":"user","content":"Plan a 4-night architecture and tea trip in Kyoto with a $2,400 USD budget"}],"tools":[],"context":[],"forwardedProps":{"llmMode":"ollama:llama3.2:latest"}}'
 ```
 
 ### 4. Portable GraalVM 25 Native Compilation ("Runs Everywhere")

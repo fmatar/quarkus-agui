@@ -483,7 +483,7 @@
 						onTriggerSkill?.(
 							`Reserve ${nomadTrip.stopTitle ?? `${nomadTrip.activeCity} Architectural Sanctuary`} in ${nomadTrip.activeCity} for ${nomadTrip.nights ?? 4} nights ($1840)`
 						)}
-					class="flex w-full items-center justify-between rounded-xl border border-[#C84B31]/40 bg-[#FBEEE9]/70 px-3 py-2 text-left text-xs font-semibold text-[#C84B31] transition-colors hover:bg-[#FBEEE9] disabled:cursor-not-allowed disabled:opacity-45"
+					class="flex w-full items-center justify-between rounded-xl border border-[#9E331D]/35 bg-[#FBEEE9]/70 px-3 py-2 text-left text-xs font-semibold text-[#9E331D] transition-colors hover:bg-[#FBEEE9] disabled:cursor-not-allowed disabled:opacity-45"
 				>
 					<span class="truncate">Hold Sanctuary Suite ($1,840)</span>
 					<Server class="size-3.5 shrink-0" />
@@ -501,7 +501,7 @@
 				? 'bg-[#EAF4EF] text-[#1F6E50]'
 				: healthSummary.status === 'UNKNOWN'
 					? 'bg-[#F6F5F2] text-[#575551]'
-					: 'bg-[#FBEEE9] text-[#C84B31]'}"
+					: 'bg-[#FBEEE9] text-[#9E331D]'}"
 			title="Click to inspect live upstream & protocol healthchecks (/q/health/ready)"
 		>
 			{#if healthSummary.status === 'UP'}

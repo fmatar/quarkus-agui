@@ -15,6 +15,9 @@
 	} from '@lucide/svelte';
 	import {
 		SCENARIO_PRESETS,
+		WebSocketAgent,
+		buildHitlResumeInput,
+		buildRunAgentInput,
 		createInitialWorkbenchState,
 		lockTurnInteraction,
 		parseSseChunk,
@@ -22,6 +25,7 @@
 		reduceAgUiEvent,
 		selectTurnOption,
 		summarizeHealthReport,
+		toRootStateDeltaOps,
 		updateTripNightsInState
 	} from '$lib/agui-client.js';
 	import TripDossierPanel from './TripDossierPanel.svelte';
@@ -47,7 +51,7 @@
 	let systemHealth = $state(null);
 	let isCheckingHealth = $state(false);
 	let healthSummary = $derived(summarizeHealthReport(systemHealth));
-	let wsSocket = null;
+	let wsAgent = null;
 
 	async function refreshSystemHealth() {
 		if (typeof window === 'undefined' || isCheckingHealth) return;
@@ -77,52 +81,32 @@
 
 	function connectWebSocket() {
 		if (typeof window === 'undefined' || typeof WebSocket === 'undefined') return;
-		if (wsSocket && (wsSocket.readyState === WebSocket.OPEN || wsSocket.readyState === WebSocket.CONNECTING)) {
-			return;
-		}
+		if (wsAgent?.isConnected) return;
 		try {
 			const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-			const socket = new WebSocket(`${proto}//${window.location.host}/api/agent/ws`);
-			wsSocket = socket;
-
-			socket.onopen = () => {
-				workbench = {
-					...workbench,
-					wsConnected: true,
-					transportMode: 'ws',
-					statusText: 'WebSocket Full-Duplex Connected (/api/agent/ws)'
-				};
-			};
-
-			socket.onmessage = (msgEvt) => {
-				try {
-					const parsed = JSON.parse(msgEvt.data);
-					if (parsed && parsed.type && parsed.type !== 'pong') {
-						workbench = reduceAgUiEvent(workbench, parsed);
+			if (!wsAgent) {
+				wsAgent = new WebSocketAgent({
+					url: `${proto}//${window.location.host}/api/agent/ws`,
+					threadId: workbench.threadId,
+					onConnectionChange: (connected) => {
+						workbench = {
+							...workbench,
+							wsConnected: connected,
+							transportMode: connected ? 'ws' : 'sse',
+							statusText: connected
+								? 'WebSocket Full-Duplex Connected (/api/agent/ws)'
+								: workbench.statusText
+						};
+					},
+					onControlEvent: (evt) => {
+						workbench = reduceAgUiEvent(workbench, evt);
+					},
+					onSpontaneousEvent: (evt) => {
+						workbench = reduceAgUiEvent(workbench, evt);
 					}
-				} catch {
-					// ignore malformed frame
-				}
-			};
-
-			socket.onclose = () => {
-				if (wsSocket === socket) {
-					wsSocket = null;
-				}
-				workbench = {
-					...workbench,
-					wsConnected: false,
-					transportMode: 'sse'
-				};
-			};
-
-			socket.onerror = () => {
-				workbench = {
-					...workbench,
-					wsConnected: false,
-					transportMode: 'sse'
-				};
-			};
+				});
+			}
+			wsAgent.connectSocket();
 		} catch {
 			workbench = {
 				...workbench,
@@ -136,20 +120,19 @@
 		connectWebSocket();
 		refreshSystemHealth();
 		return () => {
-			wsSocket?.close();
-			wsSocket = null;
+			wsAgent?.disconnectSocket();
+			wsAgent = null;
 		};
 	});
 
 	function sendWebSocketCommand(commandType, payload) {
-		if (wsSocket && wsSocket.readyState === WebSocket.OPEN) {
+		if (wsAgent?.sendControlFrame(commandType, payload)) {
 			const envelope = {
 				type: commandType,
 				threadId: workbench.threadId,
 				...payload
 			};
 			workbench = recordClientOutboundEvent(workbench, commandType, envelope);
-			wsSocket.send(JSON.stringify(envelope));
 			return true;
 		}
 		return false;
@@ -174,24 +157,78 @@
 		const decoder = new TextDecoder();
 		let buffer = '';
 
-		while (true) {
-			const { value, done } = await reader.read();
-			if (done) {
-				buffer += decoder.decode();
-				break;
+		try {
+			while (true) {
+				const { value, done } = await reader.read();
+				if (done) {
+					buffer += decoder.decode();
+					break;
+				}
+				buffer += decoder.decode(value, { stream: true });
+				const parsed = parseSseChunk(buffer);
+				buffer = parsed.remainder;
+				for (const evt of parsed.events) {
+					workbench = reduceAgUiEvent(workbench, evt);
+				}
 			}
-			buffer += decoder.decode(value, { stream: true });
-			const parsed = parseSseChunk(buffer);
-			buffer = parsed.remainder;
-			for (const evt of parsed.events) {
-				workbench = reduceAgUiEvent(workbench, evt);
+
+			if (buffer.trim()) {
+				const flushed = parseSseChunk(buffer + '\n\n');
+				for (const evt of flushed.events) {
+					workbench = reduceAgUiEvent(workbench, evt);
+				}
 			}
+		} finally {
+			reader.releaseLock?.();
+		}
+	}
+
+	async function executeRunInput(input, outboundType) {
+		workbench = recordClientOutboundEvent(workbench, outboundType, input);
+		if (wsAgent?.isConnected) {
+			await new Promise((resolve) => {
+				wsAgent.run(input).subscribe({
+					next: (evt) => {
+						workbench = reduceAgUiEvent(workbench, evt);
+					},
+					error: (err) => {
+						workbench = {
+							...workbench,
+							isStreaming: false,
+							statusText: `WebSocket error (${err?.message ?? 'stream interrupted'})`
+						};
+						resolve();
+					},
+					complete: () => resolve()
+				});
+			});
+			return;
 		}
 
-		if (buffer.trim()) {
-			const flushed = parseSseChunk(buffer + '\n\n');
-			for (const evt of flushed.events) {
-				workbench = reduceAgUiEvent(workbench, evt);
+		abortController = new AbortController();
+		try {
+			const response = await fetch('/api/agent/run', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+				body: JSON.stringify(input),
+				signal: abortController.signal
+			});
+			await consumeSseResponse(response);
+		} catch (err) {
+			workbench = {
+				...workbench,
+				isStreaming: false,
+				statusText:
+					err?.name === 'AbortError'
+						? 'Stream paused by traveler'
+						: `Bridge error (${err?.message ?? 'connect failed to :8080'})`
+			};
+		} finally {
+			if (workbench.isStreaming) {
+				workbench = {
+					...workbench,
+					isStreaming: false
+				};
 			}
 		}
 	}
@@ -222,92 +259,29 @@
 			]
 		};
 
-		if (
-			sendWebSocketCommand('RUN_AGENT', {
-				prompt: promptText,
-				state: workbench.clusterState,
-				mode: selectedMode
-			})
-		) {
-			return;
-		}
-
-		abortController = new AbortController();
-		try {
-			const response = await fetch('/api/agent/run', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					threadId: workbench.threadId,
-					prompt: promptText,
-					state: workbench.clusterState,
-					mode: selectedMode
-				}),
-				signal: abortController.signal
-			});
-			await consumeSseResponse(response);
-		} catch (err) {
-			workbench = {
-				...workbench,
-				isStreaming: false,
-				statusText:
-					err?.name === 'AbortError'
-						? 'Stream paused by traveler'
-						: `Bridge error (${err?.message ?? 'connect failed to :8080'})`
-			};
-		} finally {
-			if (workbench.isStreaming) {
-				workbench = {
-					...workbench,
-					isStreaming: false
-				};
-			}
-		}
+		const input = buildRunAgentInput({
+			threadId: workbench.threadId,
+			prompt: promptText,
+			state: workbench.clusterState,
+			llmMode: selectedMode
+		});
+		await executeRunInput(input, 'RUN_AGENT_INPUT');
 	}
 
 	async function submitHitlDecision(approved, modifiedArgs = null) {
-		const reason = approved
-			? 'Traveler authorized sanctuary hold'
-			: 'Traveler declined reservation hold';
-
-		if (
-			sendWebSocketCommand('APPROVE_HITL', {
-				approved,
-				reason,
-				modifiedArgs
-			})
-		) {
-			return;
-		}
-
-		abortController = new AbortController();
-		try {
-			const response = await fetch('/api/agent/approve', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					threadId: workbench.threadId,
-					approved,
-					reason,
-					modifiedArgs
-				}),
-				signal: abortController.signal
-			});
-			await consumeSseResponse(response);
-		} catch (err) {
-			workbench = {
-				...workbench,
-				isStreaming: false,
-				statusText: `Approval error (${err?.message ?? 'failed'})`
-			};
-		} finally {
-			if (workbench.isStreaming) {
-				workbench = {
-					...workbench,
-					isStreaming: false
-				};
-			}
-		}
+		const interruptId =
+			workbench.pendingApproval?.interruptId ??
+			workbench.pendingApproval?.callId ??
+			'hitl-approval';
+		const input = buildHitlResumeInput({
+			threadId: workbench.threadId,
+			interruptId,
+			approved,
+			modifiedArgs,
+			state: workbench.clusterState,
+			llmMode: selectedMode
+		});
+		await executeRunInput(input, 'RESUME_INTERRUPT');
 	}
 
 	async function handleUpdateTripParams({ nights, homeCurrency }) {
@@ -329,7 +303,8 @@
 				workbench = reduceAgUiEvent(workbench, {
 					id: `params-${Date.now()}`,
 					type: 'STATE_DELTA',
-					payload: delta
+					delta: toRootStateDeltaOps(delta),
+					rawEvent: delta
 				});
 			}
 		} catch {
@@ -358,7 +333,8 @@
 				workbench = reduceAgUiEvent(workbench, {
 					id: `reset-${Date.now()}`,
 					type: 'STATE_DELTA',
-					payload: delta
+					delta: toRootStateDeltaOps(delta),
+					rawEvent: delta
 				});
 			}
 		} catch {
@@ -400,6 +376,7 @@
 	}
 
 	function cancelStream() {
+		wsAgent?.abortRun();
 		if (sendWebSocketCommand('CANCEL_RUN', {})) {
 			return;
 		}
@@ -517,7 +494,7 @@
 						? 'border-[#1F6E50]/30 bg-[#EAF4EF] text-[#1F6E50]'
 						: healthSummary.status === 'UNKNOWN'
 							? 'border-[#E4E0D8] bg-[#F6F5F2] text-[#575551]'
-							: 'border-[#C84B31]/40 bg-[#FBEEE9] text-[#C84B31]'}"
+							: 'border-[#9E331D]/35 bg-[#FBEEE9] text-[#9E331D]'}"
 					title="Live MicroProfile SmallRye Readiness Check (/q/health/ready)"
 				>
 					{#if healthSummary.status === 'UP'}
@@ -546,6 +523,8 @@
 				<button
 					type="button"
 					onclick={() => (isInspectorOpen = !isInspectorOpen)}
+					aria-expanded={isInspectorOpen}
+					aria-label={isInspectorOpen ? 'Collapse Wire Telemetry Inspector' : 'Expand Wire Telemetry Inspector'}
 					class="inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 font-mono text-xs font-semibold transition-colors {isInspectorOpen
 						? 'border-[#141413] bg-[#141413] text-white'
 						: 'border-[#E4E0D8] bg-white text-[#141413] hover:bg-[#EFECE6]'}"

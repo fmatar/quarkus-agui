@@ -49,6 +49,8 @@ flowchart TD
   _68["Ticket #68 (feature/issue-#68-quarkus-langchain4j-mcp-v5)"]
   _72["Ticket #72 (fix/issue-#72-healthcheck-ttl-and-tool-prompts)"]
   _70["Ticket #70 (chore/issue-#70-sync-develop-kanban-state)"]
+  _83["Ticket #83 (feature/issue-#83-headless-agui-svelte-sdk)"]
+  _85["Ticket #85 (feature/issue-#85-nomad-showcase-cutover-delete-core)"]
   CAP_01 -->|specified_by| SPEC_01
   CAP_02 -->|specified_by| SPEC_02
   CAP_01 -->|depends_on| CAP_02

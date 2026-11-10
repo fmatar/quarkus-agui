@@ -1,40 +1,57 @@
 package org.agui.showcase.backend;
 
-import com.fasterxml.jackson.core.type.TypeReference;
+import com.agui.community.core.event.RunErrorEvent;
+import com.agui.community.core.event.RunFinishedEvent;
+import com.agui.community.core.event.StateDeltaEvent;
+import com.agui.community.core.interrupt.SuccessOutcome;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkus.arc.Arc;
 import io.quarkus.arc.ManagedContext;
+import io.quarkus.websockets.next.OnClose;
+import io.quarkus.websockets.next.OnError;
 import io.quarkus.websockets.next.OnOpen;
 import io.quarkus.websockets.next.OnTextMessage;
 import io.quarkus.websockets.next.WebSocket;
 import io.quarkus.websockets.next.WebSocketConnection;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import java.util.Locale;
 import java.util.Map;
-import org.agui.core.adapters.AgUiSseFormatter;
-import org.agui.core.domain.AgUiEvent;
+import org.agui.langchain4j.domain.AgUiStatePatch;
+import org.agui.quarkus.adapters.AgUiWebSocketHandler;
 
 /**
- * Full-Duplex Quarkus WebSockets Next Endpoint (`/api/agent/ws`) for the Nomad Concierge Studio (:8080).
+ * Full-Duplex Quarkus WebSockets Next Endpoint ({@code /api/agent/ws}) delegating canonical
+ * AG-UI {@code RunAgentInput} execution and session lifecycle to {@link AgUiWebSocketHandler}.
  */
 @WebSocket(path = "/api/agent/ws")
 @ApplicationScoped
 public class AgentWebSocketEndpoint {
 
     private final NomadConciergeOrchestratorService orchestrator;
+    private final AgUiWebSocketHandler wsHandler;
     private final ObjectMapper objectMapper = new ObjectMapper();
     boolean asyncDispatch = true;
 
-    @Inject
     public AgentWebSocketEndpoint(NomadConciergeOrchestratorService orchestrator) {
+        this(orchestrator, new AgUiWebSocketHandler());
+    }
+
+    @Inject
+    public AgentWebSocketEndpoint(
+            NomadConciergeOrchestratorService orchestrator,
+            AgUiWebSocketHandler wsHandler) {
         this.orchestrator = orchestrator;
+        this.wsHandler = wsHandler;
     }
 
     @OnOpen
     public void onOpen(WebSocketConnection connection) {
+        wsHandler.onOpen(connection);
         Object dossier = orchestrator.getCatalog().get("tripDossierState");
-        sendEventFrame(connection, "thread-nomad-1", "WS_CONNECTED", Map.of(
+        sendControlJson(connection, Map.of(
+                "type", "WS_CONNECTED",
                 "sessionId", connection.id(),
                 "transport", "websocket-full-duplex",
                 "tripDossierState", dossier,
@@ -42,75 +59,79 @@ public class AgentWebSocketEndpoint {
                 "memoryTurns", orchestrator.getMemoryTurnCount("thread-nomad-1")));
     }
 
+    @OnClose
+    public void onClose(WebSocketConnection connection) {
+        wsHandler.onClose(connection);
+    }
+
+    @OnError
+    public void onError(WebSocketConnection connection, Throwable error) {
+        wsHandler.onError(connection, error);
+    }
+
     @OnTextMessage
     public void onMessage(String rawMessage, WebSocketConnection connection) {
-        if (rawMessage == null || rawMessage.isBlank()) {
+        if (wsHandler.handleControlFrame(rawMessage, connection)) {
             return;
         }
-        String trimmed = rawMessage.trim();
-        if ("ping".equalsIgnoreCase(trimmed)) {
-            connection.sendTextAndAwait("{\"type\":\"pong\"}");
-            return;
-        }
-
         try {
-            JsonNode root = objectMapper.readTree(trimmed);
-            String commandType = root.path("type").asText("RUN_AGENT").toUpperCase();
+            JsonNode root = objectMapper.readTree(rawMessage.trim());
+            String commandType = root.path("type").asText("").toUpperCase(Locale.ROOT);
             String threadId = root.path("threadId").asText("thread-nomad-1");
-
-            switch (commandType) {
-                case "PING" -> connection.sendTextAndAwait("{\"type\":\"pong\"}");
-
-                case "CANCEL_RUN" -> {
-                    orchestrator.cancelRun(threadId);
-                    sendEventFrame(connection, threadId, "RUN_FINISHED", Map.of(
-                            "threadId", threadId,
-                            "status", "cancelled"));
-                }
-
-                case "UPDATE_TRIP_PARAMS" -> {
-                    Integer nights = root.hasNonNull("nights") ? root.path("nights").asInt() : null;
-                    String homeCurrency = root.hasNonNull("homeCurrency") ? root.path("homeCurrency").asText() : null;
-                    Map<String, Object> delta = orchestrator.updateTripParams(threadId, nights, homeCurrency);
-                    sendEventFrame(connection, threadId, "STATE_DELTA", delta);
-                }
-
-                case "RESET_MEMORY" -> {
-                    Map<String, Object> resetDelta = orchestrator.resetMemory(threadId);
-                    sendEventFrame(connection, threadId, "STATE_DELTA", resetDelta);
-                }
-
-                case "APPROVE_HITL" -> {
-                    boolean approved = root.path("approved").asBoolean(false);
-                    String reason = root.path("reason").asText(approved ? "Approved via WebSocket" : "Declined via WebSocket");
-                    Map<String, Object> modifiedArgs = root.has("modifiedArgs") && root.path("modifiedArgs").isObject()
-                            ? objectMapper.convertValue(root.path("modifiedArgs"), new TypeReference<Map<String, Object>>() {})
-                            : null;
-                    AgentApprovalRequest approval = new AgentApprovalRequest(threadId, approved, reason, modifiedArgs);
-                    dispatchWork("agui-ws-hitl-" + threadId, () ->
-                            orchestrator.approvePendingAction(approval)
-                                    .onItem().invoke(frame -> sendRawSseFrameAsJson(connection, frame))
-                                    .collect().last().await().indefinitely());
-                }
-
-                default -> {
-                    String prompt = root.path("prompt").asText("");
-                    String mode = root.hasNonNull("mode") ? root.path("mode").asText() : null;
-                    Map<String, Object> state = root.has("state") && root.path("state").isObject()
-                            ? objectMapper.convertValue(root.path("state"), new TypeReference<Map<String, Object>>() {})
-                            : Map.of();
-                    AgentRunRequest runRequest = new AgentRunRequest(threadId, prompt, state, mode);
-                    dispatchWork("agui-ws-run-" + threadId, () ->
-                            orchestrator.streamRun(runRequest)
-                                    .onItem().invoke(frame -> sendRawSseFrameAsJson(connection, frame))
-                                    .collect().last().await().indefinitely());
-                }
-            }
+            routeParsedFrame(rawMessage, connection, root, commandType, threadId);
         } catch (Exception e) {
-            sendEventFrame(connection, "thread-nomad-1", "RUN_FINISHED", Map.of(
-                    "status", "failed",
-                    "error", e.getMessage() == null ? "Invalid WebSocket frame" : e.getMessage()));
+            String msg = e.getMessage() == null ? "Invalid WebSocket frame" : e.getMessage();
+            wsHandler.sendEvent(connection, new RunErrorEvent(
+                    msg,
+                    "WS_FRAME_ERROR",
+                    System.currentTimeMillis(),
+                    Map.of("status", "failed")));
         }
+    }
+
+    private void routeParsedFrame(
+            String rawMessage,
+            WebSocketConnection connection,
+            JsonNode root,
+            String commandType,
+            String threadId) {
+        switch (commandType) {
+            case "CANCEL_RUN" -> handleCancelCommand(connection, threadId);
+            case "UPDATE_TRIP_PARAMS" -> handleUpdateParamsCommand(connection, threadId, root);
+            case "RESET_MEMORY" -> handleResetMemoryCommand(connection, threadId);
+            default -> dispatchWork(
+                    "agui-ws-run-" + threadId,
+                    () -> wsHandler.runAndSend(orchestrator, rawMessage, connection));
+        }
+    }
+
+    private void handleCancelCommand(WebSocketConnection connection, String threadId) {
+        orchestrator.cancelRun(threadId);
+        wsHandler.sendEvent(connection, new RunFinishedEvent(
+                threadId,
+                "run-cancelled",
+                new SuccessOutcome(),
+                Map.of("threadId", threadId, "status", "cancelled"),
+                System.currentTimeMillis(),
+                null));
+    }
+
+    private void handleUpdateParamsCommand(WebSocketConnection connection, String threadId, JsonNode root) {
+        Integer nights = root.hasNonNull("nights") ? root.path("nights").asInt() : null;
+        String homeCurrency = root.hasNonNull("homeCurrency") ? root.path("homeCurrency").asText() : null;
+        Map<String, Object> delta = orchestrator.updateTripParams(threadId, nights, homeCurrency);
+        wsHandler.sendEvent(connection, new StateDeltaEvent(
+                AgUiStatePatch.upsertRootFields(delta),
+                System.currentTimeMillis(),
+                delta));
+    }
+
+    private void handleResetMemoryCommand(WebSocketConnection connection, String threadId) {
+        Map<String, Object> resetDelta = orchestrator.resetMemory(threadId);
+        wsHandler.sendEvent(connection, new StateDeltaEvent(
+                AgUiStatePatch.upsertRootFields(resetDelta),
+                System.currentTimeMillis(),
+                resetDelta));
     }
 
     private void dispatchWork(String threadName, Runnable task) {
@@ -124,11 +145,10 @@ public class AgentWebSocketEndpoint {
 
     static void runWithRequestContext(Runnable task) {
         var container = Arc.container();
-        if (container == null) {
-            task.run();
-            return;
-        }
-        ManagedContext requestContext = container.requestContext();
+        runWithManagedContext(container == null ? null : container.requestContext(), task);
+    }
+
+    static void runWithManagedContext(ManagedContext requestContext, Runnable task) {
         if (requestContext == null || requestContext.isActive()) {
             task.run();
             return;
@@ -141,30 +161,19 @@ public class AgentWebSocketEndpoint {
         }
     }
 
-    void sendRawSseFrameAsJson(WebSocketConnection connection, String rawSseFrame) {
-        if (connection == null || !connection.isOpen()) {
+    void sendControlJson(WebSocketConnection connection, Map<String, Object> payload) {
+        if (connection == null || connection.isClosed()) {
             return;
         }
-        String unwrapped = AgUiSseFormatter.unwrapSseData(rawSseFrame);
-        if (unwrapped != null && !unwrapped.isBlank()) {
+        try {
+            String json = objectMapper.writeValueAsString(payload);
             synchronized (connection) {
-                if (connection.isOpen()) {
-                    connection.sendTextAndAwait(unwrapped.trim());
+                if (!connection.isClosed()) {
+                    connection.sendTextAndAwait(json);
                 }
             }
-        }
-    }
-
-    void sendEventFrame(WebSocketConnection connection, String threadId, String type, Map<String, Object> payload) {
-        if (connection == null || !connection.isOpen()) {
-            return;
-        }
-        AgUiEvent<Map<String, Object>> event = AgUiEvent.ofType(type, threadId, payload);
-        String json = AgUiSseFormatter.unwrapSseData(orchestrator.formatter().formatSse(event));
-        synchronized (connection) {
-            if (connection.isOpen()) {
-                connection.sendTextAndAwait(json.trim());
-            }
+        } catch (Exception ignored) {
+            // Non-serializable control payloads are ignored
         }
     }
 }

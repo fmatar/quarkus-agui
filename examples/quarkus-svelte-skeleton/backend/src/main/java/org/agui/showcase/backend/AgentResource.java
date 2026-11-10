@@ -1,5 +1,6 @@
 package org.agui.showcase.backend;
 
+import com.agui.community.core.agent.RunAgentInput;
 import io.smallrye.mutiny.Multi;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
@@ -11,11 +12,10 @@ import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
 import java.util.List;
 import java.util.Map;
-import org.agui.core.adapters.AgUiSseFormatter;
 import org.jboss.resteasy.reactive.RestStreamElementType;
 
 /**
- * REST & SSE Endpoint for the Nomad Travel Concierge Quarkus Orchestrator (:8080).
+ * Canonical AG-UI REST &amp; SSE Endpoint for the Nomad Travel Concierge Quarkus Orchestrator (:8080).
  */
 @Path("/api/agent")
 @Consumes(MediaType.APPLICATION_JSON)
@@ -43,30 +43,22 @@ public class AgentResource {
 
     @POST
     @Path("/chat")
-    public AgentChatResponse chat(AgentRunRequest request) {
-        return orchestrator.executeChat(request);
+    public AgentChatResponse chat(RunAgentInput input) {
+        return orchestrator.executeChat(input);
     }
 
     @POST
     @Path("/run")
     @Produces(MediaType.SERVER_SENT_EVENTS)
     @RestStreamElementType(MediaType.TEXT_PLAIN)
-    public Multi<String> run(AgentRunRequest request) {
-        return orchestrator.streamRun(request).map(AgentResource::unwrapSseDataPayload);
-    }
-
-    @POST
-    @Path("/approve")
-    @Produces(MediaType.SERVER_SENT_EVENTS)
-    @RestStreamElementType(MediaType.TEXT_PLAIN)
-    public Multi<String> approve(AgentApprovalRequest approval) {
-        return orchestrator.approvePendingAction(approval).map(AgentResource::unwrapSseDataPayload);
+    public Multi<String> run(RunAgentInput input) {
+        return orchestrator.streamJsonPayloads(input);
     }
 
     @POST
     @Path("/params")
     public Map<String, Object> updateParams(Map<String, Object> body) {
-        String threadId = body != null && body.get("threadId") instanceof String t ? t : "thread-nomad-1";
+        String threadId = extractThreadId(body);
         Integer nights = body != null && body.get("nights") instanceof Number n ? n.intValue() : null;
         String homeCurrency = body != null && body.get("homeCurrency") instanceof String c ? c : null;
         return orchestrator.updateTripParams(threadId, nights, homeCurrency);
@@ -75,14 +67,13 @@ public class AgentResource {
     @POST
     @Path("/memory/reset")
     public Map<String, Object> resetMemory(Map<String, Object> body) {
-        String threadId = body != null && body.get("threadId") instanceof String t ? t : "thread-nomad-1";
-        return orchestrator.resetMemory(threadId);
+        return orchestrator.resetMemory(extractThreadId(body));
     }
 
     @POST
     @Path("/cancel")
     public Map<String, Object> cancelRun(Map<String, Object> body) {
-        String threadId = body != null && body.get("threadId") instanceof String t ? t : "thread-nomad-1";
+        String threadId = extractThreadId(body);
         orchestrator.cancelRun(threadId);
         return Map.of("threadId", threadId, "status", "cancelled");
     }
@@ -94,7 +85,7 @@ public class AgentResource {
         return Map.of("argument", "city", "values", values);
     }
 
-    static String unwrapSseDataPayload(String rawFrame) {
-        return AgUiSseFormatter.unwrapSseData(rawFrame);
+    private static String extractThreadId(Map<String, Object> body) {
+        return body != null && body.get("threadId") instanceof String t ? t : "thread-nomad-1";
     }
 }

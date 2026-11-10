@@ -1,15 +1,18 @@
 /**
- * Ultra-fast, lightweight, zero-dependency Markdown & Code-Block renderer.
- * Designed specifically for SRE & DevOps outputs:
- * - Fenced code blocks with language tagging and copy action hooks
- * - Headers (H1 - H4)
- * - Bold / Italic / Strikethrough
- * - Inline code spans (`...`)
- * - Bulleted & numbered lists
- * - Blockquotes
- * - Markdown tables
- * - Escape-safe HTML generation
+ * Lightweight, zero-dependency, escape-safe Markdown & Code-Block renderer.
  */
+
+const HEADING_CLASSES = {
+	1: 'text-base font-bold text-[#141413] mt-4 mb-1.5 flex items-center gap-2',
+	2: 'text-sm font-bold text-[#141413] mt-3.5 mb-1.5 flex items-center gap-2',
+	3: 'text-sm font-bold text-[#141413] mt-3 mb-1',
+	4: 'text-xs font-semibold text-[#141413] mt-2 mb-1'
+};
+
+const LIST_OPEN_TAGS = {
+	ul: '<ul class="list-disc list-inside space-y-1 my-2 text-xs text-[#141413]">',
+	ol: '<ol class="list-decimal list-inside space-y-1 my-2 text-xs text-[#141413]">'
+};
 
 function escapeHtml(str) {
 	if (!str) return '';
@@ -21,191 +24,182 @@ function escapeHtml(str) {
 		.replace(/'/g, '&#039;');
 }
 
-export function renderMarkdownToHtml(markdown) {
-	if (!markdown) return '';
-
-	// Normalize line endings
-	let src = markdown.replace(/\r\n/g, '\n');
-
-	// Extract code blocks first to protect code content from further parsing
+function extractFencedCodeBlocks(src) {
 	const codeBlocks = [];
-	src = src.replace(/```([a-zA-Z0-9_\-\.]*)\n([\s\S]*?)```/g, (match, lang, code) => {
+	const text = src.replace(/```([a-zA-Z0-9_\-.]*)\n([\s\S]*?)```/g, (_m, lang, code) => {
 		const placeholder = `%%CODE_BLOCK_${codeBlocks.length}%%`;
 		codeBlocks.push({ lang: lang.trim() || 'plaintext', code: code.replace(/\n$/, '') });
 		return placeholder;
 	});
+	return { text, codeBlocks };
+}
 
-	// Split into lines for block-level parsing
-	const lines = src.split('\n');
-	const outputLines = [];
-	let inList = false;
-	let listType = null; // 'ul' | 'ol'
-	let inTable = false;
-	let tableRows = [];
+function closeActiveList(ctx) {
+	if (!ctx.listType) return;
+	ctx.output.push(`</${ctx.listType}>`);
+	ctx.listType = null;
+}
 
-	function closeList() {
-		if (inList) {
-			outputLines.push(listType === 'ul' ? '</ul>' : '</ol>');
-			inList = false;
-			listType = null;
-		}
+function closeActiveTable(ctx) {
+	if (ctx.tableRows.length > 0) {
+		ctx.output.push(renderTableHtml(ctx.tableRows));
 	}
+	ctx.tableRows = [];
+}
 
-	function closeTable() {
-		if (inTable) {
-			if (tableRows.length > 0) {
-				let tableHtml = '<div class="overflow-x-auto my-3.5 rounded-xl border border-[#E4E0D8] bg-white shadow-2xs"><table class="w-full text-left text-xs tabular-nums">';
-				tableRows.forEach((row, idx) => {
-					const isHeader = idx === 0;
-					const tag = isHeader ? 'th' : 'td';
-					const bg = isHeader
-						? 'bg-[#F6F5F2] text-[#141413] font-semibold border-b border-[#E4E0D8]'
-						: 'border-b border-[#E4E0D8] last:border-b-0 text-[#575551] hover:bg-[#FAF9F6]';
-					tableHtml += `<tr class="${bg}">`;
-					row.forEach((cell, cellIdx) => {
-						const trimmed = cell.trim();
-						const isNumericOrCost = /^[$€¥£₹]?\s*\d|cost|budget|price|rate|total|amount/i.test(trimmed);
-						const alignClass = cellIdx > 0 && isNumericOrCost ? 'text-right font-mono font-medium text-[#141413]' : '';
-						tableHtml += `<${tag} class="px-4 py-2.5 ${alignClass}">${parseInline(trimmed)}</${tag}>`;
-					});
-					tableHtml += '</tr>';
-				});
-				tableHtml += '</table></div>';
-				outputLines.push(tableHtml);
-			}
-			inTable = false;
-			tableRows = [];
-		}
+function renderTableHtml(rows) {
+	const renderedRows = rows.map((row, idx) => renderTableRow(row, idx === 0)).join('');
+	return `<div class="overflow-x-auto my-3.5 rounded-xl border border-[#E4E0D8] bg-white shadow-2xs"><table class="w-full text-left text-xs tabular-nums">${renderedRows}</table></div>`;
+}
+
+function renderTableRow(cells, isHeader) {
+	const tag = isHeader ? 'th' : 'td';
+	const bg = isHeader
+		? 'bg-[#F6F5F2] text-[#141413] font-semibold border-b border-[#E4E0D8]'
+		: 'border-b border-[#E4E0D8] last:border-b-0 text-[#575551] hover:bg-[#FAF9F6]';
+	const inner = cells.map((c, idx) => renderTableCell(tag, c.trim(), idx)).join('');
+	return `<tr class="${bg}">${inner}</tr>`;
+}
+
+function renderTableCell(tag, trimmed, cellIdx) {
+	const isNumeric = /^[$€¥£₹]?\s*\d|cost|budget|price|rate|total|amount/i.test(trimmed);
+	const align = cellIdx > 0 && isNumeric ? 'text-right font-mono font-medium text-[#141413]' : '';
+	return `<${tag} class="px-4 py-2.5 ${align}">${parseInline(trimmed)}</${tag}>`;
+}
+
+function tryConsumeTableLine(trimmed, ctx) {
+	if (!trimmed.startsWith('|') || !trimmed.endsWith('|')) {
+		closeActiveTable(ctx);
+		return false;
 	}
-
-	for (let i = 0; i < lines.length; i++) {
-		const line = lines[i];
-
-		// Check for Table rows
-		if (line.trim().startsWith('|') && line.trim().endsWith('|')) {
-			closeList();
-			const cells = line.trim().slice(1, -1).split('|');
-			// Skip markdown separator row |---|---|
-			if (cells.every(c => /^[\s\-:]+$/.test(c))) {
-				continue;
-			}
-			inTable = true;
-			tableRows.push(cells);
-			continue;
-		} else {
-			closeTable();
-		}
-
-		// Check for Headings
-		const headingMatch = line.match(/^(#{1,4})\s+(.*)$/);
-		if (headingMatch) {
-			closeList();
-			const level = headingMatch[1].length;
-			const text = parseInline(headingMatch[2]);
-			if (level === 1) {
-				outputLines.push(`<h1 class="text-base font-bold text-[#141413] mt-4 mb-1.5 flex items-center gap-2">${text}</h1>`);
-			} else if (level === 2) {
-				outputLines.push(`<h2 class="text-sm font-bold text-[#141413] mt-3.5 mb-1.5 flex items-center gap-2">${text}</h2>`);
-			} else if (level === 3) {
-				outputLines.push(`<h3 class="text-sm font-bold text-[#141413] mt-3 mb-1">${text}</h3>`);
-			} else {
-				outputLines.push(`<h4 class="text-xs font-semibold text-[#141413] mt-2 mb-1">${text}</h4>`);
-			}
-			continue;
-		}
-
-		// Check for Blockquotes
-		if (line.startsWith('> ')) {
-			closeList();
-			const content = parseInline(line.slice(2));
-			outputLines.push(`<blockquote class="border border-[#E4E0D8] bg-[#F6F5F2] px-3.5 py-2 my-2 text-xs text-[#575551] rounded-lg">${content}</blockquote>`);
-			continue;
-		}
-
-		// Check for Lists
-		const ulMatch = line.match(/^(\s*)[-*+]\s+(.*)$/);
-		const olMatch = line.match(/^(\s*)\d+\.\s+(.*)$/);
-		if (ulMatch || olMatch) {
-			const currentType = ulMatch ? 'ul' : 'ol';
-			const itemText = parseInline(ulMatch ? ulMatch[2] : olMatch[2]);
-
-			if (!inList || listType !== currentType) {
-				closeList();
-				inList = true;
-				listType = currentType;
-				outputLines.push(currentType === 'ul'
-					? '<ul class="list-disc list-inside space-y-1 my-2 text-xs text-[#141413]">'
-					: '<ol class="list-decimal list-inside space-y-1 my-2 text-xs text-[#141413]">');
-			}
-			outputLines.push(`<li class="leading-relaxed">${itemText}</li>`);
-			continue;
-		} else {
-			closeList();
-		}
-
-		// Check for Empty Lines
-		if (line.trim() === '') {
-			outputLines.push('<div class="h-2"></div>');
-			continue;
-		}
-
-		// Check for Code Block Placeholders
-		if (line.startsWith('%%CODE_BLOCK_') && line.endsWith('%%')) {
-			outputLines.push(line);
-			continue;
-		}
-
-		// Standard Paragraph
-		outputLines.push(`<p class="text-xs sm:text-sm leading-relaxed text-[#141413] my-1">${parseInline(line)}</p>`);
+	closeActiveList(ctx);
+	const cells = trimmed.slice(1, -1).split('|');
+	if (!cells.every((c) => /^[\s\-:]+$/.test(c))) {
+		ctx.tableRows.push(cells);
 	}
+	return true;
+}
 
-	closeList();
-	closeTable();
+function tryConsumeHeadingOrQuote(line, ctx) {
+	const heading = line.match(/^(#{1,4})\s+(.*)$/);
+	if (heading) {
+		closeActiveList(ctx);
+		const level = heading[1].length;
+		ctx.output.push(`<h${level} class="${HEADING_CLASSES[level]}">${parseInline(heading[2])}</h${level}>`);
+		return true;
+	}
+	if (line.startsWith('> ')) {
+		closeActiveList(ctx);
+		ctx.output.push(
+			`<blockquote class="border border-[#E4E0D8] bg-[#F6F5F2] px-3.5 py-2 my-2 text-xs text-[#575551] rounded-lg">${parseInline(line.slice(2))}</blockquote>`
+		);
+		return true;
+	}
+	return false;
+}
 
-	let html = outputLines.join('\n');
+function matchListLine(line) {
+	const ul = line.match(/^(\s*)[-*+]\s+(.*)$/);
+	if (ul) return { type: 'ul', content: ul[2] };
+	const ol = line.match(/^(\s*)\d+\.\s+(.*)$/);
+	return ol ? { type: 'ol', content: ol[2] } : null;
+}
 
-	// Re-insert Code Blocks with editorial precision styling & 1-click copy support
+function tryConsumeListLine(line, ctx) {
+	const item = matchListLine(line);
+	if (!item) {
+		closeActiveList(ctx);
+		return false;
+	}
+	if (ctx.listType !== item.type) {
+		closeActiveList(ctx);
+		ctx.listType = item.type;
+		ctx.output.push(LIST_OPEN_TAGS[item.type]);
+	}
+	ctx.output.push(`<li class="leading-relaxed">${parseInline(item.content)}</li>`);
+	return true;
+}
+
+function consumeParagraphOrSpacer(line, trimmed, ctx) {
+	if (trimmed === '') {
+		ctx.output.push('<div class="h-2"></div>');
+	} else if (line.startsWith('%%CODE_BLOCK_') && line.endsWith('%%')) {
+		ctx.output.push(line);
+	} else {
+		ctx.output.push(
+			`<p class="text-xs sm:text-sm leading-relaxed text-[#141413] my-1">${parseInline(line)}</p>`
+		);
+	}
+}
+
+function processSingleLine(line, ctx) {
+	const trimmed = line.trim();
+	if (tryConsumeTableLine(trimmed, ctx)) return;
+	if (tryConsumeHeadingOrQuote(line, ctx)) return;
+	if (tryConsumeListLine(line, ctx)) return;
+	consumeParagraphOrSpacer(line, trimmed, ctx);
+}
+
+function encodeSafeCodePayload(code) {
+	return encodeURIComponent(code)
+		.replace(/'/g, '%27')
+		.replace(/\(/g, '%28')
+		.replace(/\)/g, '%29');
+}
+
+function sanitizeLinkHref(rawHref) {
+	const trimmed = rawHref.trim();
+	if (trimmed.startsWith('#')) return trimmed;
+	if (trimmed.startsWith('/') && !trimmed.startsWith('//')) return trimmed;
+	return /^(?:https?:|mailto:)/i.test(trimmed) ? trimmed : '#';
+}
+
+function restoreCodeBlocks(html, codeBlocks) {
+	let result = html;
 	codeBlocks.forEach((block, idx) => {
-		const placeholder = `%%CODE_BLOCK_${idx}%%`;
+		const langBadge = escapeHtml(block.lang.toUpperCase());
 		const escapedCode = escapeHtml(block.code);
-		const langBadge = block.lang ? block.lang.toUpperCase() : 'CODE';
-		const codeCard = `
-<div class="my-3 overflow-hidden rounded-xl border border-[#E4E0D8] bg-[#F6F5F2] text-xs">
-	<div class="flex items-center justify-between border-b border-[#E4E0D8] bg-[#EFECE6] px-3.5 py-1.5 font-mono text-[11px]">
-		<span class="font-bold text-[#141413] uppercase tracking-wider">${escapeHtml(langBadge)}</span>
-		<button
-			type="button"
-			class="copy-code-btn rounded px-2 py-0.5 text-[10px] text-[#575551] hover:bg-white hover:text-[#141413] transition-colors"
-			onclick="navigator.clipboard.writeText(decodeURIComponent('${encodeURIComponent(block.code)}')).then(() => { this.innerText = 'Copied!'; setTimeout(() => this.innerText = 'Copy', 1500); })"
-		>
-			Copy
-		</button>
-	</div>
-	<pre class="overflow-x-auto p-3.5 font-mono text-[11px] leading-relaxed text-[#141413]"><code>${escapedCode}</code></pre>
-</div>`.trim();
-		html = html.replace(placeholder, codeCard);
+		const safePayload = encodeSafeCodePayload(block.code);
+		const card = [
+			'<div class="my-3 overflow-hidden rounded-xl border border-[#E4E0D8] bg-[#F6F5F2] text-xs">',
+			`\t<div class="flex items-center justify-between border-b border-[#E4E0D8] bg-[#EFECE6] px-3.5 py-1.5 font-mono text-[11px]">`,
+			`\t\t<span class="font-bold text-[#141413] uppercase tracking-wider">${langBadge}</span>`,
+			`\t\t<button type="button" class="copy-code-btn rounded px-2 py-0.5 text-[10px] text-[#575551] hover:bg-white hover:text-[#141413] transition-colors" onclick="navigator.clipboard.writeText(decodeURIComponent('${safePayload}')).then(() => { this.innerText = 'Copied!'; setTimeout(() => this.innerText = 'Copy', 1500); })">Copy</button>`,
+			`\t</div>`,
+			`\t<pre class="overflow-x-auto p-3.5 font-mono text-[11px] leading-relaxed text-[#141413]"><code>${escapedCode}</code></pre>`,
+			'</div>'
+		].join('\n');
+		result = result.replace(`%%CODE_BLOCK_${idx}%%`, card);
 	});
+	return result;
+}
 
-	return html;
+export function renderMarkdownToHtml(markdown) {
+	if (!markdown) return '';
+	const { text, codeBlocks } = extractFencedCodeBlocks(markdown.replace(/\r\n/g, '\n'));
+	const ctx = { output: [], listType: null, tableRows: [] };
+	for (const line of text.split('\n')) {
+		processSingleLine(line, ctx);
+	}
+	closeActiveList(ctx);
+	closeActiveTable(ctx);
+	return restoreCodeBlocks(ctx.output.join('\n'), codeBlocks);
 }
 
 function parseInline(text) {
 	if (!text) return '';
-	let str = escapeHtml(text);
-
-	// Inline code: `code`
-	str = str.replace(/`([^`]+)`/g, '<code class="rounded bg-[#EFECE6] px-1.5 py-0.5 font-mono text-[11px] text-[#141413] border border-[#E4E0D8]">$1</code>');
-
-	// Bold: **text** or __text__
-	str = str.replace(/\*\*([^*]+)\*\*/g, '<strong class="font-semibold text-[#141413]">$1</strong>');
-	str = str.replace(/__([^_]+)__/g, '<strong class="font-semibold text-[#141413]">$1</strong>');
-
-	// Italic: *text* or _text_
-	str = str.replace(/\*([^*]+)\*/g, '<em class="italic text-[#575551]">$1</em>');
-	str = str.replace(/_([^_]+)_/g, '<em class="italic text-[#575551]">$1</em>');
-
-	// Links: [text](url)
-	str = str.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-[#C84B31] underline hover:text-[#141413]">$1</a>');
-
-	return str;
+	return escapeHtml(text)
+		.replace(
+			/`([^`]+)`/g,
+			'<code class="rounded bg-[#EFECE6] px-1.5 py-0.5 font-mono text-[11px] text-[#141413] border border-[#E4E0D8]">$1</code>'
+		)
+		.replace(/\*\*([^*]+)\*\*/g, '<strong class="font-semibold text-[#141413]">$1</strong>')
+		.replace(/__([^_]+)__/g, '<strong class="font-semibold text-[#141413]">$1</strong>')
+		.replace(/\*([^*]+)\*/g, '<em class="italic text-[#575551]">$1</em>')
+		.replace(/_([^_]+)_/g, '<em class="italic text-[#575551]">$1</em>')
+		.replace(
+			/\[([^\]]+)\]\(([^)]+)\)/g,
+			(_, label, href) =>
+				`<a href="${sanitizeLinkHref(href)}" target="_blank" rel="noopener noreferrer" class="text-[#9E331D] underline hover:text-[#141413]">${label}</a>`
+		);
 }

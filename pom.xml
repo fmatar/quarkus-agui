@@ -49,7 +49,6 @@
 
     <modules>
         <module>ag-ui-bom</module>
-        <module>ag-ui-core</module>
         <module>ag-ui-a2a</module>
         <module>ag-ui-langchain4j</module>
         <module>ag-ui-quarkus</module>
@@ -152,11 +151,6 @@
                 <groupId>com.ag-ui.community</groupId>
                 <artifactId>java-client</artifactId>
                 <version>${agui.community.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.agui</groupId>
-                <artifactId>ag-ui-core</artifactId>
-                <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.agui</groupId>

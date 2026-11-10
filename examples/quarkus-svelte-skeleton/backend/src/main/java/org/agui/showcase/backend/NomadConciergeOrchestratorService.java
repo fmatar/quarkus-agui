@@ -1,7 +1,28 @@
 package org.agui.showcase.backend;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.agui.community.core.agent.Agent;
+import com.agui.community.core.agent.RunAgentInput;
+import com.agui.community.core.event.Event;
+import com.agui.community.core.event.JsonPatchOperation;
+import com.agui.community.core.event.RunErrorEvent;
+import com.agui.community.core.event.RunFinishedEvent;
+import com.agui.community.core.event.RunStartedEvent;
+import com.agui.community.core.event.StateDeltaEvent;
+import com.agui.community.core.event.StepFinishedEvent;
+import com.agui.community.core.event.TextMessageContentEvent;
+import com.agui.community.core.event.TextMessageEndEvent;
+import com.agui.community.core.event.TextMessageStartEvent;
+import com.agui.community.core.event.ToolCallArgsEvent;
+import com.agui.community.core.event.ToolCallEndEvent;
+import com.agui.community.core.event.ToolCallResultEvent;
+import com.agui.community.core.event.ToolCallStartEvent;
+import com.agui.community.core.interrupt.Interrupt;
+import com.agui.community.core.interrupt.InterruptOutcome;
+import com.agui.community.core.interrupt.Resume;
+import com.agui.community.core.interrupt.ResumeStatus;
+import com.agui.community.core.interrupt.SuccessOutcome;
+import com.agui.community.core.message.Message;
+import com.agui.community.core.message.Role;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.guardrail.GuardrailResult;
 import dev.langchain4j.guardrail.OutputGuardrailException;
@@ -20,34 +41,35 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Flow;
 import java.util.concurrent.atomic.AtomicInteger;
-import org.agui.core.adapters.AgUiSseFormatter;
-import org.agui.core.domain.AgUiEvent;
-import org.agui.core.domain.AgUiEventType;
-import org.agui.core.domain.TextDeltaPayload;
+import org.agui.langchain4j.adapters.AgUiRunOptions;
 import org.agui.langchain4j.adapters.AgUiToolClassifier;
-import org.agui.showcase.legacy.LegacyQuarkusChatBridge;
-import org.agui.showcase.legacy.LegacyRunOptions;
+import org.agui.langchain4j.domain.AgUiStatePatch;
+import org.agui.quarkus.langchain4j.adapters.AgUiQuarkusLangChain4jBridge;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 /**
  * Idiomatic Quarkus LangChain4j + MCP + A2A + AG-UI Orchestrator ({@code :8080}).
- * Delegates conversational reasoning and MCP tool execution to {@link NomadConciergeAiService}
- * (`@RegisterAiService` + `@McpToolBox("nomad")`) and adapts {@code Multi<ChatEvent>} streams.
+ * Implements canonical {@link Agent} over {@link RunAgentInput}, RFC 6902 {@link StateDeltaEvent},
+ * and native {@link InterruptOutcome} / {@link Resume} human-in-the-loop lifecycles.
  */
 @ApplicationScoped
-public class NomadConciergeOrchestratorService {
+public class NomadConciergeOrchestratorService implements Agent {
 
-    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
+    private static final String MCP_SERVER_LABEL = "nomad-mcp-concierge (:8081)";
+    private static final Map<String, String> A2A_TOOL_SKILLS = Map.of(
+            "verifyTravelAdvisory", "verify-travel-advisory",
+            "convertAndAuditBudget", "convert-and-audit-budget",
+            "curateNeighborhoodCadence", "curate-neighborhood-cadence");
 
     private final NomadConciergeAiService aiService;
-    private final LegacyQuarkusChatBridge langChain4jBridge;
+    private final AgUiQuarkusLangChain4jBridge langChain4jBridge;
     private final McpClient nomadMcpClient;
     private final A2aGatewayClient a2aClient;
     private final TripDossierStore dossierStore;
     private final NomadBackendReadinessChecks readinessChecks;
     private final TravelHonestyOutputGuardrail outputGuardrail = new TravelHonestyOutputGuardrail();
-    private final ObjectMapper objectMapper = new ObjectMapper();
     private final Map<String, AtomicInteger> memoryTurnCounts = new ConcurrentHashMap<>();
 
     @ConfigProperty(name = "quarkus.langchain4j.ollama.chat-model.model-id", defaultValue = "llama3.2:latest")
@@ -56,7 +78,7 @@ public class NomadConciergeOrchestratorService {
     @Inject
     public NomadConciergeOrchestratorService(
             NomadConciergeAiService aiService,
-            LegacyQuarkusChatBridge langChain4jBridge,
+            AgUiQuarkusLangChain4jBridge langChain4jBridge,
             @McpClientName("nomad") McpClient nomadMcpClient,
             A2aGatewayClient a2aClient,
             TripDossierStore dossierStore,
@@ -69,8 +91,26 @@ public class NomadConciergeOrchestratorService {
         this.readinessChecks = readinessChecks;
     }
 
-    public AgUiSseFormatter formatter() {
-        return langChain4jBridge.formatter();
+    @Override
+    public Flow.Publisher<Event> run(RunAgentInput input) {
+        return streamEvents(input);
+    }
+
+    public Multi<Event> streamEvents(RunAgentInput input) {
+        if (hasResumeItems(input)) {
+            return Multi.createFrom()
+                    .deferred(() -> executeResumeEvents(input))
+                    .runSubscriptionOn(Infrastructure.getDefaultWorkerPool());
+        }
+        return executeTurnEvents(input);
+    }
+
+    public Multi<String> streamSse(RunAgentInput input) {
+        return langChain4jBridge.quarkusBridge().toSseFrames(streamEvents(input));
+    }
+
+    public Multi<String> streamJsonPayloads(RunAgentInput input) {
+        return langChain4jBridge.quarkusBridge().toJsonPayloads(streamEvents(input));
     }
 
     public int getMemoryTurnCount(String threadId) {
@@ -96,183 +136,11 @@ public class NomadConciergeOrchestratorService {
         return readinessChecks.checkAllServices(nomadMcpClient);
     }
 
-    public Multi<String> streamRun(AgentRunRequest request) {
-        String threadId = normalizeThreadId(request == null ? null : request.threadId());
-        String prompt = (request == null || request.prompt() == null) ? "" : request.prompt();
-        String llmMode = resolveMode(request == null ? null : request.mode());
-
-        dossierStore.beginTurn(threadId, prompt);
-        int turns = prompt.isBlank()
-                ? getMemoryTurnCount(threadId)
-                : memoryTurnCounts.computeIfAbsent(threadId, k -> new AtomicInteger()).addAndGet(2);
-
-        Map<String, Object> initialDossier = dossierStore.readTripDossierState();
-        LegacyRunOptions options = new LegacyRunOptions(
-                llmMode,
-                Map.of(
-                        "tripDossierState", initialDossier,
-                        "clusterState", initialDossier,
-                        "memoryTurns", turns),
-                this::classifyToolExecution,
-                exec -> dossierStore.onToolExecuted(threadId, exec),
-                () -> dossierStore.finalizeTurnDossier(threadId, a2aClient),
-                () -> buildRunFinishedMetadata(threadId));
-
-        Multi<ChatEvent> guardedStream = Multi.createFrom()
-                .deferred(() -> aiService.chat(threadId, prompt))
-                .runSubscriptionOn(Infrastructure.getDefaultWorkerPool())
-                .onItem().invoke(event -> {
-                    if (event instanceof ChatEvent.ChatCompletedEvent completed
-                            && completed.getChatResponse() != null
-                            && completed.getChatResponse().aiMessage() != null) {
-                        AiMessage aiMsg = completed.getChatResponse().aiMessage();
-                        if (outputGuardrail.validate(aiMsg).result() != GuardrailResult.Result.SUCCESS) {
-                            throw new OutputGuardrailException("Assistant response blocked by TravelHonestyOutputGuardrail");
-                        }
-                    }
-                });
-
-        return langChain4jBridge.adaptToSse(threadId, guardedStream, options);
-    }
-
-    @SuppressWarnings("unchecked")
-    public AgentChatResponse executeChat(AgentRunRequest request) {
-        String threadId = normalizeThreadId(request == null ? null : request.threadId());
-        String llmMode = resolveMode(request == null ? null : request.mode());
-        List<String> frames = streamRun(request).collect().asList().await().indefinitely();
-
-        StringBuilder reply = new StringBuilder();
-        List<Map<String, Object>> mcpCalls = new ArrayList<>();
-        List<Map<String, Object>> a2aHandoffs = new ArrayList<>();
-        String status = "COMPLETED";
-
-        for (String rawFrame : frames) {
-            String json = AgUiSseFormatter.unwrapSseData(rawFrame);
-            if (json == null || json.isBlank()) {
-                continue;
-            }
-            try {
-                Map<String, Object> event = objectMapper.readValue(json, MAP_TYPE);
-                String type = String.valueOf(event.getOrDefault("type", ""));
-                Map<String, Object> payload = event.get("payload") instanceof Map<?, ?> p
-                        ? (Map<String, Object>) p
-                        : Map.of();
-                switch (type) {
-                    case "TEXT_DELTA" -> {
-                        if (payload.get("content") instanceof String chunk) {
-                            reply.append(chunk);
-                        }
-                    }
-                    case "TOOL_RESULT" -> {
-                        if (String.valueOf(payload.getOrDefault("callType", "")).startsWith("mcp:")) {
-                            mcpCalls.add(payload);
-                        }
-                    }
-                    case "STEP_FINISHED" -> {
-                        if ("A2A".equals(payload.get("protocol"))) {
-                            a2aHandoffs.add(payload);
-                        }
-                    }
-                    case "RUN_FINISHED" -> {
-                        if (payload.get("status") instanceof String s && !s.isBlank()) {
-                            status = s.toUpperCase(Locale.ROOT);
-                        }
-                    }
-                    default -> {
-                    }
-                }
-            } catch (Exception ignored) {
-                // Ignore non-JSON comments if any
-            }
-        }
-
-        return new AgentChatResponse(
-                threadId,
-                status,
-                llmMode,
-                mcpCalls,
-                a2aHandoffs,
-                dossierStore.readTripDossierState(),
-                reply.toString());
-    }
-
-    public Multi<String> approvePendingAction(AgentApprovalRequest approval) {
-        return Multi.createFrom()
-                .deferred(() -> executeApprovePendingAction(approval))
-                .runSubscriptionOn(Infrastructure.getDefaultWorkerPool());
-    }
-
-    private Multi<String> executeApprovePendingAction(AgentApprovalRequest approval) {
-        String threadId = normalizeThreadId(approval == null ? null : approval.threadId());
-        TripDossierStore.PendingHitlReservation pending = dossierStore.consumePendingApproval(threadId);
-        List<AgUiEvent<?>> events = new ArrayList<>();
-        events.add(AgUiEvent.of(AgUiEventType.RUN_STARTED, threadId, Map.of(
-                "threadId", threadId,
-                "status", "started",
-                "llmMode", resolveMode(null))));
-
-        if (approval == null || !approval.approved() || pending == null) {
-            String reason = (approval != null && approval.reason() != null && !approval.reason().isBlank())
-                    ? approval.reason()
-                    : "Declined by traveler";
-            events.add(AgUiEvent.of(
-                    AgUiEventType.TEXT_DELTA,
-                    threadId,
-                    new TextDeltaPayload("Traveler declined sanctuary reservation hold (" + reason + "). Run cancelled safely.")));
-            events.add(AgUiEvent.of(AgUiEventType.RUN_FINISHED, threadId, Map.of(
-                    "threadId", threadId,
-                    "status", "cancelled",
-                    "reason", reason,
-                    "memoryTurns", getMemoryTurnCount(threadId))));
-            return Multi.createFrom().iterable(events).map(langChain4jBridge.formatter()::formatSse);
-        }
-
-        Map<String, Object> overrides = approval.modifiedArgs() == null ? Map.of() : approval.modifiedArgs();
-        String city = overrides.get("city") instanceof String c && !c.isBlank() ? c.trim() : pending.city();
-        String stopTitle = overrides.get("stopTitle") instanceof String s && !s.isBlank() ? s.trim() : pending.stopTitle();
-        int nights = overrides.get("nights") instanceof Number n && n.intValue() > 0 ? n.intValue() : pending.nights();
-        double costUsd = overrides.get("costUsd") instanceof Number c && c.doubleValue() > 0 ? c.doubleValue() : pending.costUsd();
-
-        String callId = "hitl-exec-" + UUID.randomUUID().toString().substring(0, 8);
-        Map<String, Object> execArgs = Map.of("city", city, "stopTitle", stopTitle, "nights", nights, "costUsd", costUsd);
-        events.add(AgUiEvent.of(AgUiEventType.TOOL_CALL, threadId, Map.of(
-                "callId", callId,
-                "tool", "updateTripItinerary",
-                "callType", "mcp:tool",
-                "server", "nomad-mcp-concierge (:8081)",
-                "args", execArgs)));
-
-        Map<String, Object> outcome = dossierStore.executeApprovedItineraryUpdate(city, stopTitle, nights, costUsd);
-        boolean isError = Boolean.TRUE.equals(outcome.get("isError"));
-        Map<String, Object> toolResultPayload = new LinkedHashMap<>();
-        toolResultPayload.put("callId", callId);
-        toolResultPayload.put("tool", "updateTripItinerary");
-        toolResultPayload.put("callType", "mcp:tool");
-        toolResultPayload.put("status", isError ? "ERROR" : "OK");
-        toolResultPayload.put("isError", isError);
-        if (isError) {
-            toolResultPayload.put("error", String.valueOf(outcome.getOrDefault("error", "MCP reservation update failed")));
-        }
-        toolResultPayload.put("result", outcome);
-        events.add(AgUiEvent.of(AgUiEventType.TOOL_RESULT, threadId, toolResultPayload));
-
-        Map<String, Object> dossier = dossierStore.readTripDossierState();
-        events.add(AgUiEvent.of(AgUiEventType.STATE_DELTA, threadId, Map.of(
-                "tripDossierState", dossier,
-                "clusterState", dossier,
-                "memoryTurns", getMemoryTurnCount(threadId))));
-
-        String replyText = isError
-                ? "Reservation commit failed on MCP server (:8081): " + outcome.getOrDefault("error", "Unavailable")
-                : String.format(Locale.ROOT, "Confirmed **%s** in **%s** for **%d nights** ($%,.2f USD).", stopTitle, city, nights, costUsd);
-        events.add(AgUiEvent.of(AgUiEventType.TEXT_DELTA, threadId, new TextDeltaPayload(replyText)));
-        events.add(AgUiEvent.of(AgUiEventType.RUN_FINISHED, threadId, Map.of(
-                "threadId", threadId,
-                "status", isError ? "failed" : "completed",
-                "isError", isError,
-                "memoryTurns", getMemoryTurnCount(threadId))));
-
-        return Multi.createFrom().iterable(events).map(langChain4jBridge.formatter()::formatSse);
+    public AgentChatResponse executeChat(RunAgentInput input) {
+        String threadId = normalizeThreadId(input == null ? null : input.threadId());
+        String llmMode = resolveMode(extractRequestedMode(input));
+        List<Event> events = streamEvents(input).collect().asList().await().indefinitely();
+        return summarizeChatEvents(threadId, llmMode, events);
     }
 
     public Map<String, Object> updateTripParams(String threadId, Integer nights, String homeCurrency) {
@@ -324,48 +192,427 @@ public class NomadConciergeOrchestratorService {
         return trimmed;
     }
 
-    private AgUiToolClassifier.ToolDescriptor classifyToolExecution(String toolName, Map<String, Object> args) {
-        return switch (toolName) {
-            case "verifyTravelAdvisory" -> AgUiToolClassifier.ToolDescriptor.a2aStep(
-                    "Nomad-A2A-Specialist", "verify-travel-advisory");
-            case "convertAndAuditBudget" -> AgUiToolClassifier.ToolDescriptor.a2aStep(
-                    "Nomad-A2A-Specialist", "convert-and-audit-budget");
-            case "curateNeighborhoodCadence" -> AgUiToolClassifier.ToolDescriptor.a2aStep(
-                    "Nomad-A2A-Specialist", "curate-neighborhood-cadence");
-            case "sampleAcousticMood" -> AgUiToolClassifier.ToolDescriptor.mcpSampling(
-                    "nomad-mcp-concierge (:8081)", toolName);
-            case "presentTravelChoices" -> AgUiToolClassifier.ToolDescriptor.uiSurface(
-                    "Nomad-Concierge-Orchestrator", toolName);
-            case "requestSanctuaryReservation" -> {
-                double cost = args != null && args.get("costUsd") instanceof Number n ? n.doubleValue() : 0.0;
-                yield cost >= TripDossierStore.HITL_THRESHOLD_USD
-                        ? AgUiToolClassifier.ToolDescriptor.hitlApproval("Nomad-Concierge-Orchestrator", toolName)
-                        : AgUiToolClassifier.ToolDescriptor.uiSurface("Nomad-Concierge-Orchestrator", toolName);
+    private Multi<Event> executeTurnEvents(RunAgentInput input) {
+        String threadId = normalizeThreadId(input == null ? null : input.threadId());
+        String runId = normalizeRunId(input == null ? null : input.runId());
+        String prompt = extractLatestPrompt(input);
+        String llmMode = resolveMode(extractRequestedMode(input));
+
+        dossierStore.beginTurn(threadId, prompt);
+        int turns = incrementOrGetTurns(threadId, prompt);
+        Map<String, Object> initialDossier = dossierStore.readTripDossierState();
+
+        AgUiRunOptions options = AgUiRunOptions.builder()
+                .runId(runId)
+                .llmMode(llmMode)
+                .initialStateSnapshot(Map.of(
+                        "tripDossierState", initialDossier,
+                        "clusterState", initialDossier,
+                        "memoryTurns", turns))
+                .toolClassifier(this::classifyToolExecution)
+                .postToolStatePatchProvider(exec -> buildStatePatches(threadId, dossierStore.onToolExecuted(threadId, exec)))
+                .postRunStatePatchProvider(() -> buildStatePatches(threadId, dossierStore.finalizeTurnDossier(threadId, a2aClient)))
+                .interruptSupplier(() -> buildInterrupts(threadId))
+                .runResultSupplier(() -> buildRunResult(threadId))
+                .build();
+
+        return langChain4jBridge.adapt(threadId, buildGuardedStream(threadId, prompt), options);
+    }
+
+    private Multi<ChatEvent> buildGuardedStream(String threadId, String prompt) {
+        return Multi.createFrom()
+                .deferred(() -> aiService.chat(threadId, prompt))
+                .runSubscriptionOn(Infrastructure.getDefaultWorkerPool())
+                .onItem().invoke(this::enforceOutputGuardrail);
+    }
+
+    private void enforceOutputGuardrail(ChatEvent event) {
+        if (event instanceof ChatEvent.ChatCompletedEvent completed
+                && completed.getChatResponse() != null
+                && completed.getChatResponse().aiMessage() != null) {
+            AiMessage aiMsg = completed.getChatResponse().aiMessage();
+            if (outputGuardrail.validate(aiMsg).result() != GuardrailResult.Result.SUCCESS) {
+                throw new OutputGuardrailException("Assistant response blocked by TravelHonestyOutputGuardrail");
             }
-            default -> AgUiToolClassifier.ToolDescriptor.mcpTool("nomad-mcp-concierge (:8081)", toolName);
+        }
+    }
+
+    private Multi<Event> executeResumeEvents(RunAgentInput input) {
+        String threadId = normalizeThreadId(input.threadId());
+        String runId = normalizeRunId(input.runId());
+        String llmMode = resolveMode(extractRequestedMode(input));
+        Resume resume = input.resume().getFirst();
+        TripDossierStore.PendingHitlReservation pending = dossierStore.consumePendingApproval(threadId);
+
+        if (resume == null || resume.status() != ResumeStatus.RESOLVED || pending == null) {
+            return Multi.createFrom().iterable(buildDeclinedResumeEvents(threadId, runId, llmMode, resume));
+        }
+        return Multi.createFrom().iterable(buildApprovedResumeEvents(
+                threadId,
+                runId,
+                llmMode,
+                pending,
+                extractOverrideMap(resume.payload())));
+    }
+
+    private List<Event> buildDeclinedResumeEvents(
+            String threadId,
+            String runId,
+            String llmMode,
+            Resume resume) {
+        long now = System.currentTimeMillis();
+        String reason = extractDeclineReason(resume);
+        String msgId = "msg-" + shortId();
+        Map<String, Object> clearPending = new LinkedHashMap<>();
+        clearPending.put("pendingApproval", null);
+        clearPending.put("memoryTurns", getMemoryTurnCount(threadId));
+
+        return List.of(
+                new RunStartedEvent(threadId, runId, null, null, now, Map.of("llmMode", llmMode)),
+                new StateDeltaEvent(AgUiStatePatch.upsertRootFields(clearPending), now, null),
+                new TextMessageStartEvent(msgId, Role.ASSISTANT, now, null),
+                new TextMessageContentEvent(
+                        msgId,
+                        "Traveler declined sanctuary reservation hold (" + reason + "). Run cancelled safely.",
+                        now,
+                        null),
+                new TextMessageEndEvent(msgId, now, null),
+                new RunFinishedEvent(
+                        threadId,
+                        runId,
+                        new SuccessOutcome(),
+                        Map.of(
+                                "threadId", threadId,
+                                "status", "cancelled",
+                                "reason", reason,
+                                "memoryTurns", getMemoryTurnCount(threadId)),
+                        now,
+                        Map.of("llmMode", llmMode)));
+    }
+
+    private List<Event> buildApprovedResumeEvents(
+            String threadId,
+            String runId,
+            String llmMode,
+            TripDossierStore.PendingHitlReservation pending,
+            Map<String, Object> overrides) {
+        long now = System.currentTimeMillis();
+        String city = stringOverride(overrides, "city", pending.city());
+        String stopTitle = stringOverride(overrides, "stopTitle", pending.stopTitle());
+        int nights = intOverride(overrides, "nights", pending.nights());
+        double costUsd = doubleOverride(overrides, "costUsd", pending.costUsd());
+
+        String callId = "hitl-exec-" + shortId();
+        Map<String, Object> execArgs = Map.of(
+                "city", city,
+                "stopTitle", stopTitle,
+                "nights", nights,
+                "costUsd", costUsd);
+        Map<String, Object> outcome = dossierStore.executeApprovedItineraryUpdate(city, stopTitle, nights, costUsd);
+        boolean isError = Boolean.TRUE.equals(outcome.get("isError"));
+
+        List<Event> events = new ArrayList<>(10);
+        events.add(new RunStartedEvent(threadId, runId, null, null, now, Map.of("llmMode", llmMode)));
+        appendResumeToolLifecycle(events, callId, execArgs, outcome, isError, now);
+
+        Map<String, Object> dossier = dossierStore.readTripDossierState();
+        Map<String, Object> deltaFields = new LinkedHashMap<>();
+        deltaFields.put("tripDossierState", dossier);
+        deltaFields.put("clusterState", dossier);
+        deltaFields.put("memoryTurns", getMemoryTurnCount(threadId));
+        deltaFields.put("pendingApproval", null);
+        events.add(new StateDeltaEvent(AgUiStatePatch.upsertRootFields(deltaFields), now, null));
+
+        String replyText = isError
+                ? "Reservation commit failed on MCP server (:8081): " + outcome.getOrDefault("error", "Unavailable")
+                : String.format(
+                        Locale.ROOT,
+                        "Confirmed **%s** in **%s** for **%d nights** ($%,.2f USD).",
+                        stopTitle,
+                        city,
+                        nights,
+                        costUsd);
+        String msgId = "msg-" + shortId();
+        events.add(new TextMessageStartEvent(msgId, Role.ASSISTANT, now, null));
+        events.add(new TextMessageContentEvent(msgId, replyText, now, null));
+        events.add(new TextMessageEndEvent(msgId, now, null));
+        events.add(new RunFinishedEvent(
+                threadId,
+                runId,
+                new SuccessOutcome(),
+                Map.of(
+                        "threadId", threadId,
+                        "status", isError ? "failed" : "completed",
+                        "isError", isError,
+                        "memoryTurns", getMemoryTurnCount(threadId)),
+                now,
+                Map.of("llmMode", llmMode)));
+        return List.copyOf(events);
+    }
+
+    private void appendResumeToolLifecycle(
+            List<Event> events,
+            String callId,
+            Map<String, Object> execArgs,
+            Map<String, Object> outcome,
+            boolean isError,
+            long now) {
+        String argsJson = langChain4jBridge.quarkusBridge().serializer().serialize(execArgs);
+        String resultJson = langChain4jBridge.quarkusBridge().serializer().serialize(outcome);
+
+        events.add(new ToolCallStartEvent(callId, "updateTripItinerary", null, now, Map.of(
+                "callId", callId,
+                "tool", "updateTripItinerary",
+                "protocol", "MCP",
+                "callType", "mcp:tool",
+                "server", MCP_SERVER_LABEL,
+                "args", execArgs)));
+        events.add(new ToolCallArgsEvent(callId, argsJson, now, null));
+        events.add(new ToolCallEndEvent(callId, now, null));
+
+        Map<String, Object> resultMeta = new LinkedHashMap<>();
+        resultMeta.put("callId", callId);
+        resultMeta.put("tool", "updateTripItinerary");
+        resultMeta.put("protocol", "MCP");
+        resultMeta.put("callType", "mcp:tool");
+        resultMeta.put("server", MCP_SERVER_LABEL);
+        resultMeta.put("status", isError ? "ERROR" : "OK");
+        resultMeta.put("isError", isError);
+        if (isError) {
+            resultMeta.put("error", String.valueOf(outcome.getOrDefault("error", "MCP reservation update failed")));
+        }
+        resultMeta.put("result", outcome);
+        events.add(new ToolCallResultEvent(
+                "tool-msg-" + callId,
+                callId,
+                resultJson,
+                Role.TOOL,
+                now,
+                Map.copyOf(resultMeta)));
+    }
+
+    private AgentChatResponse summarizeChatEvents(String threadId, String llmMode, List<Event> events) {
+        StringBuilder reply = new StringBuilder();
+        List<Map<String, Object>> mcpCalls = new ArrayList<>();
+        List<Map<String, Object>> a2aHandoffs = new ArrayList<>();
+        String status = "COMPLETED";
+
+        for (Event event : events) {
+            collectChatEventArtifact(event, reply, mcpCalls, a2aHandoffs);
+            status = resolveChatEventStatus(event, status);
+        }
+        return new AgentChatResponse(
+                threadId,
+                status,
+                llmMode,
+                mcpCalls,
+                a2aHandoffs,
+                dossierStore.readTripDossierState(),
+                reply.toString());
+    }
+
+    private static void collectChatEventArtifact(
+            Event event,
+            StringBuilder reply,
+            List<Map<String, Object>> mcpCalls,
+            List<Map<String, Object>> a2aHandoffs) {
+        if (event instanceof TextMessageContentEvent text) {
+            reply.append(text.delta());
+        } else if (event instanceof ToolCallResultEvent toolRes) {
+            addIfMcpMetadata(mcpCalls, toolRes.rawEvent());
+        } else if (event instanceof StepFinishedEvent stepFin) {
+            addIfA2aMetadata(a2aHandoffs, stepFin.rawEvent());
+        }
+    }
+
+    private static String resolveChatEventStatus(Event event, String currentStatus) {
+        if (event instanceof RunFinishedEvent fin) {
+            return resolveFinishedStatus(fin);
+        }
+        if (event instanceof RunErrorEvent err) {
+            return err.code() != null ? err.code() : "ERROR";
+        }
+        return currentStatus;
+    }
+
+    private AgUiToolClassifier.ToolDescriptor classifyToolExecution(String toolName, Map<String, Object> args) {
+        String a2aSkill = A2A_TOOL_SKILLS.get(toolName);
+        if (a2aSkill != null) {
+            return AgUiToolClassifier.ToolDescriptor.a2aStep("Nomad-A2A-Specialist", a2aSkill);
+        }
+        return switch (toolName) {
+            case "sampleAcousticMood" -> AgUiToolClassifier.ToolDescriptor.mcpSampling(MCP_SERVER_LABEL, toolName);
+            case "presentTravelChoices" -> AgUiToolClassifier.ToolDescriptor.uiSurface("Nomad-Concierge-Orchestrator", toolName);
+            case "requestSanctuaryReservation" -> classifyReservationTool(toolName, args);
+            default -> AgUiToolClassifier.ToolDescriptor.mcpTool(MCP_SERVER_LABEL, toolName);
         };
     }
 
-    private Map<String, Object> buildRunFinishedMetadata(String threadId) {
-        TripDossierStore.PendingHitlReservation pending = dossierStore.peekPendingApproval(threadId);
-        int turns = getMemoryTurnCount(threadId);
-        if (pending != null) {
-            return Map.of(
-                    "status", "interrupted",
-                    "approvalRequired", true,
-                    "memoryTurns", turns,
-                    "pendingAction", Map.of(
-                            "callId", pending.callId(),
-                            "toolName", "updateTripItinerary",
-                            "city", pending.city(),
-                            "stopTitle", pending.stopTitle(),
-                            "nights", pending.nights(),
-                            "costUsd", pending.costUsd()));
+    private static AgUiToolClassifier.ToolDescriptor classifyReservationTool(String toolName, Map<String, Object> args) {
+        double cost = args != null && args.get("costUsd") instanceof Number n ? n.doubleValue() : 0.0;
+        return cost >= TripDossierStore.HITL_THRESHOLD_USD
+                ? AgUiToolClassifier.ToolDescriptor.hitlApproval("Nomad-Concierge-Orchestrator", toolName)
+                : AgUiToolClassifier.ToolDescriptor.uiSurface("Nomad-Concierge-Orchestrator", toolName);
+    }
+
+    private List<JsonPatchOperation> buildStatePatches(String threadId, Map<String, Object> deltaFields) {
+        if (deltaFields == null || deltaFields.isEmpty()) {
+            return List.of();
         }
-        return Map.of("memoryTurns", turns);
+        Map<String, Object> enriched = new LinkedHashMap<>(deltaFields);
+        enriched.put("memoryTurns", getMemoryTurnCount(threadId));
+        return AgUiStatePatch.upsertRootFields(enriched);
+    }
+
+    private List<Interrupt> buildInterrupts(String threadId) {
+        TripDossierStore.PendingHitlReservation pending = dossierStore.peekPendingApproval(threadId);
+        if (pending == null) {
+            return List.of();
+        }
+        Map<String, Object> meta = Map.of(
+                "callId", pending.callId(),
+                "toolName", "updateTripItinerary",
+                "city", pending.city(),
+                "stopTitle", pending.stopTitle(),
+                "nights", pending.nights(),
+                "costUsd", pending.costUsd());
+        String message = String.format(
+                Locale.ROOT,
+                "Confirm sanctuary reservation hold for %s in %s (%d nights, $%,.2f USD)",
+                pending.stopTitle(),
+                pending.city(),
+                pending.nights(),
+                pending.costUsd());
+        return List.of(new Interrupt(
+                pending.callId(),
+                "human_approval",
+                message,
+                pending.callId(),
+                null,
+                null,
+                meta));
+    }
+
+    private Map<String, Object> buildRunResult(String threadId) {
+        TripDossierStore.PendingHitlReservation pending = dossierStore.peekPendingApproval(threadId);
+        return Map.of(
+                "status", pending != null ? "interrupted" : "completed",
+                "memoryTurns", getMemoryTurnCount(threadId));
+    }
+
+    private int incrementOrGetTurns(String threadId, String prompt) {
+        return prompt.isBlank()
+                ? getMemoryTurnCount(threadId)
+                : memoryTurnCounts.computeIfAbsent(threadId, k -> new AtomicInteger()).addAndGet(2);
+    }
+
+    private static boolean hasResumeItems(RunAgentInput input) {
+        return input != null && input.resume() != null && !input.resume().isEmpty();
+    }
+
+    private static String extractLatestPrompt(RunAgentInput input) {
+        List<Message> messages = input == null ? null : input.messages();
+        if (messages == null || messages.isEmpty()) {
+            return "";
+        }
+        String userPrompt = findLatestUserPrompt(messages);
+        return userPrompt != null ? userPrompt : messageContentOrEmpty(messages.getLast());
+    }
+
+    private static String findLatestUserPrompt(List<Message> messages) {
+        for (int i = messages.size() - 1; i >= 0; i--) {
+            String content = userMessageContent(messages.get(i));
+            if (content != null) {
+                return content;
+            }
+        }
+        return null;
+    }
+
+    private static String userMessageContent(Message msg) {
+        return (msg != null && msg.role() == Role.USER) ? msg.content() : null;
+    }
+
+    private static String messageContentOrEmpty(Message msg) {
+        return (msg != null && msg.content() != null) ? msg.content() : "";
+    }
+
+    private static String extractRequestedMode(RunAgentInput input) {
+        if (input != null && input.forwardedProps() instanceof Map<?, ?> props) {
+            if (props.get("llmMode") instanceof String llmMode) {
+                return llmMode;
+            }
+            if (props.get("mode") instanceof String mode) {
+                return mode;
+            }
+        }
+        return null;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> extractOverrideMap(Object payload) {
+        if (payload instanceof Map<?, ?> map) {
+            if (map.get("modifiedArgs") instanceof Map<?, ?> nested) {
+                return (Map<String, Object>) nested;
+            }
+            return (Map<String, Object>) map;
+        }
+        return Map.of();
+    }
+
+    private static String extractDeclineReason(Resume resume) {
+        if (resume != null && resume.payload() instanceof Map<?, ?> map
+                && map.get("reason") instanceof String reason && !reason.isBlank()) {
+            return reason.trim();
+        }
+        return "Declined by traveler";
+    }
+
+    private static String stringOverride(Map<String, Object> overrides, String key, String fallback) {
+        return overrides.get(key) instanceof String s && !s.isBlank() ? s.trim() : fallback;
+    }
+
+    private static int intOverride(Map<String, Object> overrides, String key, int fallback) {
+        return overrides.get(key) instanceof Number n && n.intValue() > 0 ? n.intValue() : fallback;
+    }
+
+    private static double doubleOverride(Map<String, Object> overrides, String key, double fallback) {
+        return overrides.get(key) instanceof Number n && n.doubleValue() > 0.0 ? n.doubleValue() : fallback;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static void addIfMcpMetadata(List<Map<String, Object>> mcpCalls, Object rawEvent) {
+        if (rawEvent instanceof Map<?, ?> meta && String.valueOf(meta.get("callType")).startsWith("mcp:")) {
+            mcpCalls.add((Map<String, Object>) meta);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static void addIfA2aMetadata(List<Map<String, Object>> a2aHandoffs, Object rawEvent) {
+        if (rawEvent instanceof Map<?, ?> meta && "A2A".equals(meta.get("protocol"))) {
+            a2aHandoffs.add((Map<String, Object>) meta);
+        }
+    }
+
+    private static String resolveFinishedStatus(RunFinishedEvent fin) {
+        if (fin.outcome() instanceof InterruptOutcome) {
+            return "INTERRUPTED";
+        }
+        if (fin.result() instanceof Map<?, ?> res && res.get("status") instanceof String s && !s.isBlank()) {
+            return s.toUpperCase(Locale.ROOT);
+        }
+        return "COMPLETED";
     }
 
     private static String normalizeThreadId(String threadId) {
         return (threadId == null || threadId.isBlank()) ? "thread-nomad-1" : threadId.trim();
+    }
+
+    private static String normalizeRunId(String runId) {
+        return (runId == null || runId.isBlank()) ? "run-" + shortId() : runId.trim();
+    }
+
+    private static String shortId() {
+        return UUID.randomUUID().toString().substring(0, 8);
     }
 }

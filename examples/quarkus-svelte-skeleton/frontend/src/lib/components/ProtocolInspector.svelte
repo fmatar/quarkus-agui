@@ -70,8 +70,8 @@
 			</div>
 
 			<!-- Filter Strip -->
-			<div class="mb-3 flex items-center justify-between gap-1.5 shrink-0" role="tablist" aria-label="Protocol Filter">
-				<div class="flex items-center gap-1">
+			<div class="mb-3 flex items-center justify-between gap-1.5 shrink-0">
+				<div class="flex items-center gap-1" role="tablist" aria-label="Protocol Filter">
 					{#each FILTERS as filter (filter)}
 						<button
 							type="button"
@@ -103,24 +103,27 @@
 					</div>
 				{/if}
 
-				{#each visibleEvents as evt, idx (`${evt.id ?? evt.type}-${idx}`)}
+				{#each visibleEvents as evt, idx (`${evt.id ?? evt.runId ?? evt.toolCallId ?? evt.messageId ?? evt.type}-${idx}`)}
+					{@const meta = evt.rawEvent ?? evt.payload ?? {}}
+					{@const evtKey = evt.id ?? `${evt.type}-${idx}`}
 					{@const isClient = evt.direction === 'client'}
-					{@const isFrameError = Boolean(evt.payload?.isError || evt.payload?.status === 'ERROR')}
+					{@const isFrameError = Boolean(evt.type === 'RUN_ERROR' || meta?.isError || meta?.status === 'ERROR')}
 					<div class="overflow-hidden rounded-xl border {isFrameError ? 'border-[#C84B31]/55 bg-[#FBEEE9]/40' : 'border-[#E4E0D8] bg-[#FAF9F6]'}">
 						<button
 							type="button"
-							onclick={() => toggleExpand(evt.id ?? `${evt.type}-${idx}`)}
+							aria-expanded={expandedEventId === evtKey}
+							onclick={() => toggleExpand(evtKey)}
 							class="flex w-full items-center justify-between gap-2 p-2.5 text-left font-mono text-xs transition-colors hover:bg-[#EFECE6]/60"
 						>
 							<div class="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
-								{#if expandedEventId === (evt.id ?? `${evt.type}-${idx}`)}
+								{#if expandedEventId === evtKey}
 									<ChevronDown class="size-3 text-[#575551] shrink-0" />
 								{:else}
 									<ChevronRight class="size-3 text-[#575551] shrink-0" />
 								{/if}
 								<span
 									class="inline-flex items-center gap-0.5 rounded px-1 py-0.5 font-mono text-[9px] font-bold shrink-0 {isClient
-										? 'bg-[#FBEEE9] text-[#C84B31]'
+										? 'bg-[#FBEEE9] text-[#9E331D]'
 										: 'bg-[#EFECE6] text-[#141413]'}"
 									title={isClient ? 'Client to Server (Outbound WebSocket Frame)' : 'Server to Client (Inbound WebSocket Frame)'}
 								>
@@ -140,22 +143,22 @@
 										ERROR
 									</span>
 								{/if}
-								{#if evt.payload?.callType}
-									<ProtocolCallBadge callType={evt.payload.callType} />
+								{#if meta?.callType}
+									<ProtocolCallBadge callType={meta.callType} />
 								{:else}
 									<span class="truncate text-[11px] text-[#575551]">
-										{evt.payload?.stepId ?? evt.payload?.tool ?? evt.payload?.phase ?? evt.payload?.status ?? ''}
+										{meta?.stepId ?? evt.stepName ?? meta?.tool ?? evt.toolCallName ?? meta?.llmMode ?? meta?.status ?? ''}
 									</span>
 								{/if}
 							</div>
 							<span class="font-mono text-[10px] text-[#575551] shrink-0 tabular-nums">
-								{evt.id?.slice(-4) ?? idx}
+								{(evt.id ?? evt.runId ?? evt.toolCallId ?? evt.messageId)?.slice(-4) ?? idx}
 							</span>
 						</button>
 
-						{#if expandedEventId === (evt.id ?? `${evt.type}-${idx}`)}
+						{#if expandedEventId === evtKey}
 							<div class="border-t border-[#E4E0D8] bg-white p-2.5">
-								<pre class="overflow-x-auto rounded bg-[#F6F5F2] p-2 text-[10px] text-[#141413] leading-relaxed font-mono"><code>{JSON.stringify(evt.payload, null, 2)}</code></pre>
+								<pre class="overflow-x-auto rounded bg-[#F6F5F2] p-2 text-[10px] text-[#141413] leading-relaxed font-mono"><code>{JSON.stringify(evt, null, 2)}</code></pre>
 							</div>
 						{/if}
 					</div>

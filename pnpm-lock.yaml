@@ -8,6 +8,9 @@ importers:
 
   examples/quarkus-svelte-skeleton/frontend:
     dependencies:
+      '@agui/svelte':
+        specifier: workspace:*
+        version: link:../../../packages/agui-svelte
       '@lucide/svelte':
         specifier: ^1.0.0
         version: 1.70.0(svelte@5.57.3)

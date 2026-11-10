@@ -13,6 +13,9 @@
 
 | 📥 Backlog | 📋 Ready | ⚡ In Progress | 🔍 In Review | ✅ Done |
 | :--- | :--- | :--- | :--- | :--- |
+|  |  |  | [#85 feat(showcase): migrate Nomad showcase to canonical AG-UI SDKs and delete ag-ui-core](https://github.com/fmatar/quarkus-agui/issues/85) |  |
+|  |  |  |  | [#83 feat(svelte): upgrade headless @agui/svelte onto @ag-ui/client + @ag-ui/core](https://github.com/fmatar/quarkus-agui/issues/83) |
+|  |  |  |  | [#81 feat(sdk): adopt upstream com.ag-ui.community Java 17 SDKs across orthogonal modules (ADR-007)](https://github.com/fmatar/quarkus-agui/issues/81) |
 |  |  |  |  | [#78 fix(mcp,showcase): prevent saveTravelerPreferences false Service Error when LLM passes empty or placeholder args](https://github.com/fmatar/quarkus-agui/issues/78) |
 |  |  |  |  | [#76 fix(a2a,showcase): support non-ECB currencies (LBP, MAD, EGP, JOD) via open.er-api.com fallback & trailing currency symbols](https://github.com/fmatar/quarkus-agui/issues/76) |
 |  |  |  |  | [#74 feat(arch,showcase): factor out framework-agnostic ag-ui modules & enrich Nomad destination media/music](https://github.com/fmatar/quarkus-agui/issues/74) |
@@ -61,6 +64,9 @@
 
 | Issue | Status | Priority | Component | Quality Gate | Spec Link |
 | :--- | :--- | :--- | :--- | :--- | :--- |
+|  |  |  | [#85 feat(showcase): migrate Nomad showcase to canonical AG-UI SDKs and delete ag-ui-core](https://github.com/fmatar/quarkus-agui/issues/85) |  |
+| [#83 feat(svelte): upgrade headless @agui/svelte onto @ag-ui/client + @ag-ui/core](https://github.com/fmatar/quarkus-agui/issues/83) | `status:done` | P0 - Critical | Frontend SDK | `Passed` | [ADR-007](docs/adr/ADR-007-adopt-upstream-ag-ui-sdks-com-ag-ui-community-ag.md) |
+| [#81 feat(sdk): adopt upstream com.ag-ui.community Java 17 SDKs across orthogonal modules (ADR-007)](https://github.com/fmatar/quarkus-agui/issues/81) | `status:done` | P0 - Critical | Architecture | `Passed` | [ADR-007](docs/adr/ADR-007-adopt-upstream-ag-ui-sdks-com-ag-ui-community-ag.md) |
 | [#78 fix(mcp,showcase): prevent saveTravelerPreferences false Service Error when LLM passes empty or placeholder args](https://github.com/fmatar/quarkus-agui/issues/78) | `status:done` | P1 - High | Backend | `Passed` | — |
 | [#76 fix(a2a,showcase): support non-ECB currencies (LBP, MAD, EGP, JOD) via open.er-api.com fallback & trailing currency symbols](https://github.com/fmatar/quarkus-agui/issues/76) | `status:done` | P1 - High | Backend | `Passed` | — |
 | [#74 feat(arch,showcase): factor out framework-agnostic ag-ui modules & enrich Nomad destination media/music](https://github.com/fmatar/quarkus-agui/issues/74) | `status:done` | P1 - High | Architecture | `Passed` | [ADR-006](docs/adr/ADR-006-framework-agnostic-module-topology-ag-ui-core-ag.md) |
