@@ -36,13 +36,6 @@
                 <version>${agui.community.version}</version>
             </dependency>
 
-            <!-- Legacy Core (Deprecated; scheduled for removal in Wave 3) -->
-            <dependency>
-                <groupId>org.agui</groupId>
-                <artifactId>ag-ui-core</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-
             <!-- Framework-Agnostic A2A Protocol Bridge -->
             <dependency>
                 <groupId>org.agui</groupId>

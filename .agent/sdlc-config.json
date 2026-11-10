@@ -23,7 +23,7 @@
       "commands": {
         "test": "./mvnw test",
         "coverage": "./mvnw test jacoco:report",
-        "coverageFile": "ag-ui-core/target/site/jacoco/jacoco.xml",
+        "coverageFile": "ag-ui-quarkus/target/site/jacoco/jacoco.xml",
         "mutation": "./mvnw test-compile org.pitest:pitest-maven:mutationCoverage",
         "lint": "./mvnw test-compile",
         "build": "./mvnw test-compile"

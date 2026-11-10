@@ -1,26 +1,37 @@
 /**
- * Pure AG-UI SSE parser, Protocol Call Taxonomy & Tri-Protocol (AG-UI + MCP + A2A) state reducer
- * powering the Nomad Cultural Concierge & AG-UI Svelte 5 Component Kit.
- * Consumes core protocol primitives from the standalone `packages/agui-svelte` (`@agui/svelte`) library.
+ * Canonical AG-UI Workbench Adapter, Envelope Builders & Tri-Protocol (AG-UI + MCP + A2A)
+ * State Reducer powering the Nomad Cultural Concierge & AG-UI Svelte 5 Component Kit.
+ * Consumes headless `@ag-ui/client` + `@ag-ui/core` primitives from `@agui/svelte`.
  */
 
 import {
+	EventType,
+	HttpAgent,
 	PROTOCOL_CALL_TAXONOMY,
+	WebSocketAgent,
+	applyJsonPatch,
 	filterInspectorEvents,
 	lockTurnInteraction,
 	parseSseChunk,
+	randomUUID,
 	recordClientOutboundEvent,
+	resolveEventProtocolMeta,
 	resolveProtocolCallMeta,
 	selectTurnOption,
 	useAgUiAgent as createBaseAgUiAgent
-} from '../../../../../packages/agui-svelte/src/index.js';
+} from '@agui/svelte';
 
 export {
+	EventType,
+	HttpAgent,
 	PROTOCOL_CALL_TAXONOMY,
+	WebSocketAgent,
+	applyJsonPatch,
 	filterInspectorEvents,
 	lockTurnInteraction,
 	parseSseChunk,
 	recordClientOutboundEvent,
+	resolveEventProtocolMeta,
 	resolveProtocolCallMeta,
 	selectTurnOption
 };
@@ -163,6 +174,19 @@ export const SCENARIO_PRESETS = [
 	}
 ];
 
+const CLEARED_TRIP_DESTINATION = {
+	activeCity: null,
+	country: null,
+	currency: null,
+	exchangeRate: null,
+	temperatureC: null,
+	weatherCondition: null,
+	stopTitle: null,
+	allocatedUsd: null,
+	heroImageUrl: null,
+	soundtrack: null
+};
+
 function createEmptyActiveTurn() {
 	return {
 		reasoning: null,
@@ -179,19 +203,10 @@ export function createInitialWorkbenchState(threadId = 'thread-nomad-1') {
 		uri: 'itinerary://active-trip',
 		nomadTrip: {
 			uri: 'itinerary://active-trip',
-			activeCity: null,
-			country: null,
-			currency: null,
-			exchangeRate: null,
-			temperatureC: null,
-			weatherCondition: null,
+			...CLEARED_TRIP_DESTINATION,
 			nights: null,
-			stopTitle: null,
 			budgetUsd: null,
-			allocatedUsd: null,
-			homeCurrency: null,
-			heroImageUrl: null,
-			soundtrack: null
+			homeCurrency: null
 		},
 		preferences: {
 			uri: 'traveler://preferences',
@@ -215,568 +230,854 @@ export function createInitialWorkbenchState(threadId = 'thread-nomad-1') {
 		activeTurn: createEmptyActiveTurn(),
 		tripDossierState: initialDossier,
 		clusterState: initialDossier,
-		messages: [
-			{
-				id: 'msg-welcome',
-				role: 'assistant',
-				status: 'completed',
-				content:
-					'### Welcome to Nomad — Conversational Travel & Local Culture Concierge\n\nTell me **where you want to travel**, ask a focused question (live weather, currency conversion, regional music, or travel advisories), or pick a destination below.\n\n- **Zero Assumed Defaults**: When planning a trip, Nomad never assumes 3 or 4 days or a preset budget—it asks for **duration**, **budget & currency**, and **travel focus** first.\n- **Quarkus LangChain4j `@McpToolBox("nomad")` (`:8081/mcp`) + Official `A2A` (`:8082`)**: Live Open-Meteo weather, Wikipedia & iTunes 30s audio, Frankfurter ECB FX, and REST Countries v5 (`api.restcountries.com`).\n- **MicroProfile SmallRye Health (`/q/health/ready`)**: Live readiness across MCP clients, A2A upstreams, and Ollama is surfaced transparently in the Top-Bar Health Pill, Execution Spine, and chat.',
-				reasoning: null,
-				timeline: [],
-				mcpCalls: [],
-				a2aSteps: [],
-				media: [],
-				interaction: {
-					id: 'welcome-city-picker',
-					mode: 'single_select',
-					prompt: 'Choose a destination to start planning (Nomad will ask for your trip details next):',
-					selectedValues: [],
-					submitted: false,
-					options: [
-						{
-							id: 'pick-beirut',
-							label: 'Beirut, Lebanon',
-							description: 'Levantine limestone arcades, Sursock modernism, coastal terroir & Oud acoustics',
-							badge: 'LBP • Mediterranean',
-							prompt: 'I want to plan a trip to Beirut, Lebanon'
-						},
-						{
-							id: 'pick-kyoto',
-							label: 'Kyoto, Japan',
-							description: 'Arashiyama cedar pavilions, Gion machiya joinery, kaiseki & Koto strings',
-							badge: 'JPY • East Asia',
-							prompt: 'I want to plan a trip to Kyoto, Japan'
-						},
-						{
-							id: 'pick-lisbon',
-							label: 'Lisbon, Portugal',
-							description: 'Alfama azulejo terraces, Siza Vieira concrete geometry & acoustic Fado',
-							badge: 'EUR • Atlantic',
-							prompt: 'I want to plan a trip to Lisbon, Portugal'
-						},
-						{
-							id: 'pick-reykjavik',
-							label: 'Reykjavik, Iceland',
-							description: 'Harpa basalt facades, geothermal lagoons & Nordic chamber strings',
-							badge: 'ISK • Sub-Arctic',
-							prompt: 'I want to plan a trip to Reykjavik, Iceland'
-						}
-					]
-				},
-				sources: [],
-				followUps: [
-					'I want a trip in Paris',
-					'What is the weather in Beirut right now?',
-					'Check the travel advisory for Beirut',
-					'Plan a 4-night architecture and koto music trip in Kyoto with $2,400 USD'
-				]
-			}
-		],
+		messages: [createWelcomeAssistantMessage()],
 		mcpCalls: [],
 		a2aSteps: [],
 		events: []
 	};
 }
 
+function createWelcomeAssistantMessage() {
+	return {
+		id: 'msg-welcome',
+		role: 'assistant',
+		status: 'completed',
+		content:
+			'### Welcome to Nomad — Conversational Travel & Local Culture Concierge\n\nTell me **where you want to travel**, ask a focused question (live weather, currency conversion, regional music, or travel advisories), or pick a destination below.\n\n- **Zero Assumed Defaults**: When planning a trip, Nomad never assumes 3 or 4 days or a preset budget—it asks for **duration**, **budget & currency**, and **travel focus** first.\n- **Quarkus LangChain4j `@McpToolBox("nomad")` (`:8081/mcp`) + Official `A2A` (`:8082`)**: Live Open-Meteo weather, Wikipedia & iTunes 30s audio, Frankfurter ECB FX, and REST Countries v5 (`api.restcountries.com`).\n- **MicroProfile SmallRye Health (`/q/health/ready`)**: Live readiness across MCP clients, A2A upstreams, and Ollama is surfaced transparently in the Top-Bar Health Pill, Execution Spine, and chat.',
+		reasoning: null,
+		timeline: [],
+		mcpCalls: [],
+		a2aSteps: [],
+		media: [],
+		interaction: {
+			id: 'welcome-city-picker',
+			mode: 'single_select',
+			prompt: 'Choose a destination to start planning (Nomad will ask for your trip details next):',
+			selectedValues: [],
+			submitted: false,
+			options: [
+				{
+					id: 'pick-beirut',
+					label: 'Beirut, Lebanon',
+					description: 'Levantine limestone arcades, Sursock modernism, coastal terroir & Oud acoustics',
+					badge: 'LBP • Mediterranean',
+					prompt: 'I want to plan a trip to Beirut, Lebanon'
+				},
+				{
+					id: 'pick-kyoto',
+					label: 'Kyoto, Japan',
+					description: 'Arashiyama cedar pavilions, Gion machiya joinery, kaiseki & Koto strings',
+					badge: 'JPY • East Asia',
+					prompt: 'I want to plan a trip to Kyoto, Japan'
+				},
+				{
+					id: 'pick-lisbon',
+					label: 'Lisbon, Portugal',
+					description: 'Alfama azulejo terraces, Siza Vieira concrete geometry & acoustic Fado',
+					badge: 'EUR • Atlantic',
+					prompt: 'I want to plan a trip to Lisbon, Portugal'
+				},
+				{
+					id: 'pick-reykjavik',
+					label: 'Reykjavik, Iceland',
+					description: 'Harpa basalt facades, geothermal lagoons & Nordic chamber strings',
+					badge: 'ISK • Sub-Arctic',
+					prompt: 'I want to plan a trip to Reykjavik, Iceland'
+				}
+			]
+		},
+		sources: [],
+		followUps: [
+			'I want a trip in Paris',
+			'What is the weather in Beirut right now?',
+			'Check the travel advisory for Beirut',
+			'Plan a 4-night architecture and koto music trip in Kyoto with $2,400 USD'
+		]
+	};
+}
+
 /**
- * Pure reducer updating the 3-Pane Workbench state for each incoming AgUiEvent.
- *
- * @param {ReturnType<typeof createInitialWorkbenchState>} state
- * @param {any} event
+ * Builds a canonical AG-UI `RunAgentInput` envelope for HTTP SSE or WebSocket execution.
+ */
+export function buildRunAgentInput(options = {}) {
+	const { threadId, runId, prompt, state, llmMode, messages } = options;
+	const resolvedMessages =
+		messages ?? (prompt ? [{ id: `msg-user-${randomUUID()}`, role: 'user', content: prompt }] : []);
+	return {
+		threadId: threadId || 'thread-nomad-1',
+		runId: runId || `run-${randomUUID()}`,
+		state: state ?? {},
+		messages: resolvedMessages,
+		tools: [],
+		context: [],
+		forwardedProps: llmMode ? { llmMode } : {}
+	};
+}
+
+/**
+ * Builds a canonical AG-UI `RunAgentInput` containing a `resume` decision for a staged HITL `Interrupt`.
+ */
+export function buildHitlResumeInput(options = {}) {
+	const { threadId, runId, interruptId, approved, modifiedArgs, reason, state, llmMode } = options;
+	const resolvedReason = resolveResumeReason(approved, reason);
+	const payload = buildResumePayload(approved, resolvedReason, modifiedArgs);
+	return {
+		threadId: threadId || 'thread-nomad-1',
+		runId: runId || `resume-${randomUUID()}`,
+		state: state ?? {},
+		messages: [],
+		tools: [],
+		context: [],
+		forwardedProps: llmMode ? { llmMode } : {},
+		resume: [
+			{
+				interruptId: interruptId || 'hitl-approval',
+				status: approved ? 'resolved' : 'cancelled',
+				payload
+			}
+		]
+	};
+}
+
+function resolveResumeReason(approved, reason) {
+	if (reason) return reason;
+	return approved ? 'Traveler authorized sanctuary hold' : 'Traveler declined reservation hold';
+}
+
+function buildResumePayload(approved, reason, modifiedArgs) {
+	if (approved && modifiedArgs && typeof modifiedArgs === 'object') {
+		return { reason, ...modifiedArgs };
+	}
+	return { reason };
+}
+
+/**
+ * Converts a root key-value delta object into RFC 6902 JSON Patch `add` operations.
+ */
+export function toRootStateDeltaOps(fields) {
+	if (!fields || typeof fields !== 'object') return [];
+	return Object.entries(fields).map(([key, value]) => ({
+		op: 'add',
+		path: `/${key}`,
+		value
+	}));
+}
+
+function tryParseJson(raw) {
+	if (typeof raw !== 'string') return raw;
+	try {
+		return JSON.parse(raw);
+	} catch {
+		return raw;
+	}
+}
+
+function uniqueTimelineId(timeline, preferredId, fallbackIndex) {
+	const base = preferredId || `tl-${fallbackIndex}`;
+	return timeline.some((item) => item.id === base) ? `${base}-${fallbackIndex}` : base;
+}
+
+function resolveCurrentDossier(state) {
+	return state.tripDossierState ?? state.clusterState;
+}
+
+function handleWsConnected(state, event, nextEvents) {
+	const meta = event.rawEvent ?? event;
+	const incomingTurns = meta.memoryTurns ?? state.memoryTurns ?? 0;
+	const currentDossier = resolveCurrentDossier(state);
+	const incomingDossier = meta.tripDossierState ?? meta.clusterState ?? currentDossier;
+	const keepIncoming = incomingTurns > 0 || Boolean(currentDossier?.nomadTrip?.activeCity);
+	const resolvedDossier = keepIncoming ? incomingDossier : currentDossier;
+	return {
+		...state,
+		wsConnected: true,
+		transportMode: 'ws',
+		memoryTurns: incomingTurns,
+		tripDossierState: resolvedDossier,
+		clusterState: resolvedDossier,
+		statusText: 'WebSocket Full-Duplex Connected (/api/agent/ws)',
+		events: nextEvents
+	};
+}
+
+function handleRunStarted(state, event, nextEvents) {
+	const meta = event.rawEvent ?? {};
+	return {
+		...state,
+		isStreaming: true,
+		streamBuffer: '',
+		pendingApproval: null,
+		mcpCalls: [],
+		a2aSteps: [],
+		activeTurn: createEmptyActiveTurn(),
+		statusText: `Run started (${meta.llmMode ?? 'ollama:llama3.2:latest'})`,
+		events: nextEvents
+	};
+}
+
+function handleStateSnapshot(state, event, nextEvents) {
+	const snap = event.snapshot ?? event.rawEvent ?? {};
+	return applyMergedStateFields(state, snap, nextEvents);
+}
+
+function handleStateDelta(state, event, nextEvents) {
+	const base = {
+		tripDossierState: resolveCurrentDossier(state),
+		clusterState: resolveCurrentDossier(state),
+		memoryTurns: state.memoryTurns ?? 0,
+		pendingApproval: state.pendingApproval
+	};
+	const patched = Array.isArray(event.delta) ? applyJsonPatch(base, event.delta) : base;
+	const merged = { ...patched, ...(event.rawEvent ?? {}) };
+	return applyMergedStateFields(state, merged, nextEvents);
+}
+
+function applyMergedStateFields(state, fields, nextEvents) {
+	if (fields.status === 'memory_reset') {
+		return applyMemoryResetState(state, nextEvents);
+	}
+	if (fields.status === 'params_updated') {
+		return applyParamsUpdatedState(state, fields, nextEvents);
+	}
+	return applyTurnStateDelta(state, fields, nextEvents);
+}
+
+function applyMemoryResetState(state, nextEvents) {
+	const initial = createInitialWorkbenchState(state.threadId);
+	return {
+		...state,
+		tripDossierState: initial.tripDossierState,
+		clusterState: initial.clusterState,
+		memoryTurns: 0,
+		isStreaming: false,
+		pendingApproval: null,
+		streamBuffer: '',
+		activeTurn: createEmptyActiveTurn(),
+		messages: initial.messages,
+		statusText: 'Conversational memory & traveler profile reset',
+		events: nextEvents
+	};
+}
+
+function applyParamsUpdatedState(state, fields, nextEvents) {
+	const currentDossier = resolveCurrentDossier(state);
+	const incomingCluster = fields.tripDossierState ?? fields.clusterState ?? currentDossier;
+	const incomingTurns = fields.memoryTurns ?? state.memoryTurns ?? 0;
+	const keepCity = Boolean(currentDossier?.nomadTrip?.activeCity) || incomingTurns > 0;
+	const nextDossier = keepCity
+		? incomingCluster
+		: {
+				...incomingCluster,
+				nomadTrip: { ...(incomingCluster?.nomadTrip ?? {}), ...CLEARED_TRIP_DESTINATION }
+			};
+	return {
+		...state,
+		tripDossierState: nextDossier,
+		clusterState: nextDossier,
+		memoryTurns: incomingTurns,
+		statusText: 'Trip parameters updated via live WebSocket (<50ms)',
+		events: nextEvents
+	};
+}
+
+function applyTurnStateDelta(state, fields, nextEvents) {
+	const currentTurn = state.activeTurn ?? createEmptyActiveTurn();
+	const currentDossier = resolveCurrentDossier(state);
+	const incomingCluster = fields.tripDossierState ?? fields.clusterState ?? currentDossier;
+	const nextClusterState = fields.awaitingDestination
+		? {
+				...incomingCluster,
+				nomadTrip: { ...(incomingCluster?.nomadTrip ?? {}), ...CLEARED_TRIP_DESTINATION, nights: null }
+			}
+		: incomingCluster;
+	const nextPending =
+		'pendingApproval' in fields ? fields.pendingApproval : state.pendingApproval;
+	return {
+		...state,
+		tripDossierState: nextClusterState,
+		clusterState: nextClusterState,
+		memoryTurns: fields.memoryTurns ?? state.memoryTurns ?? 0,
+		pendingApproval: nextPending,
+		activeTurn: mergeTurnArtifacts(currentTurn, fields),
+		events: nextEvents
+	};
+}
+
+function mergeTurnArtifacts(currentTurn, fields) {
+	const nextInteraction = fields.interaction
+		? {
+				...fields.interaction,
+				selectedValues: fields.interaction.selectedValues ?? [],
+				submitted: Boolean(fields.interaction.submitted)
+			}
+		: currentTurn.interaction;
+	return {
+		...currentTurn,
+		media: nonEmptyArrayOrFallback(fields.media, currentTurn.media),
+		interaction: nextInteraction,
+		sources: nonEmptyArrayOrFallback(fields.sources, currentTurn.sources),
+		followUps: nonEmptyArrayOrFallback(fields.followUps, currentTurn.followUps)
+	};
+}
+
+function nonEmptyArrayOrFallback(candidate, fallback) {
+	return Array.isArray(candidate) && candidate.length > 0 ? candidate : fallback;
+}
+
+function handleReasoningContent(state, event, nextEvents) {
+	const currentTurn = state.activeTurn ?? createEmptyActiveTurn();
+	const chunk = event.delta ?? '';
+	const prevThought = currentTurn.reasoning?.thought ?? '';
+	const coalesced = coalesceDeltaEvents(state.events, nextEvents, EventType.REASONING_MESSAGE_CONTENT, chunk);
+	return {
+		...state,
+		statusText: 'Synthesizing multi-protocol plan...',
+		activeTurn: {
+			...currentTurn,
+			reasoning: {
+				thought: prevThought + chunk,
+				durationMs: currentTurn.reasoning?.durationMs ?? 950
+			}
+		},
+		events: coalesced
+	};
+}
+
+function coalesceDeltaEvents(prevEvents, fallbackEvents, eventType, chunk) {
+	const prev = prevEvents.at(-1);
+	if (!prev || prev.type !== eventType) {
+		return fallbackEvents;
+	}
+	return [
+		...prevEvents.slice(0, -1),
+		{
+			...prev,
+			delta: (prev.delta ?? '') + chunk,
+			chunks: (prev.chunks ?? 1) + 1
+		}
+	];
+}
+
+function resolveToolCallStartInfo(event) {
+	const meta = event.rawEvent ?? {};
+	const callId = event.toolCallId ?? meta.callId;
+	const tool = event.toolCallName ?? meta.tool ?? 'mcp-tool';
+	const requiresApproval = Boolean(meta.requiresApproval || meta.callType === 'hitl:approval');
+	return {
+		callId,
+		tool,
+		args: meta.args ?? {},
+		requiresApproval,
+		callType: resolveToolCallType(meta.callType, requiresApproval),
+		server: meta.server ?? 'nomad-mcp-concierge (:8081)',
+		status: requiresApproval ? 'awaiting_approval' : 'running'
+	};
+}
+
+function resolveToolCallType(explicitCallType, requiresApproval) {
+	if (explicitCallType) return explicitCallType;
+	return requiresApproval ? 'hitl:approval' : 'mcp:tool';
+}
+
+function handleToolCallStart(state, event, nextEvents) {
+	const currentTurn = resolveActiveTurn(state);
+	const info = resolveToolCallStartInfo(event);
+	const statusText = info.requiresApproval
+		? 'HITL Gate — Awaiting Traveler Approval'
+		: `MCP Tool: ${info.tool}`;
+	const pendingApproval = info.requiresApproval
+		? buildPendingFromArgs(info.callId, info.tool, info.args)
+		: state.pendingApproval;
+
+	return {
+		...state,
+		statusText,
+		pendingApproval,
+		mcpCalls: [
+			...state.mcpCalls,
+			{
+				callId: info.callId,
+				tool: info.tool,
+				callType: info.callType,
+				server: info.server,
+				args: info.args,
+				argsBuffer: '',
+				status: info.status,
+				result: null
+			}
+		],
+		activeTurn: {
+			...currentTurn,
+			timeline: [
+				...currentTurn.timeline,
+				{
+					id: uniqueTimelineId(currentTurn.timeline, info.callId, nextEvents.length),
+					callType: info.callType,
+					title: info.tool,
+					subtitle: info.server,
+					args: info.args,
+					argsBuffer: '',
+					status: info.status,
+					detail: null
+				}
+			]
+		},
+		events: nextEvents
+	};
+}
+
+function resolveActiveTurn(state) {
+	return state.activeTurn ?? createEmptyActiveTurn();
+}
+
+function buildPendingFromArgs(callId, toolName, args) {
+	return {
+		interruptId: callId,
+		callId,
+		toolName,
+		city: args?.city ?? null,
+		stopTitle: args?.stopTitle ?? null,
+		nights: args?.nights ?? null,
+		costUsd: args?.costUsd ?? null
+	};
+}
+
+function handleToolCallArgs(state, event, nextEvents) {
+	const currentTurn = state.activeTurn ?? createEmptyActiveTurn();
+	const delta = event.delta ?? '';
+	const mcpCalls = state.mcpCalls.map((c) =>
+		c.callId === event.toolCallId ? appendJsonArgs(c, delta) : c
+	);
+	const timeline = currentTurn.timeline.map((item) =>
+		item.id === event.toolCallId ? appendJsonArgs(item, delta) : item
+	);
+	const matchedCall = mcpCalls.find((c) => c.callId === event.toolCallId);
+	const pendingApproval =
+		state.pendingApproval?.callId === event.toolCallId && matchedCall?.args
+			? buildPendingFromArgs(event.toolCallId, state.pendingApproval.toolName, matchedCall.args)
+			: state.pendingApproval;
+	return {
+		...state,
+		pendingApproval,
+		mcpCalls,
+		activeTurn: { ...currentTurn, timeline },
+		events: nextEvents
+	};
+}
+
+function appendJsonArgs(entry, delta) {
+	const argsBuffer = (entry.argsBuffer ?? '') + delta;
+	const parsed = tryParseJson(argsBuffer);
+	const args = parsed && typeof parsed === 'object' ? parsed : entry.args;
+	return { ...entry, argsBuffer, args };
+}
+
+function resolveToolCallOutcome(state, event) {
+	const meta = event.rawEvent ?? {};
+	const callId = event.toolCallId ?? meta.callId;
+	const tool = resolveCompletedToolName(state.mcpCalls, callId, meta.tool);
+	const result = resolveToolResultObject(event, meta);
+	const isError = isErrorPayload(meta) || isErrorPayload(result);
+	const errorText = extractErrorDetail(meta, result);
+	return {
+		callId,
+		tool,
+		result,
+		isError,
+		nextStatus: isError ? 'error' : 'completed',
+		errorText,
+		detail: isError ? errorText : summarizeToolResult(tool, result)
+	};
+}
+
+function resolveCompletedToolName(mcpCalls, callId, explicitTool) {
+	if (explicitTool) return explicitTool;
+	const matched = mcpCalls.find((c) => c.callId === callId);
+	return matched?.tool ?? 'mcp-tool';
+}
+
+function applyToolOutcomeToMcpCalls(mcpCalls, out) {
+	return mcpCalls.map((c) =>
+		c.callId === out.callId || c.tool === out.tool
+			? { ...c, status: out.nextStatus, isError: out.isError, error: out.isError ? out.errorText : null, result: out.result }
+			: c
+	);
+}
+
+function applyToolOutcomeToTimeline(timeline, out) {
+	return timeline.map((item) =>
+		item.id === out.callId || item.title === out.tool
+			? { ...item, status: out.nextStatus, isError: out.isError, result: out.result, detail: out.detail }
+			: item
+	);
+}
+
+function resolveTurnMediaAfterTool(currentMedia, out) {
+	if (out.isError || out.tool !== 'discoverLocalCultureAndMedia' || currentMedia.length > 0) {
+		return currentMedia;
+	}
+	const extracted = extractCultureMediaItems(out.result);
+	return extracted.length > 0 ? extracted : currentMedia;
+}
+
+function handleToolCallResult(state, event, nextEvents) {
+	const currentTurn = resolveActiveTurn(state);
+	const out = resolveToolCallOutcome(state, event);
+	const nextDossier = enrichDossierFromMediaTool(
+		resolveCurrentDossier(state),
+		out.tool,
+		out.result,
+		out.isError
+	);
+	return {
+		...state,
+		tripDossierState: nextDossier,
+		clusterState: nextDossier,
+		statusText: out.isError ? `Tool Error: ${out.errorText}` : state.statusText,
+		mcpCalls: applyToolOutcomeToMcpCalls(state.mcpCalls, out),
+		activeTurn: {
+			...currentTurn,
+			timeline: applyToolOutcomeToTimeline(currentTurn.timeline, out),
+			media: resolveTurnMediaAfterTool(currentTurn.media, out)
+		},
+		events: nextEvents
+	};
+}
+
+function resolveToolResultObject(event, meta) {
+	if (meta.result !== undefined) return meta.result;
+	const parsed = tryParseJson(event.content);
+	return parsed && typeof parsed === 'object' ? parsed : { value: parsed };
+}
+
+function isMediaToolObject(tool, result, isError) {
+	return !isError && tool === 'discoverLocalCultureAndMedia' && Boolean(result && typeof result === 'object');
+}
+
+function enrichDossierFromMediaTool(currentDossier, tool, result, isError) {
+	if (!isMediaToolObject(tool, result, isError)) {
+		return currentDossier;
+	}
+	const prevTrip = currentDossier?.nomadTrip ?? {};
+	return {
+		...currentDossier,
+		nomadTrip: mergeMediaDossierFields(prevTrip, result)
+	};
+}
+
+function mergeMediaDossierFields(prevTrip, result) {
+	return {
+		...prevTrip,
+		activeCity: prevTrip.activeCity ?? nonBlankString(result.destination),
+		heroImageUrl: nonBlankString(result.heroImageUrl) ?? prevTrip.heroImageUrl ?? null,
+		soundtrack: extractDossierSoundtrack(result.audioTrack) ?? prevTrip.soundtrack ?? null
+	};
+}
+
+function nonBlankString(val) {
+	return typeof val === 'string' && val.trim().length > 0 ? val.trim() : null;
+}
+
+function extractDossierSoundtrack(track) {
+	const previewUrl = nonBlankString(track?.previewUrl);
+	if (!previewUrl) return null;
+	return {
+		trackName: track.trackName ?? 'Regional Track',
+		artistName: track.artistName ?? 'Regional Artist',
+		previewUrl,
+		durationSeconds: 30
+	};
+}
+
+function handleStepStarted(state, event, nextEvents) {
+	const currentTurn = state.activeTurn ?? createEmptyActiveTurn();
+	const meta = event.rawEvent ?? {};
+	const callType = meta.callType ?? 'a2a:task';
+	const title = meta.skillId ?? event.stepName ?? 'a2a-skill';
+	const agentName = meta.agentName ?? 'Nomad-A2A-Specialist';
+	const stepEntry = {
+		id: uniqueTimelineId(currentTurn.timeline, meta.stepId ?? event.stepName, nextEvents.length),
+		callType,
+		title,
+		subtitle: `${agentName} (:8082)`,
+		status: 'running',
+		detail: null
+	};
+	return {
+		...state,
+		statusText: `A2A Delegation: ${agentName} (${title})`,
+		activeTurn: {
+			...currentTurn,
+			timeline: [...currentTurn.timeline, stepEntry]
+		},
+		events: nextEvents
+	};
+}
+
+function resolveStepFinishedInfo(event, fallbackIndex) {
+	const meta = event.rawEvent ?? {};
+	const isError = isErrorPayload(meta);
+	return {
+		meta,
+		stepId: pickField(meta.stepId, event.stepName),
+		callType: pickField(meta.callType, null, 'a2a:task'),
+		title: pickField(meta.skillId, event.stepName, 'a2a-skill'),
+		agentName: pickField(meta.agentName, null, 'Nomad-A2A-Specialist'),
+		isError,
+		nextStatus: isError ? 'error' : 'completed',
+		detailText: isError ? extractErrorDetail(meta, meta.report) : meta.summary,
+		result: pickField(meta.report, meta.result),
+		fallbackIndex
+	};
+}
+
+function appendA2aStepRecord(a2aSteps, info) {
+	const isA2a = info.meta.protocol === 'A2A' || info.callType.startsWith('a2a:');
+	if (!isA2a) return a2aSteps;
+	return [
+		...a2aSteps,
+		{
+			stepId: info.stepId,
+			callType: info.callType,
+			agentName: info.agentName,
+			skillId: info.title,
+			status: info.nextStatus,
+			isError: info.isError,
+			summary: info.detailText,
+			report: info.meta.report ?? {}
+		}
+	];
+}
+
+function handleStepFinished(state, event, nextEvents) {
+	const currentTurn = resolveActiveTurn(state);
+	const info = resolveStepFinishedInfo(event, nextEvents.length);
+	return {
+		...state,
+		statusText: info.isError ? `Service Error: ${info.detailText}` : state.statusText,
+		a2aSteps: appendA2aStepRecord(state.a2aSteps, info),
+		activeTurn: {
+			...currentTurn,
+			timeline: upsertFinishedStepTimeline(currentTurn.timeline, info)
+		},
+		events: nextEvents
+	};
+}
+
+function upsertFinishedStepTimeline(timeline, info) {
+	const matches = (item) =>
+		item.id === info.stepId || (item.title === info.title && item.status === 'running');
+	if (timeline.some(matches)) {
+		return timeline.map((item) =>
+			matches(item)
+				? {
+						...item,
+						callType: info.callType,
+						status: info.nextStatus,
+						isError: info.isError,
+						detail: info.detailText,
+						result: info.result
+					}
+				: item
+		);
+	}
+	return [
+		...timeline,
+		{
+			id: uniqueTimelineId(timeline, info.stepId, info.fallbackIndex),
+			callType: info.callType,
+			title: info.title,
+			subtitle: `${info.agentName} (:8082)`,
+			status: info.nextStatus,
+			isError: info.isError,
+			detail: info.detailText,
+			result: info.result
+		}
+	];
+}
+
+function handleActivitySnapshot(state, event, nextEvents) {
+	const currentTurn = state.activeTurn ?? createEmptyActiveTurn();
+	const meta = event.rawEvent ?? {};
+	const entry = {
+		id: uniqueTimelineId(currentTurn.timeline, event.messageId, nextEvents.length),
+		callType: meta.callType ?? 'a2a:artifact',
+		title: meta.artifactName ?? event.activityType ?? 'activity',
+		subtitle: meta.agentName ?? 'Nomad-A2A-Specialist (:8082)',
+		status: 'completed',
+		detail: null,
+		result: event.content
+	};
+	return {
+		...state,
+		activeTurn: {
+			...currentTurn,
+			timeline: [...currentTurn.timeline, entry]
+		},
+		events: nextEvents
+	};
+}
+
+function handleTextMessageContent(state, event, nextEvents) {
+	const chunk = event.delta ?? '';
+	const coalesced = coalesceDeltaEvents(state.events, nextEvents, EventType.TEXT_MESSAGE_CONTENT, chunk);
+	return {
+		...state,
+		streamBuffer: state.streamBuffer + chunk,
+		events: coalesced
+	};
+}
+
+function handleRunFinished(state, event, nextEvents) {
+	if (event.outcome?.type === 'interrupt') {
+		return finalizeInterruptedRun(state, event, nextEvents);
+	}
+	return finalizeCompletedRun(state, event, nextEvents);
+}
+
+function pickField(primary, secondary, defaultVal = null) {
+	if (primary !== undefined && primary !== null) return primary;
+	if (secondary !== undefined && secondary !== null) return secondary;
+	return defaultVal;
+}
+
+function finalizeInterruptedRun(state, event, nextEvents) {
+	const firstInterrupt = event.outcome?.interrupts?.[0] ?? {};
+	const meta = firstInterrupt.metadata ?? {};
+	const fallback = state.pendingApproval ?? {};
+	const interruptId = pickField(firstInterrupt.id, meta.callId, fallback.interruptId || 'hitl-approval');
+	return {
+		...state,
+		isStreaming: false,
+		pendingApproval: {
+			interruptId,
+			callId: pickField(meta.callId, firstInterrupt.toolCallId, interruptId),
+			toolName: pickField(meta.toolName, fallback.toolName, 'updateTripItinerary'),
+			city: pickField(meta.city, fallback.city),
+			stopTitle: pickField(meta.stopTitle, fallback.stopTitle),
+			nights: pickField(meta.nights, fallback.nights),
+			costUsd: pickField(meta.costUsd, fallback.costUsd)
+		},
+		statusText: 'HITL Gate — Awaiting Traveler Approval',
+		events: nextEvents
+	};
+}
+
+function finalizeCompletedRun(state, event, nextEvents) {
+	const currentTurn = state.activeTurn ?? createEmptyActiveTurn();
+	const res = event.result ?? event.rawEvent ?? {};
+	const status = res.status ?? 'completed';
+	const finalReply = resolveFinalReplyText(state.streamBuffer, status);
+	const assistantMsg = finalReply
+		? [buildCompletedAssistantTurn(event, finalReply, currentTurn, state)]
+		: [];
+	return {
+		...state,
+		isStreaming: false,
+		pendingApproval: null,
+		memoryTurns: res.memoryTurns ?? state.memoryTurns ?? 0,
+		statusText: `Completed (${status})`,
+		streamBuffer: '',
+		activeTurn: createEmptyActiveTurn(),
+		messages: [...state.messages, ...assistantMsg],
+		events: nextEvents
+	};
+}
+
+function resolveFinalReplyText(streamBuffer, status) {
+	const trimmed = streamBuffer.trim();
+	if (trimmed) return trimmed;
+	return status === 'cancelled'
+		? 'Traveler declined sanctuary reservation hold. Run cancelled safely.'
+		: '';
+}
+
+function buildCompletedAssistantTurn(event, content, currentTurn, state) {
+	return {
+		id: `msg-${event.runId ?? event.id ?? randomUUID()}`,
+		role: 'assistant',
+		status: 'completed',
+		content,
+		reasoning: currentTurn.reasoning,
+		timeline: currentTurn.timeline,
+		mcpCalls: state.mcpCalls,
+		a2aSteps: state.a2aSteps,
+		media: currentTurn.media,
+		interaction: currentTurn.interaction,
+		sources: currentTurn.sources,
+		followUps: currentTurn.followUps
+	};
+}
+
+function handleRunError(state, event, nextEvents) {
+	const currentTurn = state.activeTurn ?? createEmptyActiveTurn();
+	const message = event.message ?? 'Agent run failed';
+	const statusText =
+		event.code === 'GUARDRAIL_BLOCKED'
+			? `Blocked by Guardrail (${event.code})`
+			: `Error: ${message}`;
+	const errorTurn = buildCompletedAssistantTurn(event, message, currentTurn, state);
+	return {
+		...state,
+		isStreaming: false,
+		pendingApproval: null,
+		statusText,
+		streamBuffer: '',
+		activeTurn: createEmptyActiveTurn(),
+		messages: [...state.messages, errorTurn],
+		events: nextEvents
+	};
+}
+
+const WORKBENCH_HANDLERS = new Map([
+	['WS_CONNECTED', handleWsConnected],
+	[EventType.RUN_STARTED, handleRunStarted],
+	[EventType.STATE_SNAPSHOT, handleStateSnapshot],
+	[EventType.STATE_DELTA, handleStateDelta],
+	[EventType.REASONING_MESSAGE_CONTENT, handleReasoningContent],
+	[EventType.TOOL_CALL_START, handleToolCallStart],
+	[EventType.TOOL_CALL_ARGS, handleToolCallArgs],
+	[EventType.TOOL_CALL_RESULT, handleToolCallResult],
+	[EventType.STEP_STARTED, handleStepStarted],
+	[EventType.STEP_FINISHED, handleStepFinished],
+	[EventType.ACTIVITY_SNAPSHOT, handleActivitySnapshot],
+	[EventType.TEXT_MESSAGE_CONTENT, handleTextMessageContent],
+	[EventType.RUN_FINISHED, handleRunFinished],
+	[EventType.RUN_ERROR, handleRunError]
+]);
+
+/**
+ * Pure reducer updating the 3-Pane Workbench state for each incoming canonical AG-UI `Event`.
  */
 export function reduceAgUiEvent(state, event) {
 	if (!event || !event.type) return state;
-
 	const taggedEvent = event.direction ? event : { ...event, direction: 'server' };
 	const nextEvents = [...state.events, taggedEvent];
-	const payload = event.payload ?? {};
-	const currentTurn = state.activeTurn ?? createEmptyActiveTurn();
-
-	switch (event.type) {
-		case 'WS_CONNECTED': {
-			const incomingTurns = payload.memoryTurns ?? state.memoryTurns ?? 0;
-			const currentDossier = state.tripDossierState ?? state.clusterState;
-			const hasExistingCity = Boolean(currentDossier?.nomadTrip?.activeCity);
-			const incomingDossier = payload.tripDossierState ?? payload.clusterState ?? currentDossier;
-			const resolvedDossier =
-				incomingTurns > 0 || hasExistingCity ? incomingDossier : currentDossier;
-			return {
-				...state,
-				wsConnected: true,
-				transportMode: 'ws',
-				memoryTurns: incomingTurns,
-				tripDossierState: resolvedDossier,
-				clusterState: resolvedDossier,
-				statusText: 'WebSocket Full-Duplex Connected (/api/agent/ws)',
-				events: nextEvents
-			};
-		}
-
-		case 'RUN_STARTED':
-			return {
-				...state,
-				isStreaming: true,
-				streamBuffer: '',
-				pendingApproval: null,
-				mcpCalls: [],
-				a2aSteps: [],
-				activeTurn: createEmptyActiveTurn(),
-				statusText: `Run started (${payload.llmMode ?? payload.status ?? 'ollama:llama3.2:latest'})`,
-				events: nextEvents
-			};
-
-		case 'STATE_SNAPSHOT':
-		case 'STATE_DELTA': {
-			if (payload.status === 'memory_reset') {
-				const initial = createInitialWorkbenchState(state.threadId);
-				return {
-					...state,
-					tripDossierState: initial.tripDossierState,
-					clusterState: initial.clusterState,
-					memoryTurns: 0,
-					isStreaming: false,
-					pendingApproval: null,
-					streamBuffer: '',
-					activeTurn: createEmptyActiveTurn(),
-					messages: initial.messages,
-					statusText: 'Conversational memory & traveler profile reset',
-					events: nextEvents
-				};
-			}
-			const currentDossier = state.tripDossierState ?? state.clusterState;
-			const incomingCluster = payload.tripDossierState ?? payload.clusterState ?? currentDossier;
-			if (payload.status === 'params_updated') {
-				const hasExistingCity = Boolean(currentDossier?.nomadTrip?.activeCity);
-				const incomingTurns = payload.memoryTurns ?? state.memoryTurns ?? 0;
-				const nextClusterState =
-					hasExistingCity || incomingTurns > 0
-						? incomingCluster
-						: {
-								...incomingCluster,
-								nomadTrip: {
-									...(incomingCluster?.nomadTrip ?? {}),
-									activeCity: null,
-									country: null,
-									currency: null,
-									exchangeRate: null,
-									temperatureC: null,
-									weatherCondition: null,
-									stopTitle: null,
-									allocatedUsd: null,
-									heroImageUrl: null,
-									soundtrack: null
-								}
-							};
-				return {
-					...state,
-					tripDossierState: nextClusterState,
-					clusterState: nextClusterState,
-					memoryTurns: incomingTurns,
-					statusText: 'Trip parameters updated via live WebSocket (<50ms)',
-					events: nextEvents
-				};
-			}
-			const nextClusterState = payload.awaitingDestination
-				? {
-						...incomingCluster,
-						nomadTrip: {
-							...(incomingCluster?.nomadTrip ?? {}),
-							activeCity: null,
-							country: null,
-							currency: null,
-							exchangeRate: null,
-							temperatureC: null,
-							weatherCondition: null,
-							nights: null,
-							stopTitle: null,
-							allocatedUsd: null,
-							heroImageUrl: null,
-							soundtrack: null
-						}
-					}
-				: incomingCluster;
-			const nextInteraction = payload.interaction
-				? {
-						...payload.interaction,
-						selectedValues: payload.interaction.selectedValues ?? [],
-						submitted: Boolean(payload.interaction.submitted)
-					}
-				: currentTurn.interaction;
-			return {
-				...state,
-				tripDossierState: nextClusterState,
-				clusterState: nextClusterState,
-				memoryTurns: payload.memoryTurns ?? state.memoryTurns ?? 0,
-				activeTurn: {
-					...currentTurn,
-					media:
-						Array.isArray(payload.media) && payload.media.length > 0
-							? payload.media
-							: currentTurn.media,
-					interaction: nextInteraction,
-					sources:
-						Array.isArray(payload.sources) && payload.sources.length > 0
-							? payload.sources
-							: currentTurn.sources,
-					followUps:
-						Array.isArray(payload.followUps) && payload.followUps.length > 0
-							? payload.followUps
-							: currentTurn.followUps
-				},
-				events: nextEvents
-			};
-		}
-
-		case 'STATUS': {
-			const nextReasoning =
-				payload.phase === 'reasoning' || payload.thought
-					? {
-							thought: payload.thought ?? payload.message ?? 'Synthesizing multi-protocol plan...',
-							durationMs: payload.durationMs ?? 950
-						}
-					: currentTurn.reasoning;
-			return {
-				...state,
-				statusText: payload.message ?? payload.phase ?? 'Thinking...',
-				activeTurn: {
-					...currentTurn,
-					reasoning: nextReasoning
-				},
-				events: nextEvents
-			};
-		}
-
-		case 'TOOL_CALL': {
-			const requiresApproval = Boolean(payload.requiresApproval);
-			const resolvedTool = payload.tool ?? payload.toolName ?? 'mcp-tool';
-			const resolvedCallId = payload.callId ?? payload.toolCallId;
-			const resolvedArgs = payload.args ?? payload.arguments ?? {};
-			const resolvedCallType =
-				payload.callType ?? (requiresApproval ? 'hitl:approval' : 'mcp:tool');
-			const pendingApproval = requiresApproval
-				? {
-						callId: resolvedCallId,
-						toolName: resolvedTool,
-						city: resolvedArgs?.city ?? null,
-						stopTitle: resolvedArgs?.stopTitle ?? null,
-						nights: resolvedArgs?.nights ?? null,
-						costUsd: resolvedArgs?.costUsd ?? null
-					}
-				: state.pendingApproval;
-
-			const rawCallId = resolvedCallId ?? `tl-${nextEvents.length}`;
-			const uniqueCallId = currentTurn.timeline.some((item) => item.id === rawCallId)
-				? `${rawCallId}-${nextEvents.length}`
-				: rawCallId;
-			const timelineEntry = {
-				id: uniqueCallId,
-				callType: resolvedCallType,
-				title: resolvedTool,
-				subtitle: payload.server ?? 'nomad-mcp-concierge (:8081)',
-				args: resolvedArgs,
-				status: requiresApproval ? 'awaiting_approval' : 'running',
-				detail: null
-			};
-
-			return {
-				...state,
-				statusText: requiresApproval ? 'HITL Gate — Awaiting Traveler Approval' : `MCP Tool: ${resolvedTool}`,
-				pendingApproval,
-				mcpCalls: [
-					...state.mcpCalls,
-					{
-						callId: resolvedCallId,
-						tool: resolvedTool,
-						callType: resolvedCallType,
-						server: payload.server ?? 'nomad-mcp-concierge (:8081)',
-						args: resolvedArgs,
-						status: requiresApproval ? 'awaiting_approval' : 'running',
-						result: null
-					}
-				],
-				activeTurn: {
-					...currentTurn,
-					timeline: [...currentTurn.timeline, timelineEntry]
-				},
-				events: nextEvents
-			};
-		}
-
-		case 'TOOL_RESULT': {
-			const resolvedCallId = payload.callId ?? payload.toolCallId;
-			const resolvedTool = payload.tool ?? payload.toolName;
-			const isError = isErrorPayload(payload);
-			const nextStatus = isError ? 'error' : 'completed';
-			const errorText = extractErrorDetail(payload);
-			const updatedTimeline = currentTurn.timeline.map((item) =>
-				item.id === resolvedCallId || item.title === resolvedTool
-					? {
-							...item,
-							status: nextStatus,
-							isError,
-							result: payload.result,
-							detail: isError ? errorText : summarizeToolResult(resolvedTool, payload.result)
-						}
-					: item
-			);
-			const extractedMedia =
-				!isError && resolvedTool === 'discoverLocalCultureAndMedia'
-					? extractCultureMediaItems(payload.result)
-					: [];
-			const nextMedia =
-				extractedMedia.length > 0 && (!currentTurn.media || currentTurn.media.length === 0)
-					? extractedMedia
-					: currentTurn.media;
-			const currentDossier = state.tripDossierState ?? state.clusterState;
-			const nextDossier =
-				!isError &&
-				resolvedTool === 'discoverLocalCultureAndMedia' &&
-				payload.result &&
-				typeof payload.result === 'object'
-					? {
-							...currentDossier,
-							nomadTrip: {
-								...(currentDossier?.nomadTrip ?? {}),
-								activeCity:
-									currentDossier?.nomadTrip?.activeCity ??
-									(typeof payload.result.destination === 'string' &&
-									payload.result.destination.trim().length > 0
-										? payload.result.destination.trim()
-										: null),
-								heroImageUrl:
-									typeof payload.result.heroImageUrl === 'string' &&
-									payload.result.heroImageUrl.trim().length > 0
-										? payload.result.heroImageUrl.trim()
-										: (currentDossier?.nomadTrip?.heroImageUrl ?? null),
-								soundtrack:
-									payload.result.audioTrack &&
-									typeof payload.result.audioTrack === 'object' &&
-									typeof payload.result.audioTrack.previewUrl === 'string' &&
-									payload.result.audioTrack.previewUrl.trim().length > 0
-										? {
-												trackName: payload.result.audioTrack.trackName ?? 'Regional Track',
-												artistName: payload.result.audioTrack.artistName ?? 'Regional Artist',
-												previewUrl: payload.result.audioTrack.previewUrl.trim(),
-												durationSeconds: 30
-											}
-										: (currentDossier?.nomadTrip?.soundtrack ?? null)
-							}
-						}
-					: currentDossier;
-			return {
-				...state,
-				tripDossierState: nextDossier,
-				clusterState: nextDossier,
-				statusText: isError ? `Tool Error: ${errorText}` : state.statusText,
-				mcpCalls: state.mcpCalls.map((c) =>
-					c.callId === resolvedCallId || c.tool === resolvedTool
-						? { ...c, status: nextStatus, isError, error: isError ? errorText : null, result: payload.result }
-						: c
-				),
-				activeTurn: {
-					...currentTurn,
-					timeline: updatedTimeline,
-					media: nextMedia
-				},
-				events: nextEvents
-			};
-		}
-
-		case 'STEP_STARTED': {
-			const resolvedCallType = payload.callType ?? 'a2a:task';
-			const rawStepId = payload.stepId ?? `a2a-${nextEvents.length}`;
-			const uniqueStepId = currentTurn.timeline.some((item) => item.id === rawStepId)
-				? `${rawStepId}-${nextEvents.length}`
-				: rawStepId;
-			const title = payload.skillId ?? payload.label ?? 'a2a-skill';
-			const stepEntry = {
-				id: uniqueStepId,
-				callType: resolvedCallType,
-				title,
-				subtitle: `${payload.agentName ?? 'Nomad-A2A-Specialist'} (:8082)`,
-				status: 'running',
-				detail: null
-			};
-			return {
-				...state,
-				statusText: `A2A Delegation: ${payload.agentName ?? 'Nomad-A2A-Specialist'} (${title})`,
-				activeTurn: {
-					...currentTurn,
-					timeline: [...currentTurn.timeline, stepEntry]
-				},
-				events: nextEvents
-			};
-		}
-
-		case 'STEP_FINISHED': {
-			const resolvedCallType = payload.callType ?? 'a2a:task';
-			const title = payload.skillId ?? payload.label ?? 'a2a-skill';
-			const isError = isErrorPayload(payload);
-			const nextStatus = isError ? 'error' : 'completed';
-			const detailText = isError ? extractErrorDetail(payload) : payload.summary;
-			const hasExisting = currentTurn.timeline.some(
-				(item) =>
-					item.id === payload.stepId ||
-					(item.title === title && item.status === 'running')
-			);
-			const updatedTimeline = hasExisting
-				? currentTurn.timeline.map((item) =>
-						item.id === payload.stepId ||
-						(item.title === title && item.status === 'running')
-							? {
-									...item,
-									callType: resolvedCallType,
-									status: nextStatus,
-									isError,
-									detail: detailText,
-									result: payload.report ?? payload.result
-								}
-							: item
-					)
-				: [
-						...currentTurn.timeline,
-						{
-							id: currentTurn.timeline.some((item) => item.id === payload.stepId)
-								? `${payload.stepId}-${nextEvents.length}`
-								: (payload.stepId ?? `a2a-${nextEvents.length}`),
-							callType: resolvedCallType,
-							title,
-							subtitle: `${payload.agentName ?? 'Nomad-A2A-Specialist'} (:8082)`,
-							status: nextStatus,
-							isError,
-							detail: detailText,
-							result: payload.report ?? payload.result
-						}
-					];
-			return {
-				...state,
-				statusText: isError ? `Service Error: ${detailText}` : state.statusText,
-				a2aSteps: [
-					...state.a2aSteps,
-					{
-						stepId: payload.stepId,
-						callType: resolvedCallType,
-						agentName: payload.agentName ?? 'Nomad-A2A-Specialist',
-						skillId: title,
-						status: nextStatus,
-						isError,
-						summary: detailText,
-						report: payload.report ?? {}
-					}
-				],
-				activeTurn: {
-					...currentTurn,
-					timeline: updatedTimeline
-				},
-				events: nextEvents
-			};
-		}
-
-		case 'TEXT_DELTA': {
-			const chunk = payload.content ?? payload.delta ?? '';
-			const prevEvent = state.events.at(-1);
-			const coalescedEvents =
-				prevEvent && prevEvent.type === 'TEXT_DELTA'
-					? [
-							...state.events.slice(0, -1),
-							{
-								...prevEvent,
-								payload: {
-									...prevEvent.payload,
-									content: (prevEvent.payload?.content ?? '') + chunk,
-									chunks: (prevEvent.payload?.chunks ?? 1) + 1
-								}
-							}
-						]
-					: nextEvents;
-			return {
-				...state,
-				streamBuffer: state.streamBuffer + chunk,
-				events: coalescedEvents
-			};
-		}
-
-		case 'RUN_FINISHED': {
-			if (payload.status === 'interrupted') {
-				return {
-					...state,
-					isStreaming: false,
-					pendingApproval: payload.pendingAction ?? state.pendingApproval ?? {
-						toolName: 'updateTripItinerary',
-						city: 'Kyoto',
-						stopTitle: 'Hoshinoya Arashiyama Pavilion',
-						nights: 4,
-						costUsd: 1840
-					},
-					statusText: 'HITL Gate — Awaiting Traveler Approval',
-					events: nextEvents
-				};
-			}
-			const finalReply =
-				state.streamBuffer.trim() ||
-				(payload.status === 'cancelled'
-					? 'Traveler declined sanctuary reservation hold. Run cancelled safely.'
-					: '');
-			const assistantMsg = finalReply
-				? [
-						{
-							id: `msg-${event.id ?? Date.now()}`,
-							role: 'assistant',
-							status: 'completed',
-							content: finalReply,
-							reasoning: currentTurn.reasoning,
-							timeline: currentTurn.timeline,
-							mcpCalls: state.mcpCalls,
-							a2aSteps: state.a2aSteps,
-							media: currentTurn.media,
-							interaction: currentTurn.interaction,
-							sources: currentTurn.sources,
-							followUps: currentTurn.followUps
-						}
-					]
-				: [];
-			return {
-				...state,
-				isStreaming: false,
-				pendingApproval: null,
-				memoryTurns: payload.memoryTurns ?? state.memoryTurns ?? 0,
-				statusText: `Completed (${payload.status ?? 'completed'})`,
-				streamBuffer: '',
-				activeTurn: createEmptyActiveTurn(),
-				messages: [...state.messages, ...assistantMsg],
-				events: nextEvents
-			};
-		}
-
-		default:
-			return {
-				...state,
-				events: nextEvents
-			};
-	}
+	const handler = WORKBENCH_HANDLERS.get(event.type);
+	return handler ? handler(state, event, nextEvents) : { ...state, events: nextEvents };
 }
 
 function extractCultureMediaItems(result) {
 	if (!result || typeof result !== 'object') return [];
 	const city = result.destination ?? 'Destination';
 	const items = [];
-	if (typeof result.heroImageUrl === 'string' && result.heroImageUrl.trim()) {
+	const heroUrl = nonBlankString(result.heroImageUrl);
+	if (heroUrl) {
 		items.push({
 			type: 'image',
 			title: `${city} Cultural & Architectural Plate`,
 			subtitle: 'Wikipedia REST API v1 • Verified Landmark Photography',
-			url: result.heroImageUrl.trim()
+			url: heroUrl
 		});
 	}
-	const track = result.audioTrack;
-	if (track && typeof track.previewUrl === 'string' && track.previewUrl.trim()) {
+	const previewUrl = nonBlankString(result.audioTrack?.previewUrl);
+	if (previewUrl) {
 		items.push({
 			type: 'audio',
-			title: track.trackName ?? `${city} Acoustic Session`,
-			subtitle: track.artistName ?? 'Regional Artist',
-			url: track.previewUrl.trim(),
-			durationSeconds: track.durationSeconds ?? 30
+			title: result.audioTrack.trackName ?? `${city} Acoustic Session`,
+			subtitle: result.audioTrack.artistName ?? 'Regional Artist',
+			url: previewUrl,
+			durationSeconds: result.audioTrack.durationSeconds ?? 30
 		});
 	}
 	return items;
@@ -784,24 +1085,65 @@ function extractCultureMediaItems(result) {
 
 function isErrorPayload(payload) {
 	if (!payload || typeof payload !== 'object') return false;
-	return Boolean(
-		payload.isError ||
-			payload.status === 'ERROR' ||
-			payload.result?.isError ||
-			payload.result?.status === 'ERROR' ||
-			payload.report?.isError ||
-			payload.report?.status === 'ERROR'
+	return Boolean(payload.isError || payload.status === 'ERROR');
+}
+
+function extractErrorDetail(primary, secondary) {
+	return (
+		primary?.error ??
+		secondary?.error ??
+		primary?.summary ??
+		'Upstream travel service unavailable'
 	);
 }
 
-function extractErrorDetail(payload) {
-	return (
-		payload?.error ??
-		payload?.result?.error ??
-		payload?.report?.error ??
-		payload?.summary ??
-		'Upstream travel service unavailable'
-	);
+const TOOL_SUMMARY_FORMATTERS = new Map([
+	[
+		'fetchCityWeather',
+		(r) => (r.city ? `${r.city} • ${r.temperatureC}°C (${r.condition})` : '')
+	],
+	[
+		'discoverLocalCultureAndMedia',
+		(r) => (r.audioTrack ? `${r.destination} • 30s Preview: ${r.audioTrack.trackName}` : '')
+	],
+	[
+		'updateTripItinerary',
+		(r) =>
+			r.stopTitle ? `Reserved ${r.stopTitle} (${r.nights} nights • $${r.allocatedUsd} USD)` : ''
+	],
+	[
+		'TravelSafetyAndInjectionGuardrail',
+		(r) => r.reason ?? 'OWASP-LLM01 Input Guardrail Verified'
+	],
+	[
+		'CurrencyAndGroundingGuardrail',
+		(r) => `Verified ${r.verifiedCity} • ${r.verifiedIsoCurrency} (${r.verifiedTemperatureC}°C)`
+	],
+	[
+		'retrieveCulturalFieldNotes',
+		(r) =>
+			`${r.chunksRetrieved ?? 3} field notes retrieved (cosine similarity ${r.topSimilarity ?? 0.98})`
+	],
+	['sampleAcousticMoodProfile', (r) => r.sampledMood ?? 'Sampled acoustic twilight mood'],
+	['sampleAcousticMood', (r) => r.sampledMood ?? 'Sampled acoustic twilight mood'],
+	[
+		'saveTravelerPreferences',
+		(r) => (r.travelerName ? `Traveler profile updated: ${r.travelerName}` : '')
+	]
+]);
+
+function summarizeToolResult(tool, result) {
+	if (!result || typeof result !== 'object') return '';
+	const formatter = TOOL_SUMMARY_FORMATTERS.get(tool);
+	if (formatter) return formatter(result);
+	return summarizeGenericToolResult(result);
+}
+
+function summarizeGenericToolResult(result) {
+	if (result.architecturalHighlight) return `${result.city} — ${result.architecturalHighlight}`;
+	if (result.expandedPrompt) return result.expandedPrompt;
+	if (result.style) return `${result.style} • ${result.dietary ?? result.pace ?? ''}`;
+	return '';
 }
 
 const HEALTH_CHECK_LABELS = {
@@ -833,60 +1175,64 @@ function normalizeSmallRyeChecks(checks) {
 	const services = [];
 	for (const check of checks) {
 		if (!check || typeof check !== 'object') continue;
-		const id = check.name ?? 'health-check';
-		const data = check.data && typeof check.data === 'object' ? check.data : {};
-		let primaryError = data.error ?? null;
-		const subServices = [];
-
-		for (const [key, val] of Object.entries(data)) {
-			if (key.endsWith('.status')) {
-				const subId = key.slice(0, -'.status'.length);
-				const subStatus = String(val ?? 'DOWN').toUpperCase();
-				const subError = data[`${subId}.error`] ? String(data[`${subId}.error`]) : null;
-				if (subStatus !== 'UP' && !primaryError && subError) {
-					primaryError = subError;
-				}
-				subServices.push({
-					id: subId,
-					via: id,
-					name: resolveHealthCheckLabel(subId, data),
-					status: subStatus,
-					error: subError
-				});
-			}
-		}
-
-		if (check.status !== 'UP' && !primaryError) {
-			const failedEntry = Object.entries(data).find(
-				([k, v]) => !k.endsWith('.status') && !k.endsWith('.error') && k !== 'endpoint' && k !== 'model' && v !== 'OK'
-			);
-			if (failedEntry) {
-				primaryError = `${failedEntry[0]}: ${failedEntry[1]}`;
-			}
-		}
-
-		services.push({
-			id,
-			name: resolveHealthCheckLabel(id, data),
-			status: String(check.status ?? 'DOWN').toUpperCase(),
-			error: primaryError
-		});
-		services.push(...subServices);
+		services.push(...expandSingleHealthCheck(check));
 	}
 	return services;
 }
 
+function expandSingleHealthCheck(check) {
+	const id = check.name ?? 'health-check';
+	const data = check.data && typeof check.data === 'object' ? check.data : {};
+	const { subServices, firstSubError } = extractHealthSubServices(id, data);
+	const primaryError = data.error ?? firstSubError ?? findFallbackCheckError(check.status, data);
+	return [
+		{
+			id,
+			name: resolveHealthCheckLabel(id, data),
+			status: String(check.status ?? 'DOWN').toUpperCase(),
+			error: primaryError
+		},
+		...subServices
+	];
+}
+
+function extractHealthSubServices(parentId, data) {
+	const subServices = [];
+	let firstSubError = null;
+	for (const [key, val] of Object.entries(data)) {
+		if (!key.endsWith('.status')) continue;
+		const subId = key.slice(0, -'.status'.length);
+		const status = String(val ?? 'DOWN').toUpperCase();
+		const error = data[`${subId}.error`] ? String(data[`${subId}.error`]) : null;
+		if (status !== 'UP' && !firstSubError && error) firstSubError = error;
+		subServices.push({ id: subId, via: parentId, name: resolveHealthCheckLabel(subId, data), status, error });
+	}
+	return { subServices, firstSubError };
+}
+
+function findFallbackCheckError(status, data) {
+	if (status === 'UP') return null;
+	const entry = Object.entries(data).find(([k, v]) => isFailureDataEntry(k, v));
+	return entry ? `${entry[0]}: ${entry[1]}` : null;
+}
+
+function isFailureDataEntry(key, val) {
+	return (
+		!key.endsWith('.status') &&
+		!key.endsWith('.error') &&
+		key !== 'endpoint' &&
+		key !== 'model' &&
+		val !== 'OK'
+	);
+}
+
 /**
- * Summarizes MicroProfile SmallRye Health (`/q/health/ready` `{ status, checks }`) or legacy
+ * Summarizes MicroProfile SmallRye Health (`/q/health/ready` `{ status, checks }`) or
  * `/api/agent/health` (`{ status, services }`) payloads for the Top-Bar Health Pill & Popover.
  */
 export function summarizeHealthReport(health) {
 	const fromChecks = Array.isArray(health?.checks);
-	const services = fromChecks
-		? normalizeSmallRyeChecks(health.checks)
-		: Array.isArray(health?.services)
-			? health.services
-			: null;
+	const services = resolveHealthServiceList(health, fromChecks);
 	if (!services) {
 		return {
 			status: 'UNKNOWN',
@@ -901,26 +1247,10 @@ export function summarizeHealthReport(health) {
 	const downServices = services.filter((s) => s.status !== 'UP');
 	const downCount = downServices.length;
 	const healthyCount = services.length - downCount;
-	let status;
-	if (fromChecks) {
-		status =
-			downCount === 0 && String(health.status ?? 'UP').toUpperCase() === 'UP'
-				? 'UP'
-				: healthyCount === 0
-					? 'DOWN'
-					: 'DEGRADED';
-	} else {
-		status = health.status ?? (downCount === 0 ? 'UP' : healthyCount === 0 ? 'DOWN' : 'DEGRADED');
-	}
-	const label =
-		status === 'UP'
-			? 'All Systems Operational'
-			: status === 'DOWN'
-				? `Offline • ${downCount} Services Down`
-				: `Degraded • ${downCount} ${downCount === 1 ? 'API' : 'APIs'} Down`;
+	const status = computeOverallHealthStatus(health, fromChecks, healthyCount, downCount);
 	return {
 		status,
-		label,
+		label: formatHealthSummaryLabel(status, downCount),
 		healthyCount,
 		totalCount: services.length,
 		downCount,
@@ -929,49 +1259,26 @@ export function summarizeHealthReport(health) {
 	};
 }
 
-function summarizeToolResult(tool, result) {
-	if (!result || typeof result !== 'object') return '';
-	if (tool === 'fetchCityWeather' && result.city) {
-		return `${result.city} • ${result.temperatureC}°C (${result.condition})`;
-	}
-	if (tool === 'discoverLocalCultureAndMedia' && result.audioTrack) {
-		return `${result.destination} • 30s Preview: ${result.audioTrack.trackName}`;
-	}
-	if (tool === 'updateTripItinerary' && result.stopTitle) {
-		return `Reserved ${result.stopTitle} (${result.nights} nights • $${result.allocatedUsd} USD)`;
-	}
-	if (tool === 'TravelSafetyAndInjectionGuardrail') {
-		return result.reason ?? 'OWASP-LLM01 Input Guardrail Verified';
-	}
-	if (tool === 'CurrencyAndGroundingGuardrail') {
-		return `Verified ${result.verifiedCity} • ${result.verifiedIsoCurrency} (${result.verifiedTemperatureC}°C)`;
-	}
-	if (tool === 'retrieveCulturalFieldNotes') {
-		return `${result.chunksRetrieved ?? 3} field notes retrieved (cosine similarity ${result.topSimilarity ?? 0.98})`;
-	}
-	if (tool === 'sampleAcousticMoodProfile' || tool === 'sampleAcousticMood') {
-		return result.sampledMood ?? 'Sampled acoustic twilight mood';
-	}
-	if (tool === 'saveTravelerPreferences' && result.travelerName) {
-		return `Traveler profile updated: ${result.travelerName}`;
-	}
-	if (result.architecturalHighlight) {
-		return `${result.city} — ${result.architecturalHighlight}`;
-	}
-	if (result.expandedPrompt) {
-		return result.expandedPrompt;
-	}
-	if (result.style) {
-		return `${result.style} • ${result.dietary ?? result.pace ?? ''}`;
-	}
-	return '';
+function resolveHealthServiceList(health, fromChecks) {
+	if (fromChecks) return normalizeSmallRyeChecks(health.checks);
+	return Array.isArray(health?.services) ? health.services : null;
+}
+
+function computeOverallHealthStatus(health, fromChecks, healthyCount, downCount) {
+	if (!fromChecks && health?.status) return health.status;
+	const reportedUp = String(health?.status ?? 'UP').toUpperCase() === 'UP';
+	if (downCount === 0 && (!fromChecks || reportedUp)) return 'UP';
+	return healthyCount === 0 ? 'DOWN' : 'DEGRADED';
+}
+
+function formatHealthSummaryLabel(status, downCount) {
+	if (status === 'UP') return 'All Systems Operational';
+	if (status === 'DOWN') return `Offline • ${downCount} Services Down`;
+	return `Degraded • ${downCount} ${downCount === 1 ? 'API' : 'APIs'} Down`;
 }
 
 /**
  * Mutates local trip nights count in clusterState for bidirectional UI-to-Agent state editing.
- *
- * @param {any} clusterState
- * @param {number} delta
  */
 export function updateTripNightsInState(clusterState, delta) {
 	if (!clusterState?.nomadTrip) return clusterState;
@@ -992,8 +1299,6 @@ export function updateTripNightsInState(clusterState, delta) {
 
 /**
  * Creates a reactive AG-UI Workbench controller pre-configured with Nomad's initial state and reducer.
- *
- * @param {any} options
  */
 export function useAgUiAgent(options = {}) {
 	return createBaseAgUiAgent({
@@ -1010,39 +1315,77 @@ export function useAgUiAgent(options = {}) {
 export function formatTripDossierMarkdown(clusterState, messages = []) {
 	const trip = clusterState?.nomadTrip ?? {};
 	const prefs = clusterState?.preferences ?? {};
-	const city = trip.activeCity ?? 'Destination Pending';
-	const country = trip.country ?? 'Unspecified';
-	const currency = trip.currency ?? '--';
-	const rate = trip.exchangeRate ?? null;
-	const nights = trip.nights != null ? `${trip.nights} Nights` : 'Duration Not Set';
-	const allocatedUsd = trip.allocatedUsd != null ? `$${trip.allocatedUsd}` : 'Not allocated';
-	const budgetUsd = trip.budgetUsd != null ? `$${trip.budgetUsd}` : 'Not set';
-	const localAllocated =
-		rate != null && trip.allocatedUsd != null
-			? `${Math.round(trip.allocatedUsd * rate).toLocaleString()} ${currency} @ 1 = ${rate} ${currency}`
-			: 'Awaiting FX audit';
-	const lastAssistant = [...(messages ?? [])].reverse().find((m) => m.role === 'assistant');
-
 	const lines = [
+		...buildTripOverviewMarkdownLines(trip, prefs),
+		...buildTravelerProfileMarkdownLines(prefs)
+	];
+	const latestBriefing = findLatestAssistantContent(messages);
+	if (latestBriefing) {
+		lines.push(`## Curated Concierge Briefing`, ``, latestBriefing, ``);
+	}
+	return lines.join('\n');
+}
+
+function buildTripOverviewMarkdownLines(trip, prefs) {
+	const city = pickField(trip.activeCity, null, 'Destination Pending');
+	const country = pickField(trip.country, null, 'Unspecified');
+	const homeCurrency = pickField(prefs.homeCurrency, trip.homeCurrency, 'Not set');
+	return [
 		`# Nomad Cultural & Architectural Dossier — ${city}, ${country}`,
 		``,
-		`- **Sanctuary Allocation**: ${trip.stopTitle ?? 'Not reserved yet'} (${nights})`,
-		`- **Live Open-Meteo Telemetry**: ${trip.temperatureC != null ? `${trip.temperatureC}°C` : '--°C'} — ${trip.weatherCondition ?? 'Awaiting weather check'}`,
-		`- **Frankfurter FX Settlement**: ${allocatedUsd} / ${budgetUsd} (${localAllocated})`,
-		`- **Home Currency**: ${prefs.homeCurrency ?? trip.homeCurrency ?? 'Not set'}`,
-		`- **Soundtrack Preview**: ${trip.soundtrack?.trackName ?? 'Not loaded'} — ${trip.soundtrack?.artistName ?? '--'}`,
-		``,
-		`## Traveler Profile (\`traveler://preferences\`)`,
-		`- **Architectural Style**: ${prefs.style ?? 'Not specified yet'}`,
-		`- **Dietary Terroir**: ${prefs.dietary ?? 'Not specified yet'}`,
-		`- **Acoustic & Music Taste**: ${prefs.musicTaste ?? 'Not specified yet'}`,
-		`- **Cadence & Pace**: ${prefs.pace ?? 'Not specified yet'}`,
+		`- **Sanctuary Allocation**: ${pickField(trip.stopTitle, null, 'Not reserved yet')} (${formatNightsLabel(trip.nights)})`,
+		`- **Live Open-Meteo Telemetry**: ${formatTemperatureLabel(trip.temperatureC)} — ${pickField(trip.weatherCondition, null, 'Awaiting weather check')}`,
+		`- **Frankfurter FX Settlement**: ${formatUsdAmount(trip.allocatedUsd, 'Not allocated')} / ${formatUsdAmount(trip.budgetUsd, 'Not set')} (${formatLocalFxSettlement(trip)})`,
+		`- **Home Currency**: ${homeCurrency}`,
+		`- **Soundtrack Preview**: ${formatSoundtrackLine(trip.soundtrack)}`,
 		``
 	];
+}
 
-	if (lastAssistant?.content) {
-		lines.push(`## Curated Concierge Briefing`, ``, lastAssistant.content.trim(), ``);
+function formatSoundtrackLine(soundtrack) {
+	const track = pickField(soundtrack?.trackName, null, 'Not loaded');
+	const artist = pickField(soundtrack?.artistName, null, '--');
+	return `${track} — ${artist}`;
+}
+
+function buildTravelerProfileMarkdownLines(prefs) {
+	return [
+		`## Traveler Profile (\`traveler://preferences\`)`,
+		`- **Architectural Style**: ${pickField(prefs.style, null, 'Not specified yet')}`,
+		`- **Dietary Terroir**: ${pickField(prefs.dietary, null, 'Not specified yet')}`,
+		`- **Acoustic & Music Taste**: ${pickField(prefs.musicTaste, null, 'Not specified yet')}`,
+		`- **Cadence & Pace**: ${pickField(prefs.pace, null, 'Not specified yet')}`,
+		``
+	];
+}
+
+function formatNightsLabel(nights) {
+	return nights != null ? `${nights} Nights` : 'Duration Not Set';
+}
+
+function formatTemperatureLabel(temperatureC) {
+	return temperatureC != null ? `${temperatureC}°C` : '--°C';
+}
+
+function formatUsdAmount(amount, fallback) {
+	return amount != null ? `$${amount}` : fallback;
+}
+
+function formatLocalFxSettlement(trip) {
+	if (trip.exchangeRate == null || trip.allocatedUsd == null) {
+		return 'Awaiting FX audit';
 	}
+	const currency = trip.currency ?? '--';
+	const converted = Math.round(trip.allocatedUsd * trip.exchangeRate).toLocaleString();
+	return `${converted} ${currency} @ 1 = ${trip.exchangeRate} ${currency}`;
+}
 
-	return lines.join('\n');
+function findLatestAssistantContent(messages) {
+	const list = Array.isArray(messages) ? messages : [];
+	for (let i = list.length - 1; i >= 0; i--) {
+		if (list[i]?.role === 'assistant' && list[i]?.content) {
+			return list[i].content.trim();
+		}
+	}
+	return null;
 }

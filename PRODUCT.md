@@ -7,7 +7,7 @@
 ---
 
 ## 1. Product Vision
-Fill the gap in Java/JVM ecosystems for the **AG-UI (Agent–User Interaction Protocol)** standard by building a complete **Tri-Protocol (`AG-UI + MCP + A2A`) Reference Application** on **Quarkus `3.40.1.1` (Java 25 + GraalVM Native)** and **SvelteKit (Svelte 5 Runes + `@skeletonlabs/skeleton-svelte` + `@lucide/svelte` via `pnpm`)** first, evolving full AG-UI capabilities in-place, and then extracting a zero-dependency **Core Java 25 Library (`ag-ui-core`)** and a zero-configuration **Quarkus Extension (`quarkus-ag-ui`)** with MCP, A2A, and LangChain4j bridges.
+Fill the gap in Java/JVM ecosystems for the **AG-UI (Agent–User Interaction Protocol)** standard by building a complete **Tri-Protocol (`AG-UI + MCP + A2A`) Reference Application** on **Quarkus `3.40.1.1` (Java 25 + GraalVM Native)** and **SvelteKit (Svelte 5 Runes + `@agui/svelte` + `@skeletonlabs/skeleton-svelte` + `@lucide/svelte` via `pnpm`)**, backed by **4 orthogonal Java 17 library modules (`ag-ui-quarkus`, `ag-ui-langchain4j`, `ag-ui-quarkus-langchain4j`, `ag-ui-a2a`)** built directly on upstream `com.ag-ui.community:{java-core,java-server,java-client}:0.1.1` and headless `@agui/svelte` built on `@ag-ui/client` + `@ag-ui/core` (`ADR-007`, superseding custom `ag-ui-core`).
 
 ### Strategic 4-Wave Evolutionary Progression
 1. **Wave 1 — Tri-Protocol Agent Baseline (`examples/quarkus-svelte-skeleton`):** Build local Quarkus MCP Server (`:8081`), Quarkus A2A Specialist Server (`:8082`), Quarkus LangChain4j Orchestrator (`:8080`), and SvelteKit + `pnpm` 3-Pane UI baseline (`:5173`).

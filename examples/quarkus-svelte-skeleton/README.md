@@ -9,7 +9,7 @@
 
 `quarkus-svelte-skeleton` is a complete, production-grade reference application demonstrating how three open agentic protocols collaborate in real time inside a single cohesive developer experience:
 
-1. **AG-UI (Agent–User Interaction Protocol — `:8080`)**: Streams fine-grained lifecycle, state synchronization (`STATE_SNAPSHOT`, `STATE_DELTA`), tool execution (`TOOL_CALL`, `TOOL_RESULT`), reasoning steps (`STEP_STARTED`, `STEP_FINISHED`), Human-in-the-Loop interrupts (`HitlApprovalCard`), and token deltas (`TEXT_DELTA`) between the Quarkus orchestrator and the Svelte 5 frontend over **Full-Duplex WebSockets (`/api/agent/ws`)** with automatic **SSE (`/api/agent/run`)** fallback.
+1. **AG-UI (Agent–User Interaction Protocol — `:8080`)**: Streams canonical upstream AG-UI lifecycle, RFC 6902 JSON Patch state synchronization (`STATE_SNAPSHOT`, `STATE_DELTA`), tool execution (`TOOL_CALL_START`, `TOOL_CALL_ARGS`, `TOOL_CALL_END`, `TOOL_CALL_RESULT`), reasoning & sub-agent steps (`REASONING_MESSAGE_CONTENT`, `STEP_STARTED`, `ACTIVITY_SNAPSHOT`, `STEP_FINISHED`), native Human-in-the-Loop interrupts (`RUN_FINISHED` `InterruptOutcome` resumed via `RunAgentInput.resume` in `HitlApprovalCard`), and token deltas (`TEXT_MESSAGE_START`, `TEXT_MESSAGE_CONTENT`, `TEXT_MESSAGE_END`) between the Quarkus orchestrator (`ag-ui-quarkus` + `ag-ui-quarkus-langchain4j`) and the Svelte 5 frontend (`@agui/svelte` over `@ag-ui/client` + `@ag-ui/core`) via **Full-Duplex WebSockets (`/api/agent/ws`)** with automatic **SSE (`/api/agent/run`)** fallback.
 2. **MCP (Model Context Protocol — `:8081`)**: Provides standardized domain tools (`@Tool`), URI resources (`@Resource`), parameterized resource templates (`@ResourceTemplate`), prompt templates (`@Prompt`), slash-command argument autocompletion (`@CompletePrompt`), and server-initiated LLM sampling (`mcp:sampling`) for live destination weather, architectural landmarks, and regional 30-second acoustic masters.
 3. **A2A (Agent-to-Agent Protocol — `:8082`)**: Exposes an autonomous specialist auditor agent (`Nomad-A2A-Specialist`) discoverable via `GET /.well-known/agent-card.json` and invoked over JSON-RPC 2.0 (`POST /` with `A2A-Version: 1.0`) or companion `POST /api/a2a/audit` to perform multi-currency FX conversion (`convert-and-audit-budget`), neighborhood cadence curation (`curate-neighborhood-cadence`), and visa/safety advisory verification (`verify-travel-advisory`).
 
@@ -32,9 +32,9 @@ flowchart TB
 
     subgraph Backend["backend (:8080) — Quarkus 3.40.1.1 + Quinoa + Jib"]
         Quinoa["Quarkus Quinoa Static SPA Router<br/>(META-INF/webui/ -> index.html)"]
-        WS["AgentWebSocketEndpoint<br/>(@WebSocket path = '/api/agent/ws')"]
+        WS["AgentWebSocketEndpoint + AgUiWebSocketHandler<br/>(@WebSocket path = '/api/agent/ws')"]
         REST["AgentResource + SmallRye Health<br/>('/api/agent/run', '/q/health/ready')"]
-        Orch["NomadConciergeOrchestratorService + AgUiLangChain4jBridge<br/>(Multi&lt;ChatEvent&gt; -> Multi&lt;AgUiEvent&gt;)"]
+        Orch["NomadConciergeOrchestratorService + AgUiQuarkusLangChain4jBridge<br/>(Multi&lt;ChatEvent&gt; -> Multi&lt;Event&gt;)"]
         AiSvc["@RegisterAiService NomadConciergeAiService<br/>(@McpToolBox('nomad') + QuarkusStreamableHttpMcpTransport)"]
         Guard["TravelSafetyInputGuardrail & TravelHonestyOutputGuardrail<br/>+ NomadChatMemoryStore (16-Turn Window)"]
     end
@@ -79,34 +79,34 @@ flowchart TB
 
 ### 2.2 End-to-End Tri-Protocol Execution Sequence
 
-Every concierge turn streams through `@ApplicationScoped @RegisterAiService NomadConciergeAiService` + `@McpToolBox("nomad")` and `AgUiLangChain4jBridge`, enforces **Zero Assumed Defaults** (conversational slot elicitation when destination, duration, budget/currency, or travel focus is missing), and emits typed `callType` metadata with **strict upstream error surfacing** (zero silent fake fallbacks):
+Every concierge turn streams through `@ApplicationScoped @RegisterAiService NomadConciergeAiService` + `@McpToolBox("nomad")` and `AgUiQuarkusLangChain4jBridge`, enforces **Zero Assumed Defaults** (conversational slot elicitation when destination, duration, budget/currency, or travel focus is missing), and emits canonical AG-UI events carrying Tri-Protocol `rawEvent` metadata with **strict upstream error surfacing** (zero silent fake fallbacks):
 
 ```mermaid
 sequenceDiagram
     autonumber
     actor Traveler as Traveler (:8080 UI)
-    participant Orch as backend (:8080)<br/>NomadConciergeAiService + AgUiLangChain4jBridge
+    participant Orch as backend (:8080)<br/>NomadConciergeAiService + AgUiQuarkusLangChain4jBridge
     participant MCP as mcp-server (:8081/mcp)<br/>NomadMcpConciergeService
     participant A2A as a2a-server (:8082)<br/>NomadTravelAdvisorService
     participant LLM as Local Ollama (:11434)<br/>(Default: llama3.2:latest)
 
-    Traveler->>Orch: WS RUN_AGENT {"threadId", "prompt", "mode"}
+    Traveler->>Orch: RunAgentInput {"threadId", "runId", "messages", "forwardedProps"}
     Orch-->>Traveler: RUN_STARTED -> STATE_SNAPSHOT
     Orch-->>Orch: TravelSafetyInputGuardrail (@InputGuardrails) + NomadChatMemoryStore
     alt Missing Required Trip Details (Destination / Duration / Budget / Focus)
         Orch->>LLM: Conversational Slot-Elicitation Turn
-        Orch-->>Traveler: TEXT_DELTA (Ask Missing Parameters) -> RUN_FINISHED
+        Orch-->>Traveler: TEXT_MESSAGE_CONTENT (Ask Missing Parameters) -> RUN_FINISHED
     else All Trip Planning Details Supplied
         Orch->>LLM: @McpToolBox("nomad") + A2A & UI @Tool Schemas
         Orch->>MCP: MCP tools/call (fetchCityWeather, discoverLocalCultureAndMedia, sampleAcousticMood)
         MCP-->>Orch: ToolResponse (Live Open-Meteo, Wikipedia, iTunes 30s Audio or isError=true)
-        Orch-->>Traveler: TOOL_CALL / TOOL_RESULT [mcp:tool, mcp:sampling] + STATE_DELTA
+        Orch-->>Traveler: TOOL_CALL_START / ARGS / END / RESULT [mcp:tool, mcp:sampling] + STATE_DELTA
         Orch->>A2A: JSON-RPC SendMessage (convert-and-audit-budget, verify-travel-advisory, curate-neighborhood-cadence)
         A2A-->>Orch: Live Frankfurter FX + REST Countries v5 (api.restcountries.com, status: OK | ERROR)
-        Orch-->>Traveler: STEP_STARTED / FINISHED [a2a:task] + STATE_DELTA
+        Orch-->>Traveler: STEP_STARTED / ACTIVITY_SNAPSHOT / STEP_FINISHED [a2a:task] + STATE_DELTA
         Orch->>LLM: Synthesize Grounded Markdown Itinerary + TravelHonestyOutputGuardrail
         LLM-->>Orch: PartialResponseEvent Token Stream
-        Orch-->>Traveler: TEXT_DELTA -> RUN_FINISHED {status: "completed"}
+        Orch-->>Traveler: TEXT_MESSAGE_START / CONTENT / END -> RUN_FINISHED {outcome: "success"}
     end
 ```
 
@@ -138,15 +138,15 @@ examples/quarkus-svelte-skeleton/
 │       ├── NomadA2aAgentTools.java               # @Tool bridge delegating to Nomad-A2A-Specialist (:8082) with required-arg guards
 │       ├── NomadUiSurfaceTools.java              # @Tool beans for AG-UI ChoiceCards & HITL (>= $1,500 USD) sanctuary holds
 │       ├── NomadBackendReadinessChecks.java      # @Readiness HealthCheck beans alongside built-in McpClientHealthCheck (/q/health/ready)
-│       ├── NomadConciergeOrchestratorService.java # Adapts Multi<ChatEvent> via AgUiLangChain4jBridge + @McpClientName("nomad")
-│       ├── TripDossierStore.java                 # Synchronizes MCP resources & tool executions into AG-UI STATE_DELTA snapshots
-│       ├── AgentWebSocketEndpoint.java           # @WebSocket(path = "/api/agent/ws") full-duplex AG-UI endpoint
-│       ├── AgentResource.java                    # REST + SSE endpoints (/api/agent/run, /health, /approve, /params)
+│       ├── NomadConciergeOrchestratorService.java # Adapts Multi<ChatEvent> via AgUiQuarkusLangChain4jBridge + @McpClientName("nomad")
+│       ├── TripDossierStore.java                 # Synchronizes MCP resources & tool executions into RFC 6902 STATE_DELTA patches
+│       ├── AgentWebSocketEndpoint.java           # @WebSocket(path = "/api/agent/ws") delegating to reusable AgUiWebSocketHandler
+│       ├── AgentResource.java                    # REST + SSE endpoints (/api/agent/run, /chat, /catalog, /health, /params, /reset)
 │       └── A2aGatewayClient.java                 # Official A2A JSON-RPC client to a2a-server (:8082)
 └── frontend/                        # SvelteKit 5 (Runes) SPA packaged via Quarkus Quinoa
     ├── svelte.config.js             # @sveltejs/adapter-static (fallback: 'index.html' for Quinoa SPA routing)
     ├── src/lib/
-    │   ├── agui-client.js           # Pure state reducer (reduceAgUiEvent), summarizeHealthReport, Markdown exporter
+    │   ├── agui-client.js           # @agui/svelte adapter, RunAgentInput/Resume builders, reduceAgUiEvent, Markdown exporter
     │   ├── markdown.js              # Sanitized Markdown-to-HTML renderer with tabular-nums cost tables
     │   └── components/
     │       ├── AgentChatContainer.svelte  # Top-level 3-pane studio, Top-Bar Health Pill + Popover, WebSocket lifecycle
@@ -176,18 +176,18 @@ examples/quarkus-svelte-skeleton/
 ## 4. Feature Deep-Dive
 
 ### 4.1 Full-Duplex WebSockets (`/api/agent/ws`) & Sub-50ms State Sync
-- [`AgentWebSocketEndpoint`](file:///Users/fady/workspace/labs/quarkus-agui/examples/quarkus-svelte-skeleton/backend/src/main/java/org/agui/showcase/backend/AgentWebSocketEndpoint.java) uses Quarkus WebSockets Next (`@WebSocket(path = "/api/agent/ws")`) to multiplex bidirectional JSON frames over a single persistent connection:
-  - **Outbound Client Actions (`OUT` $\uparrow$)**: `RUN_AGENT`, `UPDATE_TRIP_PARAMS` (clicking `- 5N +` or switching `USD`/`EUR`/`GBP` in the Trip Dossier updates budget math in `<50ms` without an LLM round-trip), `APPROVE_HITL`, `CANCEL_RUN`, `RESET_MEMORY`, and `PING`.
-  - **Inbound Server Events (`IN` $\downarrow$)**: Standard AG-UI events (`RUN_STARTED`, `STATE_SNAPSHOT`, `TOOL_CALL`, `TOOL_RESULT`, `STEP_STARTED`, `STEP_FINISHED`, `STATE_DELTA`, `TEXT_DELTA`, `RUN_FINISHED`).
+- [`AgentWebSocketEndpoint`](file:///Users/fady/workspace/labs/quarkus-agui/examples/quarkus-svelte-skeleton/backend/src/main/java/org/agui/showcase/backend/AgentWebSocketEndpoint.java) uses Quarkus WebSockets Next (`@WebSocket(path = "/api/agent/ws")`) and reusable `AgUiWebSocketHandler` (`ag-ui-quarkus`) paired with `WebSocketAgent` (`@agui/svelte`) to multiplex bidirectional JSON frames over a single persistent connection:
+  - **Outbound Client Frames (`OUT` $\uparrow$)**: Canonical `RunAgentInput` (including `RunAgentInput.resume` for HITL `Interrupt` resolution), `UPDATE_TRIP_PARAMS` (clicking `- 5N +` or switching `USD`/`EUR`/`GBP` in the Trip Dossier updates budget math in `<50ms` without an LLM round-trip), `CANCEL_RUN`, `RESET_MEMORY`, and `ping`.
+  - **Inbound Server Events (`IN` $\downarrow$)**: Canonical upstream AG-UI events (`RUN_STARTED`, `STATE_SNAPSHOT`, RFC 6902 `STATE_DELTA`, `REASONING_MESSAGE_CONTENT`, `TOOL_CALL_START`, `TOOL_CALL_ARGS`, `TOOL_CALL_END`, `TOOL_CALL_RESULT`, `STEP_STARTED`, `ACTIVITY_SNAPSHOT`, `STEP_FINISHED`, `TEXT_MESSAGE_START`, `TEXT_MESSAGE_CONTENT`, `TEXT_MESSAGE_END`, `RUN_FINISHED`, `RUN_ERROR`).
 - If WebSockets are unavailable, [`AgentChatContainer.svelte`](file:///Users/fady/workspace/labs/quarkus-agui/examples/quarkus-svelte-skeleton/frontend/src/lib/components/AgentChatContainer.svelte) automatically falls back to `POST /api/agent/run` (`text/event-stream`).
 
 ### 4.2 Declarative `@RegisterAiService` + `@McpToolBox("nomad")`, Conversational Memory & Zero Assumed Defaults
-- [`NomadConciergeAiService`](file:///Users/fady/workspace/labs/quarkus-agui/examples/quarkus-svelte-skeleton/backend/src/main/java/org/agui/showcase/backend/NomadConciergeAiService.java) binds local Ollama (`ollama:llama3.2:latest`) declaratively via Quarkus LangChain4j (`@McpToolBox("nomad")` over Vert.x `QuarkusStreamableHttpMcpTransport`), maintains a 16-message sliding window per `@MemoryId` backed by `NomadChatMemoryStore`, and streams `Multi<ChatEvent>` through `AgUiLangChain4jBridge` (`quarkus-ag-ui-langchain4j`).
+- [`NomadConciergeAiService`](file:///Users/fady/workspace/labs/quarkus-agui/examples/quarkus-svelte-skeleton/backend/src/main/java/org/agui/showcase/backend/NomadConciergeAiService.java) binds local Ollama (`ollama:llama3.2:latest`) declaratively via Quarkus LangChain4j (`@McpToolBox("nomad")` over Vert.x `QuarkusStreamableHttpMcpTransport`), maintains a 16-message sliding window per `@MemoryId` backed by `NomadChatMemoryStore`, and streams `Multi<ChatEvent>` through `AgUiQuarkusLangChain4jBridge` (`ag-ui-quarkus-langchain4j`).
 - **Zero Assumed Defaults**: Neither MCP, A2A, backend, nor UI assumes `Kyoto`, `3`/`4` nights, `$3,200 USD`, or pre-filled traveler traits. When a traveler asks *"I want a trip in Paris"*, Nomad refuses to assume defaults and asks conversationally for any missing required parameters (**Destination**, **Duration**, **Budget & Currency**, **Travel Focus**) before invoking itinerary planning tools.
 
 ### 4.3 MicroProfile SmallRye Health (`/q/health/ready`), REST Countries v5 & Honest Error Surfacing
 - **Authenticated REST Countries v5 (`api.restcountries.com`)**: `NomadTravelAdvisorService` (`:8082`) queries `https://api.restcountries.com/countries/v5/names.common/{country}` with `Authorization: Bearer <RESTCOUNTRIES_API_KEY>` loaded from `.env`.
-- **Zero Silent Fake Fallbacks**: Any missing key or upstream HTTP error surfaces `isError: true` / `status: "ERROR"` across `TOOL_RESULT`, `STEP_FINISHED`, `ExecutionTimeline.svelte` (`Service Error`), `TurnFooter.svelte` (`UNAVAILABLE`), `ProtocolInspector.svelte` (`ERROR`), and the assistant reply.
+- **Zero Silent Fake Fallbacks**: Any missing key or upstream HTTP error surfaces `isError: true` / `status: "ERROR"` across `TOOL_CALL_RESULT`, `STEP_FINISHED`, `ExecutionTimeline.svelte` (`Service Error`), `TurnFooter.svelte` (`UNAVAILABLE`), `ProtocolInspector.svelte` (`ERROR`), and the assistant reply.
 - **Standard SmallRye Health (`/q/health/ready`)**: Live readiness probes run across `GET /q/health/ready` on `:8081`, `:8082`, and `:8080` (including `quarkus-langchain4j-mcp`'s built-in `McpClientHealthCheck`), powering the **Top-Bar Health Pill + Popover** (`All Systems Operational` / `Degraded • N API Down` / `Offline`).
 
 ### 4.4 Prompt-Injection Guardrails, Acoustic Mood Sampling & A2A Neighborhood Cadence
@@ -320,10 +320,10 @@ curl -s -X POST http://localhost:8082/api/a2a/audit \
   -H "Content-Type: application/json" \
   -d '{"skillId":"convert-and-audit-budget","prompt":"Convert $1,840 USD for Kyoto","context":{"city":"Kyoto","budgetUsd":1840}}' | jq .
 
-# 3. AG-UI Orchestrator (:8080) — Stream AG-UI SSE Frames (Full 4-Slot Trip Planning)
+# 3. AG-UI Orchestrator (:8080) — Stream Canonical AG-UI SSE Frames (Full 4-Slot Trip Planning)
 curl -N -X POST http://localhost:8080/api/agent/run \
   -H "Content-Type: application/json" \
-  -d '{"threadId":"thread-cli-1","prompt":"Plan a 4-night architecture and tea trip in Kyoto with a $2,400 USD budget"}'
+  -d '{"threadId":"thread-cli-1","runId":"run-cli-1","state":{},"messages":[{"id":"u-1","role":"user","content":"Plan a 4-night architecture and tea trip in Kyoto with a $2,400 USD budget"}],"tools":[],"context":[],"forwardedProps":{"llmMode":"ollama:llama3.2:latest"}}'
 ```
 
 ---
