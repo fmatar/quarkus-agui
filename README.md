@@ -84,10 +84,18 @@ curl -N -X POST http://localhost:8080/api/agent/run \
 ```
 
 ### 5. Bring Your Own Agent (BYOA) Contract
-To expose any `com.agui.community.core.agent.Agent`, LangChain4j `TokenStream`, Quarkiverse `@RegisterAiService` (`Multi<ChatEvent>`), MCP tool client, or A2A sub-agent over the canonical AG-UI protocol in **any Java 17+ framework** (Spring Boot, Quarkus, Helidon, Micronaut, Jakarta EE, or plain Java):
+To expose any `com.agui.community.core.agent.Agent`, LangChain4j `TokenStream`, Quarkiverse `@RegisterAiService` (`Multi<ChatEvent>`), MCP tool client, or A2A sub-agent over the canonical AG-UI protocol in **any Java 17+ framework** (Spring Boot, Quarkus, Helidon, Micronaut, Jakarta EE, or plain Java) and connect any Svelte 5 / JS client:
 1. Import `org.agui:ag-ui-bom` in `<dependencyManagement>` and add `org.agui:ag-ui-quarkus` (Quarkus SSE + WebSockets Next + Jackson MixIns + GraalVM reflection), `org.agui:ag-ui-langchain4j` (upstream `TokenStream` + RFC 6902 `AgUiStatePatch` + HITL `Interrupt`), `org.agui:ag-ui-quarkus-langchain4j` (Quarkiverse `Multi<ChatEvent>`), and/or `org.agui:ag-ui-a2a` (A2A `Task` delegation).
 2. Instantiate or `@Inject` `AgUiQuarkusBridge`, `AgUiWebSocketHandler`, `AgUiLangChain4jBridge`, `AgUiQuarkusLangChain4jBridge`, `AgUiMcpBridge`, `AgUiA2aBridge`, and `AgUiSessionRegistry`.
 3. Stream `Flow.Publisher<Event>` or Mutiny `Multi<String>` emitting canonical AG-UI SSE (`data: {...}\n\n`) and WebSocket frames (`RunAgentInput` $\rightarrow$ `RUN_STARTED` $\rightarrow$ `REASONING_*` $\rightarrow$ `STEP_*` $\rightarrow$ `TOOL_CALL_*` $\rightarrow$ `STATE_SNAPSHOT` / `STATE_DELTA` $\rightarrow$ `TEXT_MESSAGE_*` $\rightarrow$ `RUN_FINISHED` / `RUN_ERROR`).
+4. Connect any Svelte 5 / browser client with headless `@agui/svelte` (`HttpAgent`, `WebSocketAgent`, `createAgUiStore`, `applyJsonPatch`):
+   ```js
+   import { HttpAgent, WebSocketAgent, createAgUiStore } from '@agui/svelte';
+
+   const agent = new WebSocketAgent({ url: 'ws://localhost:8080/api/agent/ws', threadId: 'thread-1' });
+   const store = createAgUiStore({ agent });
+   await store.runAgent('Plan Kyoto', { forwardedProps: { llmMode: 'ollama:llama3.2:latest' } });
+   ```
 
 ---
 
@@ -100,7 +108,7 @@ To expose any `com.agui.community.core.agent.Agent`, LangChain4j `TokenStream`, 
 | **`ag-ui-langchain4j`** | [`ag-ui-langchain4j/`](ag-ui-langchain4j/pom.xml) | Framework-agnostic Java 17 `dev.langchain4j` `TokenStream` & `Agent` adapter (`AgUiLangChain4jBridge`, `AgUiStatePatch`, `AgUiMcpBridge`, `AgUiRunOptions`) | Works in Quarkus, Spring, Helidon, Micronaut & plain Java |
 | **`ag-ui-quarkus-langchain4j`** | [`ag-ui-quarkus-langchain4j/`](ag-ui-quarkus-langchain4j/pom.xml) | Java 17 Quarkiverse `Multi<ChatEvent>` reactive adapter (`AgUiQuarkusLangChain4jBridge`) | Decouples `quarkus-langchain4j-core` from `ag-ui-quarkus` |
 | **`ag-ui-a2a`** | [`ag-ui-a2a/`](ag-ui-a2a/pom.xml) | Framework-agnostic Java 17 A2A Protocol Bridge (`AgUiA2aBridge` over `org.a2aproject.sdk`) | Emits canonical `StepStarted`/`ActivitySnapshot`/`StepFinished` |
-| **`packages/agui-svelte`** | [`packages/agui-svelte/`](packages/agui-svelte/package.json) | Headless Svelte 5 Runes SDK (`@agui/svelte`) | CSS-framework-free AG-UI client & protocol telemetry |
+| **`packages/agui-svelte`** | [`packages/agui-svelte/`](packages/agui-svelte/package.json) | Headless Svelte 5 Runes & JS SDK (`@agui/svelte`) over `@ag-ui/client` + `@ag-ui/core` (`^1.0.4`) | `HttpAgent`, `WebSocketAgent`, RFC 6902 `applyJsonPatch`, & Tri-Protocol telemetry |
 | **`mcp-server` (`:8081`)** | [`examples/quarkus-svelte-skeleton/mcp-server/`](examples/quarkus-svelte-skeleton/mcp-server/pom.xml) | Java 25 Quarkus 3.40.1.1 Nomad MCP Server + SmallRye Health (`/q/health/ready`) + Jib Container (`nomad-agui-showcase/mcp-server:latest`) | `fetchCityWeather`, `discoverLocalCultureAndMedia`, `updateTripItinerary`, `saveTravelerPreferences`, `sampleAcousticMood`, `resetNomadState` |
 | **`a2a-server` (`:8082`)** | [`examples/quarkus-svelte-skeleton/a2a-server/`](examples/quarkus-svelte-skeleton/a2a-server/pom.xml) | Java 25 Quarkus 3.40.1.1 A2A Specialist Server + SmallRye Health (`/q/health/ready`) + Jib Container (`nomad-agui-showcase/a2a-server:latest`) | `convert-and-audit-budget` (Frankfurter FX), `verify-travel-advisory` (REST Countries v5 `api.restcountries.com`) |
 | **`backend` (`:8080`)** | [`examples/quarkus-svelte-skeleton/backend/`](examples/quarkus-svelte-skeleton/backend/pom.xml) | Java 25 Quarkus 3.40.1.1 `@RegisterAiService` + `@McpToolBox("nomad")` + SmallRye Health + **Quarkus Quinoa** + Jib Container (`nomad-agui-showcase/backend:latest`) | Serves SvelteKit 5 SPA, AG-UI WebSocket (`/api/agent/ws`), SSE (`/api/agent/run`), and `/q/health/ready` on `:8080` |

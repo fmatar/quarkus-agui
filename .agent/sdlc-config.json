@@ -34,6 +34,24 @@
       }
     },
     {
+      "name": "@agui/svelte",
+      "path": "packages/agui-svelte",
+      "stack": "node-sveltekit-pnpm",
+      "language": "typescript",
+      "commands": {
+        "test": "pnpm test",
+        "coverage": "pnpm run test:coverage",
+        "coverageFile": "coverage/coverage-summary.json",
+        "mutation": "pnpm run test:mutation 2>/dev/null || true",
+        "lint": "pnpm run check",
+        "build": "pnpm run build"
+      },
+      "thresholds": {
+        "diffCoverage": 85,
+        "mutationScore": 80
+      }
+    },
+    {
       "name": "quarkus-svelte-skeleton-frontend",
       "path": "examples/quarkus-svelte-skeleton/frontend",
       "stack": "node-sveltekit-pnpm",

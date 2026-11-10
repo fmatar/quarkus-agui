@@ -1,0 +1,6 @@
+packages:
+  - 'packages/*'
+  - 'examples/quarkus-svelte-skeleton/frontend'
+
+allowBuilds:
+  esbuild: true
