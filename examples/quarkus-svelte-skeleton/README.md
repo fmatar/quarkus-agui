@@ -79,35 +79,33 @@ flowchart TB
 
 ### 2.2 End-to-End Tri-Protocol Execution Sequence
 
-Every concierge turn classifies user intent (`TravelIntent`), enforces **Zero Assumed Defaults** (`TripSlotState` interactive slot-filling when destination, duration, budget/currency, or travel focus is missing), and streams typed `callType` metadata with **strict upstream error surfacing** (zero silent fake fallbacks):
+Every concierge turn streams through `@ApplicationScoped @RegisterAiService NomadConciergeAiService` + `@McpToolBox("nomad")` and `AgUiLangChain4jBridge`, enforces **Zero Assumed Defaults** (conversational slot elicitation when destination, duration, budget/currency, or travel focus is missing), and emits typed `callType` metadata with **strict upstream error surfacing** (zero silent fake fallbacks):
 
 ```mermaid
 sequenceDiagram
     autonumber
     actor Traveler as Traveler (:8080 UI)
-    participant Orch as backend (:8080)<br/>NomadConciergeOrchestratorService
+    participant Orch as backend (:8080)<br/>NomadConciergeAiService + AgUiLangChain4jBridge
     participant MCP as mcp-server (:8081/mcp)<br/>NomadMcpConciergeService
     participant A2A as a2a-server (:8082)<br/>NomadTravelAdvisorService
     participant LLM as Local Ollama (:11434)<br/>(Default: llama3.2:latest)
 
-    Traveler->>Orch: WS SEND_PROMPT {"threadId", "prompt", "mode"}
+    Traveler->>Orch: WS RUN_AGENT {"threadId", "prompt", "mode"}
     Orch-->>Traveler: RUN_STARTED -> STATE_SNAPSHOT
-    Orch-->>Traveler: STEP_STARTED / FINISHED [guardrail:input]<br/>(TravelSafetyAndInjectionGuardrail + Memory Context)
-    alt Missing Required Trip Slots (Destination / Duration / Budget / Focus)
-        Orch->>LLM: Conversational Slot-Filling Reply
-        Orch-->>Traveler: TEXT_DELTA + StructuredResponseBlock [trip-slot-elicitation] -> RUN_FINISHED
-    else All Trip Planning Slots Supplied
-        Orch->>MCP: MCP prompts/get + resources/read + tools/call (fetchCityWeather)
-        MCP-->>Orch: ToolResponse (Live Open-Meteo Telemetry or isError=true)
-        Orch-->>Traveler: STEP / TOOL_CALL / TOOL_RESULT [mcp:prompt, mcp:resource, mcp:tool] + STATE_DELTA
-        Orch->>MCP: MCP tools/call (discoverLocalCultureAndMedia & updateTripItinerary)
-        MCP-->>Orch: ToolResponse (Wikipedia Landmark + iTunes 30s Audio + Sanctuary Hold)
-        Orch-->>Traveler: TOOL_CALL / TOOL_RESULT [mcp:tool] + [tool:function sampleAcousticMoodProfile]
-        Orch->>A2A: GET /.well-known/agent-card.json + JSON-RPC SendMessage<br/>(convert-and-audit-budget, verify-travel-advisory, curate-neighborhood-cadence)
-        A2A-->>Orch: Live Frankfurter FX + Honest Upstream Status (status: OK | ERROR)
-        Orch-->>Traveler: STEP_STARTED / FINISHED [a2a:discovery, a2a:task, a2a:artifact] + STATE_DELTA
-        Orch->>LLM: Synthesize Grounded Markdown Itinerary (Honoring Upstream Errors)
-        LLM-->>Orch: Streaming Tokens
+    Orch-->>Orch: TravelSafetyInputGuardrail (@InputGuardrails) + NomadChatMemoryStore
+    alt Missing Required Trip Details (Destination / Duration / Budget / Focus)
+        Orch->>LLM: Conversational Slot-Elicitation Turn
+        Orch-->>Traveler: TEXT_DELTA (Ask Missing Parameters) -> RUN_FINISHED
+    else All Trip Planning Details Supplied
+        Orch->>LLM: @McpToolBox("nomad") + A2A & UI @Tool Schemas
+        Orch->>MCP: MCP tools/call (fetchCityWeather, discoverLocalCultureAndMedia, sampleAcousticMood)
+        MCP-->>Orch: ToolResponse (Live Open-Meteo, Wikipedia, iTunes 30s Audio or isError=true)
+        Orch-->>Traveler: TOOL_CALL / TOOL_RESULT [mcp:tool, mcp:sampling] + STATE_DELTA
+        Orch->>A2A: JSON-RPC SendMessage (convert-and-audit-budget, verify-travel-advisory, curate-neighborhood-cadence)
+        A2A-->>Orch: Live Frankfurter FX + REST Countries v5 (api.restcountries.com, status: OK | ERROR)
+        Orch-->>Traveler: STEP_STARTED / FINISHED [a2a:task] + STATE_DELTA
+        Orch->>LLM: Synthesize Grounded Markdown Itinerary + TravelHonestyOutputGuardrail
+        LLM-->>Orch: PartialResponseEvent Token Stream
         Orch-->>Traveler: TEXT_DELTA -> RUN_FINISHED {status: "completed"}
     end
 ```
@@ -179,7 +177,7 @@ examples/quarkus-svelte-skeleton/
 
 ### 4.1 Full-Duplex WebSockets (`/api/agent/ws`) & Sub-50ms State Sync
 - [`AgentWebSocketEndpoint`](file:///Users/fady/workspace/labs/quarkus-agui/examples/quarkus-svelte-skeleton/backend/src/main/java/org/agui/showcase/backend/AgentWebSocketEndpoint.java) uses Quarkus WebSockets Next (`@WebSocket(path = "/api/agent/ws")`) to multiplex bidirectional JSON frames over a single persistent connection:
-  - **Outbound Client Actions (`OUT` $\uparrow$)**: `RUN_AGENT` (`SEND_PROMPT`), `UPDATE_TRIP_PARAMS` (clicking `- 5N +` or switching `USD`/`EUR`/`GBP` in the Trip Dossier updates budget math in `<50ms` without an LLM round-trip), `HITL_APPROVE`, `CANCEL_RUN`, `RESET_MEMORY`, and `PING`.
+  - **Outbound Client Actions (`OUT` $\uparrow$)**: `RUN_AGENT`, `UPDATE_TRIP_PARAMS` (clicking `- 5N +` or switching `USD`/`EUR`/`GBP` in the Trip Dossier updates budget math in `<50ms` without an LLM round-trip), `APPROVE_HITL`, `CANCEL_RUN`, `RESET_MEMORY`, and `PING`.
   - **Inbound Server Events (`IN` $\downarrow$)**: Standard AG-UI events (`RUN_STARTED`, `STATE_SNAPSHOT`, `TOOL_CALL`, `TOOL_RESULT`, `STEP_STARTED`, `STEP_FINISHED`, `STATE_DELTA`, `TEXT_DELTA`, `RUN_FINISHED`).
 - If WebSockets are unavailable, [`AgentChatContainer.svelte`](file:///Users/fady/workspace/labs/quarkus-agui/examples/quarkus-svelte-skeleton/frontend/src/lib/components/AgentChatContainer.svelte) automatically falls back to `POST /api/agent/run` (`text/event-stream`).
 
@@ -193,9 +191,9 @@ examples/quarkus-svelte-skeleton/
 - **Standard SmallRye Health (`/q/health/ready`)**: Live readiness probes run across `GET /q/health/ready` on `:8081`, `:8082`, and `:8080` (including `quarkus-langchain4j-mcp`'s built-in `McpClientHealthCheck`), powering the **Top-Bar Health Pill + Popover** (`All Systems Operational` / `Degraded • N API Down` / `Offline`).
 
 ### 4.4 Prompt-Injection Guardrails, Acoustic Mood Sampling & A2A Neighborhood Cadence
-- **OWASP-LLM01 Input Guardrail (`guardrail:input`)**: Validates prompt safety and blocks prompt-injection patterns (`ignore previous instructions`, `reveal your system prompt`, `jailbreak`, `bypass safety`) before invoking downstream tools or LLMs.
-- **Native MCP Prompt, Resource & Acoustic Sampling (`mcp:prompt`, `mcp:resource`, `tool:function`)**: Expands `weekend-cultural-escape`, reads `traveler://preferences` and `itinerary://city/{city}/dossier` over `:8081/mcp`, and samples regional acoustic mood profiles tailored to live destination weather.
-- **A2A Specialist Skills & Artifacts (`a2a:discovery`, `a2a:task`, `a2a:artifact`)**: Discovers `GET /.well-known/agent-card.json` and delegates `convert-and-audit-budget` (Frankfurter FX), `verify-travel-advisory` (REST Countries), and `curate-neighborhood-cadence` (`neighborhood-cadence-{city}` artifact).
+- **OWASP-LLM01 & LLM07 Guardrails (`TravelSafetyInputGuardrail`, `TravelHonestyOutputGuardrail`)**: Validates prompt safety on `@RegisterAiService` input and verifies grounded assistant completions before finalizing turns.
+- **Native MCP Tools, Resources & Acoustic Sampling (`mcp:tool`, `mcp:resource`, `mcp:sampling`)**: Discovers `@Tool` schemas via `@McpToolBox("nomad")`, reads `itinerary://active-trip` and `traveler://preferences` via `@McpClientName("nomad")`, and samples regional acoustic mood profiles (`sampleAcousticMood`) tailored to live destination weather.
+- **A2A Specialist Skills & Artifacts (`a2a:task`)**: Discovers `GET /.well-known/agent-card.json` and delegates `convert-and-audit-budget` (Frankfurter FX), `verify-travel-advisory` (REST Countries v5 `api.restcountries.com`), and `curate-neighborhood-cadence`.
 
 ### 4.5 Wide-Resolution (`2560x1440`) Editorial Layout & Deep-Linked Sources
 - On wide viewports (`@container turn-card (inline-size > 820px)`), [`AssistantTurn.svelte`](file:///Users/fady/workspace/labs/quarkus-agui/examples/quarkus-svelte-skeleton/frontend/src/lib/components/agui/AssistantTurn.svelte) switches into a 2-column **Editorial Split**: narrative prose and budget breakdown table on the left (`1.38fr`), paired with a sticky right-hand companion rail (`0.92fr`) housing the `16:10` architectural photograph, native `<dialog>` top-layer lightbox, 30-second Apple iTunes audio preview player, and interactive choice cards.
@@ -280,7 +278,7 @@ For scale-to-zero serverless deployments (`~25–45ms` cold startup, `~50MB` RSS
 - **Home Currency Switcher (`USD` / `EUR` / `GBP`)**: Re-anchors the budget bar and live Frankfurter ECB exchange rate badge immediately.
 - **Concierge Verifications**: Trigger targeted 1-click actions once a destination is active:
   - **`Audit FX & Trip Budget`** (`A2A` Frankfurter FX)
-  - **`Verify Entry & Travel Advisory`** (`A2A` REST Countries — surfaces deprecation errors honestly)
+  - **`Verify Entry & Travel Advisory`** (`A2A` REST Countries v5 `api.restcountries.com`)
   - **`Hold Sanctuary Suite ($1,840)`** (`HITL` approval gate `>$1,500`)
 - **`Export .md`**: Downloads the current destination's curated itinerary, weather telemetry, FX rates, and traveler profile as a Markdown file (`nomad-paris-dossier.md`).
 
@@ -296,7 +294,7 @@ Press `/` in the prompt bar (or `⌘K` / `Ctrl+K` anywhere) to open the keyboard
 | `/media` | **MCP Media** — fetches Wikipedia landmark photography & 30s Apple iTunes audio | `Play local Fado music from Lisbon` |
 | `/choices` | **AG-UI ChoiceGroup** — renders interactive multi-select neighborhood cards | `Give me 4 multi_select evening options in Beirut to pick from` |
 | `/mcp` | **MCP** — queries live Open-Meteo geocoding & forecast over `:8081/mcp` | `What is the weather in Oaxaca right now?` |
-| `/a2a` | **A2A** — runs live REST Countries advisory check (surfaces upstream deprecations) | `Check the travel advisory for Beirut` |
+| `/a2a` | **A2A** — runs live REST Countries v5 (`api.restcountries.com`) advisory check | `Check the travel advisory for Beirut` |
 | `/hitl` | **HITL Gate** — triggers the `>$1,500` Human-in-the-Loop sanctuary hold gate | `Reserve Hoshinoya Arashiyama Pavilion in Kyoto for 4 nights ($1840)` |
 
 ---

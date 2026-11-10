@@ -574,7 +574,7 @@ class NomadConciergeOrchestratorServiceTest {
         Map<String, Object> prefsAfter = (Map<String, Object>) dossierStore.readTripDossierState().get("preferences");
         assertEquals("Nadia", prefsAfter.get("travelerName"));
         assertEquals("vegan", prefsAfter.get("dietary"));
-        assertEquals("chf", prefsAfter.get("homeCurrency"));
+        assertEquals("CHF", prefsAfter.get("homeCurrency"));
         assertEquals("CHF", ((Map<?, ?>) dossierStore.readTripDossierState().get("nomadTrip")).get("homeCurrency"));
 
         // Error tool execution does not overwrite preferences/weather/culture/budget
@@ -704,7 +704,9 @@ class NomadConciergeOrchestratorServiceTest {
         assertEquals("Portugal", lisbonTrip.get("country"));
         assertEquals(20.5, lisbonTrip.get("temperatureC"));
         assertEquals("Sunny", lisbonTrip.get("weatherCondition"));
-        assertEquals("Fado Song", lisbonTrip.get("soundtrack"));
+        Map<?, ?> lisbonSoundtrack = (Map<?, ?>) lisbonTrip.get("soundtrack");
+        assertEquals("Fado Song", lisbonSoundtrack.get("trackName"));
+        assertEquals("Amalia", lisbonSoundtrack.get("artistName"));
         assertEquals("EUR", lisbonTrip.get("currency"));
         assertEquals("USD", lisbonTrip.get("homeCurrency"));
         assertEquals(2200.0, lisbonTrip.get("budgetUsd"));
@@ -716,7 +718,9 @@ class NomadConciergeOrchestratorServiceTest {
         assertTrue(oaxacaFrames.stream().anyMatch(f -> f.contains("mcp:sampling")));
         assertTrue(oaxacaFrames.stream().anyMatch(f -> f.contains("tool:ui")));
         assertFalse(oaxacaFrames.stream().anyMatch(f -> f.contains("hitl:approval")));
-        assertEquals("Oaxaca Marimba Dusk", ((Map<?, ?>) dossierStore.readTripDossierState().get("nomadTrip")).get("soundtrack"));
+        Map<?, ?> oaxacaSoundtrack = (Map<?, ?>) ((Map<?, ?>) dossierStore.readTripDossierState().get("nomadTrip")).get("soundtrack");
+        assertEquals("Oaxaca Marimba Dusk", oaxacaSoundtrack.get("trackName"));
+        assertEquals("Sampled Acoustic Mood", oaxacaSoundtrack.get("artistName"));
 
         // 4. Honest REST Countries v5 advisory success vs upstream error
         List<String> advOkFrames = orchestrator.streamRun(

@@ -476,7 +476,7 @@
 				: healthSummary.status === 'UNKNOWN'
 					? 'bg-[#F6F5F2] text-[#575551]'
 					: 'bg-[#FBEEE9] text-[#C84B31]'}"
-			title="Click to inspect live upstream & protocol healthchecks (/api/agent/health)"
+			title="Click to inspect live upstream & protocol healthchecks (/q/health/ready)"
 		>
 			{#if healthSummary.status === 'UP'}
 				<Activity class="size-2.5" />

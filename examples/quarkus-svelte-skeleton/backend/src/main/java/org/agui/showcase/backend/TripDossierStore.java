@@ -342,9 +342,10 @@ public class TripDossierStore {
             for (String field : List.of("travelerName", "style", "dietary", "musicTaste", "pace", "homeCurrency")) {
                 Object val = result.get(field) != null ? result.get(field) : args.get(field);
                 if (val instanceof String s && !s.isBlank()) {
-                    preferences.put(field, s.trim());
+                    String normalized = "homeCurrency".equals(field) ? s.trim().toUpperCase(Locale.ROOT) : s.trim();
+                    preferences.put(field, normalized);
                     if ("homeCurrency".equals(field)) {
-                        nomadTrip.put("homeCurrency", s.trim().toUpperCase(Locale.ROOT));
+                        nomadTrip.put("homeCurrency", normalized);
                     }
                 }
             }
@@ -397,11 +398,11 @@ public class TripDossierStore {
                     "subtitle", "Wikipedia REST API v1 • Verified Landmark Photography",
                     "url", imgUrl));
         }
-        String trackTitle = null;
+        Map<String, Object> soundtrackEntry = null;
         if (result.get("audioTrack") instanceof Map<?, ?> track
                 && track.get("previewUrl") instanceof String previewUrl
                 && !previewUrl.isBlank()) {
-            trackTitle = track.get("trackName") != null ? String.valueOf(track.get("trackName")) : city + " Acoustic Session";
+            String trackTitle = track.get("trackName") != null ? String.valueOf(track.get("trackName")) : city + " Acoustic Session";
             String artistName = track.get("artistName") != null ? String.valueOf(track.get("artistName")) : "Regional Artist";
             mediaItems.add(Map.of(
                     "type", "audio",
@@ -409,22 +410,30 @@ public class TripDossierStore {
                     "subtitle", artistName,
                     "url", previewUrl,
                     "durationSeconds", 30));
+            soundtrackEntry = Map.of(
+                    "trackName", trackTitle,
+                    "artistName", artistName,
+                    "previewUrl", previewUrl,
+                    "durationSeconds", 30);
         }
         if (!mediaItems.isEmpty()) {
             turnMedia.put(threadKey, mediaItems);
         }
         synchronized (stateLock) {
             nomadTrip.putIfAbsent("activeCity", city);
-            if (trackTitle != null) {
-                nomadTrip.put("soundtrack", trackTitle);
+            if (soundtrackEntry != null) {
+                nomadTrip.put("soundtrack", soundtrackEntry);
             }
         }
     }
 
     private void applyAcousticMoodResult(Map<String, Object> result, boolean isError) {
         if (!isError && result.get("sampledMood") instanceof String mood && !mood.isBlank()) {
+            String window = stringOrDefault(result.get("recommendedListeningWindow"), "Sampled Acoustic Mood");
             synchronized (stateLock) {
-                nomadTrip.put("soundtrack", mood);
+                nomadTrip.put("soundtrack", Map.of(
+                        "trackName", mood.trim(),
+                        "artistName", window));
             }
         }
     }

@@ -15,7 +15,7 @@
 
 ## 2. Decision
 1. **New `quarkus-ag-ui-langchain4j` Extension Module (`org.agui:quarkus-ag-ui-langchain4j` + `-deployment`)**:
-   - Added to `quarkus-extension/langchain4j/` and `quarkus-extension/langchain4j-deployment/` and managed in `quarkus-ag-ui-bom`.
+   - Added to `quarkus-extension/langchain4j/runtime/` and `quarkus-extension/langchain4j/deployment/` and managed in `quarkus-ag-ui-bom`.
    - Provides `AgUiLangChain4jBridge`, `AgUiRunOptions`, and `AgUiToolClassifier` to translate Quarkus LangChain4j `Multi<ChatEvent>` streams (`BeforeToolExecutionEvent`, `ToolExecutedEvent`, `PartialResponseEvent`, `AccumulatedResponseEvent`, `ChatCompletedEvent`) and guardrail exceptions directly into non-blocking AG-UI protocol events (`RUN_STARTED`, `STATE_SNAPSHOT`, `STEP_STARTED`/`STEP_FINISHED`, `TOOL_CALL`/`TOOL_RESULT`, `STATE_DELTA`, `TEXT_DELTA`, `RUN_FINISHED`).
 2. **Declarative `@ApplicationScoped @RegisterAiService` + `@McpToolBox("nomad")` + `@McpClientName("nomad")`**:
    - Deleted custom `McpGatewayClient.java` and removed the `src/main` `"deterministic"` engine.
