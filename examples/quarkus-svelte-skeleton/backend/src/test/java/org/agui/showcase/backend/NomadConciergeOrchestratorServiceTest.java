@@ -748,6 +748,9 @@ class NomadConciergeOrchestratorServiceTest {
         unreachable.ollamaBaseUrl = "http://127.0.0.1:1";
         assertEquals(HealthCheckResponse.Status.DOWN, unreachable.probeMcpUpstreams().getStatus());
         assertEquals(HealthCheckResponse.Status.DOWN, unreachable.probeOllamaEndpoint().getStatus());
+
+        // Cold-start specialist taking >2.5s (e.g. 2.7s cold TLS handshake) succeeds under default 6s probe timeout
+        assertTrue(unreachable.probeTimeoutMs >= 6000L, "Default readiness probe timeout must be >= 6000ms to prevent cold-start 2.5s timeouts");
     }
 
     @Test

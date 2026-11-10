@@ -2,7 +2,9 @@ package org.agui.showcase.a2a;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.quarkus.runtime.StartupEvent;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.event.Observes;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.net.URI;
@@ -19,6 +21,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executors;
 import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -72,8 +76,21 @@ public class NomadTravelAdvisorService {
     @ConfigProperty(name = "agui.health.cache-ttl-ms", defaultValue = "300000")
     long healthCacheTtlMs = 300_000L;
 
+    @ConfigProperty(name = "agui.health.degraded-cache-ttl-ms", defaultValue = "5000")
+    long degradedHealthCacheTtlMs = 5_000L;
+
+    @ConfigProperty(name = "agui.health.warmup-on-start", defaultValue = "true")
+    boolean warmupOnStart = true;
+
+    private final Object healthRefreshLock = new Object();
     private volatile Map<String, Object> cachedHealthReport;
     private volatile long cachedHealthExpiresAtMs;
+
+    void onStartup(@Observes StartupEvent event) {
+        if (warmupOnStart) {
+            Thread.ofVirtual().name("nomad-a2a-health-warmup").start(this::checkHealth);
+        }
+    }
 
     Function<String, UpstreamHttpResult> httpProbe = this::probeUrlViaHttp;
 
@@ -443,33 +460,50 @@ public class NomadTravelAdvisorService {
         if (cached != null && now < cachedHealthExpiresAtMs) {
             return cached;
         }
-        List<Map<String, Object>> upstreams = new ArrayList<>();
-        upstreams.add(probeUpstreamHealth(
-                "frankfurter",
-                "Frankfurter ECB FX API",
-                "api.frankfurter.dev",
-                frankfurterBaseUrl + "/v1/latest?base=USD&symbols=EUR",
-                httpProbe));
-        upstreams.add(probeUpstreamHealth(
-                "restcountries",
-                "REST Countries v5 Travel Advisory API",
-                "api.restcountries.com",
-                restCountriesBaseUrl + "/countries/v5/names.common/France?response_fields=names.common,region",
-                this::probeRestCountriesV5));
+        synchronized (healthRefreshLock) {
+            long refreshedNow = System.currentTimeMillis();
+            Map<String, Object> rechecked = cachedHealthReport;
+            if (rechecked != null && refreshedNow < cachedHealthExpiresAtMs) {
+                return rechecked;
+            }
+            List<Map<String, Object>> upstreams;
+            try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+                CompletableFuture<Map<String, Object>> frankfurterFuture = CompletableFuture.supplyAsync(
+                        () -> probeUpstreamHealth(
+                                "frankfurter",
+                                "Frankfurter ECB FX API",
+                                "api.frankfurter.dev",
+                                frankfurterBaseUrl + "/v1/latest?base=USD&symbols=EUR",
+                                httpProbe),
+                        executor);
+                CompletableFuture<Map<String, Object>> restCountriesFuture = CompletableFuture.supplyAsync(
+                        () -> probeUpstreamHealth(
+                                "restcountries",
+                                "REST Countries v5 Travel Advisory API",
+                                "api.restcountries.com",
+                                restCountriesBaseUrl + "/countries/v5/names.common/France?response_fields=names.common,region",
+                                this::probeRestCountriesV5),
+                        executor);
+                upstreams = List.of(frankfurterFuture.join(), restCountriesFuture.join());
+            }
 
-        long upCount = upstreams.stream().filter(u -> "UP".equals(u.get("status"))).count();
-        String overall = upCount == upstreams.size() ? "UP" : (upCount == 0 ? "DOWN" : "DEGRADED");
+            long upCount = upstreams.stream().filter(u -> "UP".equals(u.get("status"))).count();
+            String overall = upCount == upstreams.size() ? "UP" : (upCount == 0 ? "DOWN" : "DEGRADED");
 
-        Map<String, Object> report = new LinkedHashMap<>();
-        report.put("server", AGENT_NAME);
-        report.put("status", overall);
-        report.put("healthyCount", upCount);
-        report.put("totalCount", upstreams.size());
-        report.put("upstreams", List.copyOf(upstreams));
-        Map<String, Object> snapshot = Collections.unmodifiableMap(report);
-        cachedHealthReport = snapshot;
-        cachedHealthExpiresAtMs = now + Math.max(0L, healthCacheTtlMs);
-        return snapshot;
+            Map<String, Object> report = new LinkedHashMap<>();
+            report.put("server", AGENT_NAME);
+            report.put("status", overall);
+            report.put("healthyCount", upCount);
+            report.put("totalCount", upstreams.size());
+            report.put("upstreams", upstreams);
+            Map<String, Object> snapshot = Collections.unmodifiableMap(report);
+            long ttlMs = "UP".equals(overall)
+                    ? Math.max(0L, healthCacheTtlMs)
+                    : Math.min(Math.max(0L, healthCacheTtlMs), Math.max(0L, degradedHealthCacheTtlMs));
+            cachedHealthReport = snapshot;
+            cachedHealthExpiresAtMs = System.currentTimeMillis() + ttlMs;
+            return snapshot;
+        }
     }
 
     private Map<String, Object> probeUpstreamHealth(

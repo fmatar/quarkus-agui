@@ -2,7 +2,7 @@
 
 - **Author:** Agentic SDLC Product Autopilot (`sdlc-product`)
 - **Status:** `APPROVED (Amended by ADR-004, ADR-005, ADR-006 & ADR-007)`
-- **Version:** `0.1.0`
+- **Version:** `0.1.1`
 - **License:** Apache-2.0 OR MIT
 - **Constitution Link:** [`PRODUCT.md`](../../PRODUCT.md)
 - **ADR Links:** [`ADR-001`](../adr/ADR-001-multi-module-maven-sveltekit-clean-architecture-.md), [`ADR-002`](../adr/ADR-002-example-first-tri-protocol-ag-ui-mcp-a2a-evoluti.md), [`ADR-003`](../adr/ADR-003-multi-extension-bom-and-concentric-transport-arc.md), [`ADR-004`](../adr/ADR-004-nomad-concierge-and-svelte5-agui-component-kit.md), [`ADR-005`](../adr/ADR-005-quarkus-langchain4j-mcp-and-smallrye-health.md), [`ADR-006`](../adr/ADR-006-framework-agnostic-module-topology-ag-ui-core-ag.md), [`ADR-007`](../adr/ADR-007-adopt-upstream-ag-ui-sdks-com-ag-ui-community-ag.md)

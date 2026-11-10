@@ -16,6 +16,8 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executors;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.eclipse.microprofile.health.HealthCheck;
 import org.eclipse.microprofile.health.HealthCheckResponse;
@@ -48,6 +50,9 @@ public class NomadBackendReadinessChecks {
     @ConfigProperty(name = "quarkus.langchain4j.ollama.chat-model.model-id", defaultValue = "llama3.2:latest")
     String defaultOllamaModel = "llama3.2:latest";
 
+    @ConfigProperty(name = "agui.health.probe-timeout-ms", defaultValue = "6000")
+    long probeTimeoutMs = 6000L;
+
     HealthCheckResponse probeMcpUpstreams() {
         return probeSmallRyeEndpoint("nomad-mcp-upstreams", mcpHealthUrl);
     }
@@ -61,7 +66,7 @@ public class NomadBackendReadinessChecks {
         builder.withData("endpoint", url);
         try {
             HttpRequest req = HttpRequest.newBuilder(URI.create(url))
-                    .timeout(Duration.ofMillis(2500))
+                    .timeout(Duration.ofMillis(Math.max(500L, probeTimeoutMs)))
                     .GET()
                     .build();
             HttpResponse<String> res = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
@@ -136,9 +141,23 @@ public class NomadBackendReadinessChecks {
                     "error", ex.getMessage() == null ? "MCP ping failed" : ex.getMessage()));
         }
 
-        appendHealthResponseEntries(services, probeSmallRyeEndpoint("nomad-mcp-upstreams", mcpHealthUrl), "Quarkus MCP Server (:8081)");
-        appendHealthResponseEntries(services, probeSmallRyeEndpoint("nomad-a2a-specialist", a2aBaseUrl + "/q/health/ready"), "Quarkus A2A Specialist (:8082)");
-        appendHealthResponseEntries(services, probeOllamaEndpoint(), "Ollama Local LLM (" + defaultOllamaModel + ")");
+        HealthCheckResponse mcpRes;
+        HealthCheckResponse a2aRes;
+        HealthCheckResponse ollamaRes;
+        try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            CompletableFuture<HealthCheckResponse> mcpFuture = CompletableFuture.supplyAsync(
+                    () -> probeSmallRyeEndpoint("nomad-mcp-upstreams", mcpHealthUrl), executor);
+            CompletableFuture<HealthCheckResponse> a2aFuture = CompletableFuture.supplyAsync(
+                    () -> probeSmallRyeEndpoint("nomad-a2a-specialist", a2aBaseUrl + "/q/health/ready"), executor);
+            CompletableFuture<HealthCheckResponse> ollamaFuture = CompletableFuture.supplyAsync(
+                    this::probeOllamaEndpoint, executor);
+            mcpRes = mcpFuture.join();
+            a2aRes = a2aFuture.join();
+            ollamaRes = ollamaFuture.join();
+        }
+        appendHealthResponseEntries(services, mcpRes, "Quarkus MCP Server (:8081)");
+        appendHealthResponseEntries(services, a2aRes, "Quarkus A2A Specialist (:8082)");
+        appendHealthResponseEntries(services, ollamaRes, "Ollama Local LLM (" + defaultOllamaModel + ")");
 
         long upCount = services.stream().filter(s -> "UP".equals(s.get("status"))).count();
         String overall = upCount == services.size() ? "UP" : (upCount == 0 ? "DOWN" : "DEGRADED");

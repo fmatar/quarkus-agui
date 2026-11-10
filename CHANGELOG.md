@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-10
+
+### Fixed
+- fix(showcase,health,docker): eliminate cold-start `SRHCK01001` readiness timeouts (`http://a2a-server:8082/q/health/ready` `request timed out`) by parallelizing `NomadTravelAdvisorService` (`frankfurter` + `restcountries`) and `NomadMcpConciergeService` (`open-meteo` + `wikipedia` + `itunes`) upstream health probes on Virtual Threads behind single-flight refresh locks, pre-warming health caches asynchronously on Quarkus `StartupEvent` (`agui.health.warmup-on-start=true`), capping degraded health cache TTL at `5,000ms` (`agui.health.degraded-cache-ttl-ms=5000`), parallelizing `NomadBackendReadinessChecks.checkAllServices` with `agui.health.probe-timeout-ms=6000`, enforcing `condition: service_healthy` startup ordering in `docker-compose.yml`, and adding bounded auto-retry to `AgentChatContainer.svelte` ([#90](https://github.com/fmatar/quarkus-agui/issues/90))
+
 ## [0.1.0] - 2026-11-10
 
 ### Changed
