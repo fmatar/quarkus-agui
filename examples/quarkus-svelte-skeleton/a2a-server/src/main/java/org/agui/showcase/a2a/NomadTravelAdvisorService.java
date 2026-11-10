@@ -13,6 +13,7 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -65,10 +66,18 @@ public class NomadTravelAdvisorService {
     @ConfigProperty(name = "restcountries.api-key")
     Optional<String> restCountriesApiKey = Optional.empty();
 
+    @ConfigProperty(name = "agui.health.cache-ttl-ms", defaultValue = "300000")
+    long healthCacheTtlMs = 300_000L;
+
+    private volatile Map<String, Object> cachedHealthReport;
+    private volatile long cachedHealthExpiresAtMs;
+
     Function<String, UpstreamHttpResult> httpProbe = this::probeUrlViaHttp;
 
     void setHttpProbe(Function<String, UpstreamHttpResult> probe) {
         this.httpProbe = probe == null ? this::probeUrlViaHttp : probe;
+        this.cachedHealthReport = null;
+        this.cachedHealthExpiresAtMs = 0L;
     }
 
     public record UpstreamHttpResult(int statusCode, String body, String error, long latencyMs) {
@@ -215,7 +224,7 @@ public class NomadTravelAdvisorService {
 
             String summary = String.format(
                     Locale.ROOT,
-                    "Frankfurter FX audit complete for %s (%s): %,.0f %s = %,.2f %s (rate %.4f). Sanctuary holds >$1,500 require traveler confirmation.",
+                    "Frankfurter FX audit complete for %s (%s): %,.0f %s = %,.2f %s (rate %.4f).",
                     city, country, budgetAmount, baseCurrency, convertedTotal, targetCurrency, rate);
             return new AuditResult(summary, "art-fx-1", "Nomad Multi-Currency & Budget Audit", data);
         } catch (Exception ex) {
@@ -354,6 +363,11 @@ public class NomadTravelAdvisorService {
     }
 
     public Map<String, Object> checkHealth() {
+        long now = System.currentTimeMillis();
+        Map<String, Object> cached = cachedHealthReport;
+        if (cached != null && now < cachedHealthExpiresAtMs) {
+            return cached;
+        }
         List<Map<String, Object>> upstreams = new ArrayList<>();
         upstreams.add(probeUpstreamHealth(
                 "frankfurter",
@@ -376,8 +390,11 @@ public class NomadTravelAdvisorService {
         report.put("status", overall);
         report.put("healthyCount", upCount);
         report.put("totalCount", upstreams.size());
-        report.put("upstreams", upstreams);
-        return report;
+        report.put("upstreams", List.copyOf(upstreams));
+        Map<String, Object> snapshot = Collections.unmodifiableMap(report);
+        cachedHealthReport = snapshot;
+        cachedHealthExpiresAtMs = now + Math.max(0L, healthCacheTtlMs);
+        return snapshot;
     }
 
     private Map<String, Object> probeUpstreamHealth(

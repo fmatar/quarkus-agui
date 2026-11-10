@@ -99,9 +99,6 @@
 					const parsed = JSON.parse(msgEvt.data);
 					if (parsed && parsed.type && parsed.type !== 'pong') {
 						workbench = reduceAgUiEvent(workbench, parsed);
-						if (parsed.type === 'RUN_FINISHED') {
-							refreshSystemHealth();
-						}
 					}
 				} catch {
 					// ignore malformed frame
@@ -265,7 +262,6 @@
 					isStreaming: false
 				};
 			}
-			refreshSystemHealth();
 		}
 	}
 
@@ -311,7 +307,6 @@
 					isStreaming: false
 				};
 			}
-			refreshSystemHealth();
 		}
 	}
 
