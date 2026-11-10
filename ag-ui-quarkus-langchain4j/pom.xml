@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.agui</groupId>
+        <artifactId>ag-ui-java-parent</artifactId>
+        <version>0.1.0</version>
+    </parent>
+
+    <artifactId>ag-ui-quarkus-langchain4j</artifactId>
+    <name>AG-UI Quarkiverse LangChain4j Adapter (ag-ui-quarkus-langchain4j)</name>
+    <description>Reactive Quarkiverse LangChain4j Multi&lt;ChatEvent&gt; adapter for canonical AG-UI Event and SSE streams</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.agui</groupId>
+            <artifactId>ag-ui-quarkus</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.agui</groupId>
+            <artifactId>ag-ui-langchain4j</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkiverse.langchain4j</groupId>
+            <artifactId>quarkus-langchain4j-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <systemPropertyVariables>
+                        <java.util.logging.manager>java.util.logging.LogManager</java.util.logging.manager>
+                    </systemPropertyVariables>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <groupId>org.pitest</groupId>
+                <artifactId>pitest-maven</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+</project>

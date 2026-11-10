@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.agui</groupId>
+        <artifactId>ag-ui-java-parent</artifactId>
+        <version>0.1.0</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>ag-ui-bom</artifactId>
+    <packaging>pom</packaging>
+
+    <name>AG-UI Java - BOM (ag-ui-bom)</name>
+    <description>Bill of Materials for upstream AG-UI Java SDKs and Quarkus, LangChain4j, and A2A Adapter Modules</description>
+
+    <dependencyManagement>
+        <dependencies>
+            <!-- Upstream AG-UI Protocol Java SDKs -->
+            <dependency>
+                <groupId>com.ag-ui.community</groupId>
+                <artifactId>java-core</artifactId>
+                <version>${agui.community.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.ag-ui.community</groupId>
+                <artifactId>java-server</artifactId>
+                <version>${agui.community.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.ag-ui.community</groupId>
+                <artifactId>java-client</artifactId>
+                <version>${agui.community.version}</version>
+            </dependency>
+
+            <!-- Framework-Agnostic A2A Protocol Bridge -->
+            <dependency>
+                <groupId>org.agui</groupId>
+                <artifactId>ag-ui-a2a</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <!-- Framework-Agnostic Upstream LangChain4j TokenStream & Event Bridge -->
+            <dependency>
+                <groupId>org.agui</groupId>
+                <artifactId>ag-ui-langchain4j</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <!-- Plain Quarkus CDI, Jackson MixIns, Mutiny Multi & WebSockets Next Adapter -->
+            <dependency>
+                <groupId>org.agui</groupId>
+                <artifactId>ag-ui-quarkus</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <!-- Quarkiverse LangChain4j Multi<ChatEvent> Adapter -->
+            <dependency>
+                <groupId>org.agui</groupId>
+                <artifactId>ag-ui-quarkus-langchain4j</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+</project>

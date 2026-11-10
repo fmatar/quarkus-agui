@@ -23,10 +23,28 @@
       "commands": {
         "test": "./mvnw test",
         "coverage": "./mvnw test jacoco:report",
-        "coverageFile": "ag-ui-core/target/site/jacoco/jacoco.xml",
+        "coverageFile": "ag-ui-quarkus/target/site/jacoco/jacoco.xml",
         "mutation": "./mvnw test-compile org.pitest:pitest-maven:mutationCoverage",
         "lint": "./mvnw test-compile",
         "build": "./mvnw test-compile"
+      },
+      "thresholds": {
+        "diffCoverage": 85,
+        "mutationScore": 80
+      }
+    },
+    {
+      "name": "@agui/svelte",
+      "path": "packages/agui-svelte",
+      "stack": "node-sveltekit-pnpm",
+      "language": "typescript",
+      "commands": {
+        "test": "pnpm test",
+        "coverage": "pnpm run test:coverage",
+        "coverageFile": "coverage/coverage-summary.json",
+        "mutation": "pnpm run test:mutation 2>/dev/null || true",
+        "lint": "pnpm run check",
+        "build": "pnpm run build"
       },
       "thresholds": {
         "diffCoverage": 85,

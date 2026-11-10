@@ -7,21 +7,33 @@
     <parent>
         <groupId>org.agui</groupId>
         <artifactId>quarkus-svelte-skeleton-parent</artifactId>
-        <version>0.1.0-SNAPSHOT</version>
+        <version>0.1.0</version>
     </parent>
 
     <artifactId>quarkus-svelte-skeleton-backend</artifactId>
-    <name>AG-UI Showcase - OpsPilot Quarkus Orchestrator (:8080)</name>
+    <name>AG-UI Showcase - Nomad Concierge Quarkus Orchestrator (:8080)</name>
     <description>Quarkus 3.40.1.1 + Java 25 Orchestrator connecting MCP, A2A, LangChain4j, and AG-UI SSE</description>
 
     <dependencies>
         <dependency>
             <groupId>org.agui</groupId>
-            <artifactId>ag-ui-core</artifactId>
+            <artifactId>ag-ui-a2a</artifactId>
         </dependency>
         <dependency>
             <groupId>org.agui</groupId>
-            <artifactId>quarkus-ag-ui</artifactId>
+            <artifactId>ag-ui-langchain4j</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.agui</groupId>
+            <artifactId>ag-ui-quarkus</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.agui</groupId>
+            <artifactId>ag-ui-quarkus-langchain4j</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-smallrye-health</artifactId>
         </dependency>
         <dependency>
             <groupId>io.quarkus</groupId>
@@ -50,6 +62,14 @@
         <dependency>
             <groupId>io.quarkiverse.langchain4j</groupId>
             <artifactId>quarkus-langchain4j-agentic</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkiverse.quinoa</groupId>
+            <artifactId>quarkus-quinoa</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-container-image-jib</artifactId>
         </dependency>
         <dependency>
             <groupId>io.quarkus</groupId>
@@ -86,6 +106,15 @@
             <plugin>
                 <groupId>org.pitest</groupId>
                 <artifactId>pitest-maven</artifactId>
+                <configuration>
+                    <threads>4</threads>
+                    <targetClasses>
+                        <param>org.agui.showcase.backend.*</param>
+                    </targetClasses>
+                    <targetTests>
+                        <param>org.agui.showcase.backend.NomadConciergeOrchestratorServiceTest</param>
+                    </targetTests>
+                </configuration>
             </plugin>
         </plugins>
     </build>

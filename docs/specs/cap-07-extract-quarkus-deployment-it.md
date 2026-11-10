@@ -1,20 +1,14 @@
-# SPEC-07: Extract `quarkus-ag-ui-deployment`, GraalVM 25 Reflection, Dev UI & Integration Tests
+# SPEC-07: Standard CDI Discovery & GraalVM 25 Reflection Metadata (`ADR-006` & `ADR-007`)
 
 - **Linked Capability**: `CAP-07`
 - **Depends On**: `CAP-06`
-- **Ticket**: `#8`
-- **Modules**: `quarkus-extension/deployment` & `quarkus-extension/integration-tests`
-- **Status**: `ACTIVE`
+- **Tickets**: `#8`, `#74`, `#81`
+- **Module**: `ag-ui-quarkus`
+- **Status**: `AMENDED (ADR-006 & ADR-007)`
 
 ## 1. Problem Statement & Technical Scope
-Implements the Quarkus build-time deployment processor (`AgUiProcessor`) in `quarkus-extension/deployment`:
-- Registers `FeatureBuildItem("ag-ui")`.
-- Registers `ReflectiveClassBuildItem` for all `ag-ui-core` records and DTOs to guarantee GraalVM 25 Native Image compilation (`< 50MB` RSS).
-- Registers `AdditionalBeanBuildItem` for `AgUiBridge`, `AgUiMcpBridge`, and `AgUiA2aBridge`.
-- Contributes the **Quarkus Dev UI AG-UI Inspector Card** (`/q/devui`).
-- Validates the extension in `quarkus-extension/integration-tests` (`@QuarkusTest` & `@QuarkusIntegrationTest` with `-Dnative` / `-Dnative-container`).
+Per [`ADR-006`](../adr/ADR-006-framework-agnostic-module-topology-ag-ui-core-ag.md) and [`ADR-007`](../adr/ADR-007-adopt-upstream-ag-ui-sdks-com-ag-ui-community-ag.md), Quarkus build-time `-deployment` extension processors were replaced with standard CDI `META-INF/beans.xml` discovery (`AgUiObjectMapperCustomizer`, `AgUiQuarkusBridge`, `AgUiSessionRegistry`) and an embedded 57-entry `META-INF/native-image/org.agui/ag-ui-quarkus/reflect-config.json` registering all upstream `com.agui.community.core.*` event, message, tool, state patch, interrupt, and Jackson MixIn types for GraalVM / Mandrel native compilation.
 
-## 2. Acceptance Criteria (Gherkin / DoD)
-- **AC-01**: `AgUiProcessor` registers all core record classes for GraalVM native reflection and exposes Dev UI metadata.
-- **AC-02**: `quarkus-extension/integration-tests` passes on ephemeral test port `0`.
-- **AC-03**: Dual-Gate verification passes with $\ge 85\%$ coverage and $\ge 80\%$ PITest mutation kill score.
+## 2. Acceptance Criteria (DoD)
+- **AC-01**: Importing `org.agui:ag-ui-quarkus` auto-registers Jackson MixIns and GraalVM reflection hints with zero manual configuration.
+- **AC-02**: Verified native runner compilation via `quay.io/quarkus/ubi9-quarkus-mandrel-builder-image:jdk-25` (`Mandrel-25.0.5.0-Final`).

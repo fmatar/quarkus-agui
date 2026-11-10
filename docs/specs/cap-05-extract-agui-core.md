@@ -1,16 +1,14 @@
-# SPEC-05: Extract `ag-ui-core` Standalone Java 25 Library & Refactor Showcase
+# SPEC-05: Adopt Upstream `com.ag-ui.community` Java 17 Core SDK (`ADR-007`)
 
 - **Linked Capability**: `CAP-05`
 - **Depends On**: `CAP-03`, `CAP-04`
-- **Ticket**: `#6`
-- **Module**: `ag-ui-core` & `examples/quarkus-svelte-skeleton/backend`
-- **Clean Architecture Layers**: `domain` (Level 0) $\leftarrow$ `application` (Level 1) $\leftarrow$ `adapters` (Level 2)
-- **Status**: `ACTIVE`
+- **Tickets**: `#6`, `#81`, `#85`
+- **Module**: `ag-ui-bom` (superseding deleted `ag-ui-core`)
+- **Status**: `AMENDED (ADR-007)`
 
 ## 1. Problem Statement & Technical Scope
-Extracts the battle-tested AG-UI event envelopes (`AgUiEvent<T>`), typed payload records (`RunStartedPayload`, `TextDeltaPayload`, `ToolCallPayload`, `ToolResultPayload`, `StatusPayload`, `RunFinishedPayload`, `StepPayload`, `StateSnapshotPayload`, `StateDeltaPayload`, `A2aHandoffPayload`, `McpToolMetadata`), sub-10ms `AgUiSseFormatter`, and `Flow.Publisher` reactive adapters (`AgUiFlowAdapter`) from the showcase into `ag-ui-core` (Plain Java 25, zero external framework dependencies), and refactors the showcase backend to use `ag-ui-core`.
+Per [`ADR-007`](../adr/ADR-007-adopt-upstream-ag-ui-sdks-com-ag-ui-community-ag.md), custom `ag-ui-core` event POJOs and bespoke SSE formatters were deleted and replaced by upstream `com.ag-ui.community:{java-core,java-server,java-client}:0.1.1` managed in `ag-ui-bom` on a **Java 17 (`--release 17`, `major version: 61`)** baseline, dual-licensed under `Apache-2.0 OR MIT`.
 
-## 2. Acceptance Criteria (Gherkin / DoD)
-- **AC-01**: `ag-ui-core` has zero Quarkus/Spring runtime dependencies (`INV-04`) and passes Archlens concentric layer checks (`INV-03`).
-- **AC-02**: `examples/quarkus-svelte-skeleton/backend` deletes its inline AG-UI model classes and imports `org.agui.core.*`.
-- **AC-03**: Dual-Gate verification passes with $\ge 85\%$ coverage and $\ge 80\%$ PITest mutation kill score.
+## 2. Acceptance Criteria (DoD)
+- **AC-01**: Zero duplicate AG-UI event POJOs remain in `org.agui` (`ag-ui-core` directory deleted).
+- **AC-02**: `ag-ui-bom` manages `com.ag-ui.community:{java-core,java-server,java-client}:0.1.1` and all 4 `org.agui` Java 17 adapter modules.

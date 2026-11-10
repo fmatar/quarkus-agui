@@ -32,6 +32,7 @@ Thumbs.db
 
 # SDLC Ephemeral Cache & Local Agent Symlinks
 .agent/.cache/
+.agent/.sdlc-session.json
 .quarkus/
 .claude/
 .codex/

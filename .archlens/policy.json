@@ -1,7 +1,7 @@
 {
   "title": "quarkus-agui",
-  "src": "ag-ui-core/src/main/java",
-  "prefix": "org.agui.core",
+  "src": "ag-ui-quarkus/src/main/java",
+  "prefix": "org.agui.quarkus",
   "hierarchical": true,
   "order": [
     "domain",
@@ -24,8 +24,8 @@
     "jakarta.",
     "io.quarkus.",
     "io.smallrye.",
-    "dev.langchain4j.",
-    "com.fasterxml.jackson."
+    "com.fasterxml.jackson.",
+    "com.agui.community."
   ],
   "omit": [
     "target",

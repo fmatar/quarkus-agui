@@ -6,11 +6,11 @@
 
     <groupId>org.agui</groupId>
     <artifactId>ag-ui-java-parent</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.1.0</version>
     <packaging>pom</packaging>
 
-    <name>AG-UI Java 25 &amp; Quarkus 3.40.1.1 Extension Parent</name>
-    <description>Java 25 Core Library, Quarkus 3.40.1.1 Extension, and Tri-Protocol (AG-UI + MCP + A2A) Showcase</description>
+    <name>AG-UI Quarkus, LangChain4j &amp; A2A Multi-Module Parent</name>
+    <description>Upstream-aligned AG-UI Java 17 adapters for Quarkus, LangChain4j, and A2A, plus Java 25 Tri-Protocol Showcase</description>
 
     <licenses>
         <license>
@@ -18,19 +18,26 @@
             <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
             <distribution>repo</distribution>
         </license>
+        <license>
+            <name>MIT License</name>
+            <url>https://opensource.org/licenses/MIT</url>
+            <distribution>repo</distribution>
+        </license>
     </licenses>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-        <maven.compiler.release>25</maven.compiler.release>
+        <maven.compiler.release>17</maven.compiler.release>
         <maven.compiler.parameters>true</maven.compiler.parameters>
+        <agui.community.version>0.1.1</agui.community.version>
         <quarkus.platform.group-id>io.quarkus.platform</quarkus.platform.group-id>
         <quarkus.platform.artifact-id>quarkus-bom</quarkus.platform.artifact-id>
         <quarkus.platform.version>3.40.1.1</quarkus.platform.version>
         <a2a.sdk.version>1.4.0.Final</a2a.sdk.version>
         <quarkus.mcp.server.version>2.1.0.Beta1</quarkus.mcp.server.version>
         <quarkus.langchain4j.version>1.15.0.CR1</quarkus.langchain4j.version>
+        <quarkus.quinoa.version>2.9.3</quarkus.quinoa.version>
         <quarkus.native.builder-image>quay.io/quarkus/ubi9-quarkus-mandrel-builder-image:jdk-25</quarkus.native.builder-image>
         <junit.jupiter.version>5.11.4</junit.jupiter.version>
         <jacoco.version>0.8.14</jacoco.version>
@@ -41,8 +48,11 @@
     </properties>
 
     <modules>
-        <module>ag-ui-core</module>
-        <module>quarkus-extension</module>
+        <module>ag-ui-bom</module>
+        <module>ag-ui-a2a</module>
+        <module>ag-ui-langchain4j</module>
+        <module>ag-ui-quarkus</module>
+        <module>ag-ui-quarkus-langchain4j</module>
         <module>examples/quarkus-svelte-skeleton</module>
     </modules>
 
@@ -123,18 +133,43 @@
                 <version>${quarkus.mcp.server.version}</version>
             </dependency>
             <dependency>
+                <groupId>io.quarkiverse.quinoa</groupId>
+                <artifactId>quarkus-quinoa</artifactId>
+                <version>${quarkus.quinoa.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.ag-ui.community</groupId>
+                <artifactId>java-core</artifactId>
+                <version>${agui.community.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.ag-ui.community</groupId>
+                <artifactId>java-server</artifactId>
+                <version>${agui.community.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.ag-ui.community</groupId>
+                <artifactId>java-client</artifactId>
+                <version>${agui.community.version}</version>
+            </dependency>
+            <dependency>
                 <groupId>org.agui</groupId>
-                <artifactId>ag-ui-core</artifactId>
+                <artifactId>ag-ui-a2a</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.agui</groupId>
-                <artifactId>quarkus-ag-ui</artifactId>
+                <artifactId>ag-ui-langchain4j</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.agui</groupId>
-                <artifactId>quarkus-ag-ui-deployment</artifactId>
+                <artifactId>ag-ui-quarkus</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.agui</groupId>
+                <artifactId>ag-ui-quarkus-langchain4j</artifactId>
                 <version>${project.version}</version>
             </dependency>
         </dependencies>

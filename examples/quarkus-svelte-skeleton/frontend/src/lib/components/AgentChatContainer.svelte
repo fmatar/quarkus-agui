@@ -1,43 +1,153 @@
 <script>
+	import { onMount } from 'svelte';
 	import {
 		Activity,
-		Cpu,
-		Layers,
-		Radio,
-		Server,
-		ShieldAlert,
-		Sparkles,
-		Terminal,
-		CheckCircle2,
-		XCircle,
+		AlertTriangle,
+		Check,
 		ChevronRight,
-		SlidersHorizontal,
-		PanelRightClose,
-		PanelRightOpen
+		Compass,
+		Cpu,
+		HelpCircle,
+		RotateCcw,
+		Terminal,
+		Wifi,
+		X
 	} from '@lucide/svelte';
 	import {
 		SCENARIO_PRESETS,
+		WebSocketAgent,
+		buildHitlResumeInput,
+		buildRunAgentInput,
 		createInitialWorkbenchState,
+		lockTurnInteraction,
 		parseSseChunk,
+		recordClientOutboundEvent,
 		reduceAgUiEvent,
-		updateServiceReplicasInState
+		selectTurnOption,
+		summarizeHealthReport,
+		toRootStateDeltaOps,
+		updateTripNightsInState
 	} from '$lib/agui-client.js';
-	import ClusterStatePanel from './ClusterStatePanel.svelte';
+	import TripDossierPanel from './TripDossierPanel.svelte';
 	import MessageHistory from './MessageHistory.svelte';
 	import InputBar from './InputBar.svelte';
 	import ProtocolInspector from './ProtocolInspector.svelte';
 
 	const LLM_MODES = [
 		{ value: 'ollama:llama3.2:latest', label: 'Llama 3.2 • Live Local Ollama' },
-		{ value: 'ollama:qwen3.5:4b', label: 'Qwen 3.5 4B • Live Local Ollama' },
 		{ value: 'ollama:ministral-3:8b', label: 'Ministral 8B • Live Local Ollama' },
-		{ value: 'deterministic', label: 'Deterministic CI Engine (Fast Mock)' }
+		{ value: 'ollama:gemma3:latest', label: 'Gemma 3 • Live Local Ollama' },
+		{ value: 'ollama:qwen2.5:3b', label: 'Qwen 2.5 3B • Live Local Ollama' }
 	];
 
-	let workbench = $state(createInitialWorkbenchState('thread-opspilot-1'));
+	const HEADER_PRESETS = SCENARIO_PRESETS.slice(0, 4);
+
+	let workbench = $state(createInitialWorkbenchState('thread-nomad-1'));
 	let selectedMode = $state('ollama:llama3.2:latest');
 	let abortController = $state(null);
 	let isInspectorOpen = $state(true);
+	let isGuideOpen = $state(false);
+	let isHealthOpen = $state(false);
+	let systemHealth = $state(null);
+	let isCheckingHealth = $state(false);
+	let healthSummary = $derived(summarizeHealthReport(systemHealth));
+	let wsAgent = null;
+
+	async function refreshSystemHealth() {
+		if (typeof window === 'undefined' || isCheckingHealth) return;
+		isCheckingHealth = true;
+		try {
+			const res = await fetch('/q/health/ready');
+			if (res.ok || res.status === 503) {
+				systemHealth = await res.json();
+			}
+		} catch (err) {
+			systemHealth = {
+				status: 'DOWN',
+				checks: [
+					{
+						name: 'nomad-backend-orchestrator',
+						status: 'DOWN',
+						data: {
+							error: err?.message ?? 'Orchestrator unreachable'
+						}
+					}
+				]
+			};
+		} finally {
+			isCheckingHealth = false;
+		}
+	}
+
+	function connectWebSocket() {
+		if (typeof window === 'undefined' || typeof WebSocket === 'undefined') return;
+		if (wsAgent?.isConnected) return;
+		try {
+			const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+			if (!wsAgent) {
+				wsAgent = new WebSocketAgent({
+					url: `${proto}//${window.location.host}/api/agent/ws`,
+					threadId: workbench.threadId,
+					onConnectionChange: (connected) => {
+						workbench = {
+							...workbench,
+							wsConnected: connected,
+							transportMode: connected ? 'ws' : 'sse',
+							statusText: connected
+								? 'WebSocket Full-Duplex Connected (/api/agent/ws)'
+								: workbench.statusText
+						};
+					},
+					onControlEvent: (evt) => {
+						workbench = reduceAgUiEvent(workbench, evt);
+					},
+					onSpontaneousEvent: (evt) => {
+						workbench = reduceAgUiEvent(workbench, evt);
+					}
+				});
+			}
+			wsAgent.connectSocket();
+		} catch {
+			workbench = {
+				...workbench,
+				wsConnected: false,
+				transportMode: 'sse'
+			};
+		}
+	}
+
+	onMount(() => {
+		connectWebSocket();
+		refreshSystemHealth();
+		return () => {
+			wsAgent?.disconnectSocket();
+			wsAgent = null;
+		};
+	});
+
+	function sendWebSocketCommand(commandType, payload) {
+		if (wsAgent?.sendControlFrame(commandType, payload)) {
+			const envelope = {
+				type: commandType,
+				threadId: workbench.threadId,
+				...payload
+			};
+			workbench = recordClientOutboundEvent(workbench, commandType, envelope);
+			return true;
+		}
+		return false;
+	}
+
+	function resolvePresetPrompt(preset) {
+		if (preset.id === 'nomad-hitl') {
+			const trip = (workbench.tripDossierState ?? workbench.clusterState)?.nomadTrip;
+			if (trip?.activeCity && trip?.nights) {
+				const stopTitle = trip.stopTitle ?? `${trip.activeCity} Architectural Sanctuary`;
+				return `Reserve ${stopTitle} in ${trip.activeCity} for ${trip.nights} nights ($1840)`;
+			}
+		}
+		return preset.prompt;
+	}
 
 	async function consumeSseResponse(response) {
 		if (!response.ok || !response.body) {
@@ -47,24 +157,78 @@
 		const decoder = new TextDecoder();
 		let buffer = '';
 
-		while (true) {
-			const { value, done } = await reader.read();
-			if (done) {
-				buffer += decoder.decode();
-				break;
+		try {
+			while (true) {
+				const { value, done } = await reader.read();
+				if (done) {
+					buffer += decoder.decode();
+					break;
+				}
+				buffer += decoder.decode(value, { stream: true });
+				const parsed = parseSseChunk(buffer);
+				buffer = parsed.remainder;
+				for (const evt of parsed.events) {
+					workbench = reduceAgUiEvent(workbench, evt);
+				}
 			}
-			buffer += decoder.decode(value, { stream: true });
-			const parsed = parseSseChunk(buffer);
-			buffer = parsed.remainder;
-			for (const evt of parsed.events) {
-				workbench = reduceAgUiEvent(workbench, evt);
+
+			if (buffer.trim()) {
+				const flushed = parseSseChunk(buffer + '\n\n');
+				for (const evt of flushed.events) {
+					workbench = reduceAgUiEvent(workbench, evt);
+				}
 			}
+		} finally {
+			reader.releaseLock?.();
+		}
+	}
+
+	async function executeRunInput(input, outboundType) {
+		workbench = recordClientOutboundEvent(workbench, outboundType, input);
+		if (wsAgent?.isConnected) {
+			await new Promise((resolve) => {
+				wsAgent.run(input).subscribe({
+					next: (evt) => {
+						workbench = reduceAgUiEvent(workbench, evt);
+					},
+					error: (err) => {
+						workbench = {
+							...workbench,
+							isStreaming: false,
+							statusText: `WebSocket error (${err?.message ?? 'stream interrupted'})`
+						};
+						resolve();
+					},
+					complete: () => resolve()
+				});
+			});
+			return;
 		}
 
-		if (buffer.trim()) {
-			const flushed = parseSseChunk(buffer + '\n\n');
-			for (const evt of flushed.events) {
-				workbench = reduceAgUiEvent(workbench, evt);
+		abortController = new AbortController();
+		try {
+			const response = await fetch('/api/agent/run', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+				body: JSON.stringify(input),
+				signal: abortController.signal
+			});
+			await consumeSseResponse(response);
+		} catch (err) {
+			workbench = {
+				...workbench,
+				isStreaming: false,
+				statusText:
+					err?.name === 'AbortError'
+						? 'Stream paused by traveler'
+						: `Bridge error (${err?.message ?? 'connect failed to :8080'})`
+			};
+		} finally {
+			if (workbench.isStreaming) {
+				workbench = {
+					...workbench,
+					isStreaming: false
+				};
 			}
 		}
 	}
@@ -72,6 +236,17 @@
 	async function runScenarioPrompt(promptText) {
 		workbench = {
 			...workbench,
+			isStreaming: true,
+			statusText: 'Curating destination dossier...',
+			streamBuffer: '',
+			activeTurn: {
+				reasoning: null,
+				timeline: [],
+				media: [],
+				interaction: null,
+				sources: [],
+				followUps: []
+			},
 			messages: [
 				...workbench.messages,
 				{
@@ -84,64 +259,116 @@
 			]
 		};
 
-		abortController = new AbortController();
+		const input = buildRunAgentInput({
+			threadId: workbench.threadId,
+			prompt: promptText,
+			state: workbench.clusterState,
+			llmMode: selectedMode
+		});
+		await executeRunInput(input, 'RUN_AGENT_INPUT');
+	}
+
+	async function submitHitlDecision(approved, modifiedArgs = null) {
+		const interruptId =
+			workbench.pendingApproval?.interruptId ??
+			workbench.pendingApproval?.callId ??
+			'hitl-approval';
+		const input = buildHitlResumeInput({
+			threadId: workbench.threadId,
+			interruptId,
+			approved,
+			modifiedArgs,
+			state: workbench.clusterState,
+			llmMode: selectedMode
+		});
+		await executeRunInput(input, 'RESUME_INTERRUPT');
+	}
+
+	async function handleUpdateTripParams({ nights, homeCurrency }) {
+		if (sendWebSocketCommand('UPDATE_TRIP_PARAMS', { nights, homeCurrency })) {
+			return;
+		}
 		try {
-			const response = await fetch('/api/agent/run', {
+			const res = await fetch('/api/agent/params', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
 					threadId: workbench.threadId,
-					prompt: promptText,
-					state: workbench.clusterState,
-					mode: selectedMode
-				}),
-				signal: abortController.signal
+					nights,
+					homeCurrency
+				})
 			});
-			await consumeSseResponse(response);
-		} catch (err) {
+			if (res.ok) {
+				const delta = await res.json();
+				workbench = reduceAgUiEvent(workbench, {
+					id: `params-${Date.now()}`,
+					type: 'STATE_DELTA',
+					delta: toRootStateDeltaOps(delta),
+					rawEvent: delta
+				});
+			}
+		} catch {
 			workbench = {
 				...workbench,
-				isStreaming: false,
-				statusText:
-					err?.name === 'AbortError'
-						? 'Stream interrupted by operator'
-						: `Bridge error (${err?.message ?? 'connect failed to :8080'})`
+				clusterState: updateTripNightsInState(
+					workbench.clusterState,
+					(nights ?? 4) - (workbench.clusterState?.nomadTrip?.nights ?? 4)
+				)
 			};
 		}
 	}
 
-	async function submitHitlDecision(approved) {
-		abortController = new AbortController();
+	async function handleResetMemory() {
+		if (sendWebSocketCommand('RESET_MEMORY', {})) {
+			return;
+		}
 		try {
-			const response = await fetch('/api/agent/approve', {
+			const res = await fetch('/api/agent/memory/reset', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					threadId: workbench.threadId,
-					approved,
-					reason: approved
-						? 'Operator authorized replica scale above threshold (>5)'
-						: 'Operator rejected replica mutation'
-				}),
-				signal: abortController.signal
+				body: JSON.stringify({ threadId: workbench.threadId })
 			});
-			await consumeSseResponse(response);
-		} catch (err) {
-			workbench = {
-				...workbench,
-				isStreaming: false,
-				statusText: `Approval error (${err?.message ?? 'failed'})`
-			};
+			if (res.ok) {
+				const delta = await res.json();
+				workbench = reduceAgUiEvent(workbench, {
+					id: `reset-${Date.now()}`,
+					type: 'STATE_DELTA',
+					delta: toRootStateDeltaOps(delta),
+					rawEvent: delta
+				});
+			}
+		} catch {
+			workbench = createInitialWorkbenchState(workbench.threadId);
 		}
 	}
 
-	function handleAdjustReplicas(serviceName, delta) {
-		const updated = updateServiceReplicasInState(workbench.clusterState, serviceName, delta);
-		workbench = { ...workbench, clusterState: updated };
-		const targetSvc = updated?.services?.find((s) => s.serviceName === serviceName);
-		if (targetSvc) {
-			runScenarioPrompt(`Scale deployment ${serviceName} to ${targetSvc.replicas} replicas`);
+	function handleSelectOption(messageId, opt) {
+		const targetMsg = workbench.messages.find((m) => m.id === messageId);
+		const isMulti = targetMsg?.interaction?.mode === 'multi_select';
+		workbench = selectTurnOption(workbench, messageId, opt.id);
+		if (!isMulti) {
+			if (opt.prompt) {
+				runScenarioPrompt(opt.prompt);
+			} else {
+				const city = (workbench.tripDossierState ?? workbench.clusterState)?.nomadTrip?.activeCity;
+				const detail = opt.description ? ` (${opt.description})` : '';
+				const suffix = city ? ` in ${city}` : '';
+				runScenarioPrompt(`Selected itinerary preference: ${opt.label}${detail}${suffix}`);
+			}
 		}
+	}
+
+	function handleConfirmMultiSelect(messageId, selectedIds) {
+		const targetMsg = workbench.messages.find((m) => m.id === messageId);
+		const options = targetMsg?.interaction?.options ?? [];
+		const labels = selectedIds.map((id) => {
+			const match = options.find((o) => o.id === id);
+			return match ? match.label : id;
+		});
+		const city = (workbench.tripDossierState ?? workbench.clusterState)?.nomadTrip?.activeCity;
+		const suffix = city ? ` in ${city}` : '';
+		workbench = lockTurnInteraction(workbench, messageId);
+		runScenarioPrompt(`Confirmed multi-select itinerary preferences: ${labels.join('; ')}${suffix}`);
 	}
 
 	function clearInspectorEvents() {
@@ -149,164 +376,321 @@
 	}
 
 	function cancelStream() {
+		wsAgent?.abortRun();
+		if (sendWebSocketCommand('CANCEL_RUN', {})) {
+			return;
+		}
 		abortController?.abort();
+	}
+
+	function handleWindowKeydown(event) {
+		if (event.key === 'Escape') {
+			if (isGuideOpen) isGuideOpen = false;
+			if (isHealthOpen) isHealthOpen = false;
+		}
 	}
 </script>
 
+<svelte:window onkeydown={handleWindowKeydown} />
+
 <main class="workbench-grid {isInspectorOpen ? '' : 'inspector-collapsed'}">
-	<!-- High-Tech Command Header -->
+	<!-- Editorial Precision Header -->
 	<header
-		class="workbench-header cyber-card flex flex-wrap items-center justify-between gap-4 rounded-2xl px-5 py-3"
+		class="workbench-header nomad-panel relative flex flex-wrap items-center justify-between gap-3 rounded-2xl px-4 py-3 sm:px-5"
 	>
-		<div class="flex items-center gap-3.5">
-			<div class="relative flex items-center justify-center rounded-xl bg-cyan-950/60 p-2.5 ring-1 ring-cyan-500/30">
-				<Radio class="size-5 text-cyan-400" />
-				<span class="absolute -top-1 -right-1 flex size-2.5">
-					<span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-cyan-400 opacity-75"></span>
-					<span class="relative inline-flex size-2.5 rounded-full bg-cyan-500"></span>
-				</span>
+		<div class="flex items-center gap-3">
+			<div class="flex size-9 items-center justify-center rounded-xl bg-[#141413] text-white">
+				<Compass class="size-5" />
 			</div>
 			<div>
-				<div class="flex items-center gap-2">
-					<span class="font-mono text-[10px] font-bold tracking-widest text-cyan-400 uppercase">
-						Autonomous SRE Command
-					</span>
-					<span class="rounded bg-slate-800/80 px-1.5 py-0.5 font-mono text-[10px] text-slate-400">
-						Tri-Protocol
-					</span>
-				</div>
-				<h1 class="text-sm font-bold tracking-tight text-white sm:text-base">
-					Quarkus AG-UI Workbench
+				<h1 class="text-sm font-bold tracking-tight text-[#141413] sm:text-base">
+					Nomad — Cultural & Architectural Concierge
 				</h1>
+				<div class="flex flex-wrap items-center gap-2 text-[11px] text-[#575551]">
+					<span>Open-Meteo Weather • Wikipedia • iTunes 30s Audio • Frankfurter FX</span>
+				</div>
 			</div>
 		</div>
 
-		<!-- Protocol Status & Scenario Strip -->
-		<div class="flex flex-wrap items-center gap-2.5">
-			<!-- LLM Model Selector -->
-			<div class="flex items-center gap-2 rounded-xl bg-slate-950/80 px-3 py-1.5 ring-1 ring-slate-800">
-				<Cpu class="size-3.5 text-emerald-400" />
-				<select
-					id="agui-llm-mode"
-					bind:value={selectedMode}
-					disabled={workbench.isStreaming}
-					class="bg-transparent font-mono text-xs font-medium text-emerald-300 focus:outline-none cursor-pointer"
+		<div class="flex flex-wrap items-center gap-2">
+			<!-- Transport & Memory Telemetry Group -->
+			<div class="flex items-center gap-1.5" role="group" aria-label="Transport and Memory Controls">
+				<button
+					type="button"
+					onclick={connectWebSocket}
+					class="inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 font-mono text-[11px] font-semibold transition-colors {workbench.wsConnected
+						? 'border-[#1F6E50]/30 bg-[#EAF4EF] text-[#1F6E50]'
+						: 'border-[#E4E0D8] bg-[#F6F5F2] text-[#575551] hover:text-[#141413]'}"
+					title={workbench.wsConnected
+						? 'Full-Duplex Quarkus WebSocket Next Connected (/api/agent/ws)'
+						: 'Click to reconnect WebSocket (/api/agent/ws)'}
 				>
-					{#each LLM_MODES as m (m.value)}
-						<option value={m.value} class="bg-slate-900 text-slate-100">{m.label}</option>
-					{/each}
-				</select>
-			</div>
+					<Wifi class="size-3" />
+					<span>{workbench.wsConnected ? 'WS Connected' : 'SSE Mode'}</span>
+				</button>
 
-			<!-- Quick Scenarios -->
-			<div class="flex flex-wrap items-center gap-1.5" role="group" aria-label="Preset Scenarios">
-				{#each SCENARIO_PRESETS as preset (preset.id)}
+				<div class="inline-flex items-center gap-1 rounded-xl border border-[#E4E0D8] bg-[#F6F5F2] px-2.5 py-1 font-mono text-[11px] text-[#141413]">
+					<span class="font-semibold tabular-nums" title="Sliding-window conversational memory turns">
+						Memory: {workbench.memoryTurns ?? 0}
+					</span>
 					<button
 						type="button"
 						disabled={workbench.isStreaming}
-						onclick={() => runScenarioPrompt(preset.prompt)}
-						class="group flex items-center gap-1.5 rounded-xl bg-slate-900/90 px-3 py-1.5 text-xs font-medium text-slate-300 ring-1 ring-slate-700/60 transition-all hover:bg-slate-800 hover:text-white hover:ring-cyan-500/50 disabled:opacity-40"
+						onclick={handleResetMemory}
+						aria-label="Reset conversational memory"
+						title="Reset Conversational Memory & Traveler Profile"
+						class="ml-1 rounded p-0.5 text-[#575551] transition-colors hover:bg-[#E4E0D8] hover:text-[#C84B31] disabled:opacity-40"
+					>
+						<RotateCcw class="size-3" />
+					</button>
+				</div>
+
+				<!-- Engine Mode Selector -->
+				<div class="flex items-center gap-1.5 rounded-xl border border-[#E4E0D8] bg-[#F6F5F2] px-2.5 py-1.5">
+					<Cpu class="size-3.5 text-[#1F6E50]" />
+					<label for="agui-llm-mode" class="sr-only">Engine Mode</label>
+					<select
+						id="agui-llm-mode"
+						bind:value={selectedMode}
+						disabled={workbench.isStreaming}
+						class="cursor-pointer bg-transparent font-mono text-xs font-medium text-[#141413] focus:outline-none"
+					>
+						{#each LLM_MODES as m (m.value)}
+							<option value={m.value} class="bg-white text-[#141413]">{m.label}</option>
+						{/each}
+					</select>
+				</div>
+			</div>
+
+			<!-- Quick Destination & Protocol Scenarios (<= 4 items for cognitive clarity) -->
+			<div class="flex flex-wrap items-center gap-1.5" role="group" aria-label="Preset Scenarios">
+				{#each HEADER_PRESETS as preset (preset.id)}
+					<button
+						type="button"
+						disabled={workbench.isStreaming}
+						onclick={() => runScenarioPrompt(resolvePresetPrompt(preset))}
+						class="group inline-flex items-center gap-1 rounded-xl border border-[#E4E0D8] bg-white px-2.5 py-1.5 text-xs font-semibold text-[#141413] transition-colors hover:border-[#C84B31] hover:bg-[#FBEEE9]/40 disabled:opacity-40"
 					>
 						<span>{preset.label}</span>
-						<ChevronRight class="size-3 text-slate-500 transition-transform group-hover:translate-x-0.5 group-hover:text-cyan-400" />
+						<ChevronRight class="size-3 text-[#575551] transition-transform group-hover:translate-x-0.5 group-hover:text-[#C84B31]" />
 					</button>
 				{/each}
 			</div>
 
-			<!-- Wire Inspector Toggle Button -->
-			<button
-				type="button"
-				onclick={() => isInspectorOpen = !isInspectorOpen}
-				class="flex items-center gap-1.5 rounded-xl px-3 py-1.5 font-mono text-xs font-semibold transition-all {isInspectorOpen ? 'bg-cyan-500/20 text-cyan-300 ring-1 ring-cyan-500/40' : 'bg-slate-900 text-slate-400 ring-1 ring-slate-800 hover:text-slate-200'}"
-				title={isInspectorOpen ? 'Collapse Wire Inspector' : 'Expand Wire Inspector'}
-			>
-				<Terminal class="size-3.5" />
-				<span class="hidden sm:inline">Wire</span>
-				<span class="rounded bg-slate-950 px-1.5 py-0.2 text-[10px]">{workbench.events.length}</span>
-			</button>
+			<!-- Inspector, Healthcheck & Quick Guide Controls -->
+			<div class="flex items-center gap-1.5" role="group" aria-label="Health, Inspector and Help">
+				<button
+					type="button"
+					onclick={() => {
+						isHealthOpen = !isHealthOpen;
+						if (isHealthOpen) {
+							isGuideOpen = false;
+							refreshSystemHealth();
+						}
+					}}
+					aria-expanded={isHealthOpen}
+					aria-label="Inspect Multi-Service Healthcheck"
+					class="inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 font-mono text-[11px] font-semibold transition-colors {healthSummary.status === 'UP'
+						? 'border-[#1F6E50]/30 bg-[#EAF4EF] text-[#1F6E50]'
+						: healthSummary.status === 'UNKNOWN'
+							? 'border-[#E4E0D8] bg-[#F6F5F2] text-[#575551]'
+							: 'border-[#9E331D]/35 bg-[#FBEEE9] text-[#9E331D]'}"
+					title="Live MicroProfile SmallRye Readiness Check (/q/health/ready)"
+				>
+					{#if healthSummary.status === 'UP'}
+						<Activity class="size-3.5 shrink-0" />
+					{:else}
+						<AlertTriangle class="size-3.5 shrink-0" />
+					{/if}
+					<span>{healthSummary.label}</span>
+				</button>
+
+				<button
+					type="button"
+					onclick={() => {
+						isGuideOpen = !isGuideOpen;
+						if (isGuideOpen) isHealthOpen = false;
+					}}
+					aria-expanded={isGuideOpen}
+					aria-label="Open Concierge Guide and Keyboard Shortcuts"
+					class="inline-flex items-center gap-1 rounded-xl border border-[#E4E0D8] bg-white px-2.5 py-1.5 text-xs font-semibold text-[#141413] transition-colors hover:bg-[#EFECE6]"
+					title="Concierge Guide & Keyboard Shortcuts"
+				>
+					<HelpCircle class="size-3.5 text-[#575551]" />
+					<span class="hidden md:inline">Guide</span>
+				</button>
+
+				<button
+					type="button"
+					onclick={() => (isInspectorOpen = !isInspectorOpen)}
+					aria-expanded={isInspectorOpen}
+					aria-label={isInspectorOpen ? 'Collapse Wire Telemetry Inspector' : 'Expand Wire Telemetry Inspector'}
+					class="inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 font-mono text-xs font-semibold transition-colors {isInspectorOpen
+						? 'border-[#141413] bg-[#141413] text-white'
+						: 'border-[#E4E0D8] bg-white text-[#141413] hover:bg-[#EFECE6]'}"
+					title={isInspectorOpen ? 'Collapse Wire Telemetry' : 'Expand Wire Telemetry'}
+				>
+					<Terminal class="size-3.5" />
+					<span class="hidden sm:inline">Wire</span>
+					<span class="rounded bg-white/15 px-1.5 py-0.2 text-[10px] tabular-nums">
+						{workbench.events.length}
+					</span>
+				</button>
+			</div>
 		</div>
+
+		{#if isHealthOpen}
+			<div
+				class="absolute top-full right-4 z-30 mt-2 w-88 sm:w-[27rem] rounded-2xl border border-[#CFCAC0] bg-white p-4 shadow-xl space-y-3"
+				role="dialog"
+				aria-label="Multi-Service and Upstream API Healthcheck"
+			>
+				<div class="flex items-center justify-between border-b border-[#E4E0D8] pb-2">
+					<div>
+						<h2 class="text-xs font-bold text-[#141413]">
+							Live Protocol & Upstream API Healthcheck
+						</h2>
+						<p class="font-mono text-[10px] text-[#575551]">
+							GET /q/health/ready • {healthSummary.healthyCount}/{healthSummary.totalCount} operational
+						</p>
+					</div>
+					<div class="flex items-center gap-1">
+						<button
+							type="button"
+							disabled={isCheckingHealth}
+							onclick={refreshSystemHealth}
+							aria-label="Refresh healthcheck"
+							class="inline-flex items-center gap-1 rounded-lg border border-[#E4E0D8] bg-[#F6F5F2] px-2 py-1 font-mono text-[10px] font-semibold text-[#141413] hover:bg-[#EFECE6] disabled:opacity-40"
+						>
+							<RotateCcw class="size-3 {isCheckingHealth ? 'animate-spin' : ''}" />
+							<span>Refresh</span>
+						</button>
+						<button
+							type="button"
+							onclick={() => (isHealthOpen = false)}
+							aria-label="Close healthcheck"
+							class="rounded p-1 text-[#575551] hover:bg-[#EFECE6] hover:text-[#141413]"
+						>
+							<X class="size-3.5" />
+						</button>
+					</div>
+				</div>
+
+				<div class="max-h-80 overflow-y-auto space-y-1.5 pr-0.5">
+					{#each healthSummary.services as svc (svc.id + (svc.via ?? ''))}
+						{@const isUp = svc.status === 'UP'}
+						<div
+							class="rounded-xl border p-2.5 text-xs {isUp
+								? 'border-[#E4E0D8] bg-[#FAF9F6]'
+								: 'border-[#C84B31]/45 bg-[#FBEEE9]/55'}"
+						>
+							<div class="flex items-center justify-between gap-2">
+								<span class="font-semibold text-[#141413] truncate">{svc.name ?? svc.id}</span>
+								<div class="flex items-center gap-1.5 shrink-0 font-mono text-[10px]">
+									{#if svc.latencyMs != null}
+										<span class="text-[#575551] tabular-nums">{svc.latencyMs}ms</span>
+									{/if}
+									<span
+										class="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 font-bold {isUp
+											? 'bg-[#EAF4EF] text-[#1F6E50]'
+											: 'bg-[#C84B31] text-white'}"
+									>
+										{#if isUp}
+											<Check class="size-2.5" />
+											<span>UP</span>
+										{:else}
+											<AlertTriangle class="size-2.5" />
+											<span>DOWN</span>
+										{/if}
+									</span>
+								</div>
+							</div>
+							{#if !isUp && svc.error}
+								<p class="mt-1 font-mono text-[10px] leading-snug text-[#9E331D]">
+									{svc.error}
+								</p>
+							{/if}
+						</div>
+					{/each}
+				</div>
+			</div>
+		{/if}
+
+		{#if isGuideOpen}
+			<div
+				class="absolute top-full right-4 z-30 mt-2 w-80 sm:w-96 rounded-2xl border border-[#CFCAC0] bg-white p-4 shadow-xl space-y-3"
+				role="dialog"
+				aria-label="Concierge Guide and Keyboard Shortcuts"
+			>
+				<div class="flex items-center justify-between border-b border-[#E4E0D8] pb-2">
+					<h2 class="text-xs font-bold text-[#141413]">
+						Tri-Protocol Studio Guide & Shortcuts
+					</h2>
+					<button
+						type="button"
+						onclick={() => (isGuideOpen = false)}
+						aria-label="Close guide"
+						class="rounded p-1 text-[#575551] hover:bg-[#EFECE6] hover:text-[#141413]"
+					>
+						<X class="size-3.5" />
+					</button>
+				</div>
+				<div class="space-y-2 text-xs text-[#575551]">
+					<div class="flex items-center justify-between">
+						<span>Focus Concierge Prompt</span>
+						<kbd class="rounded border border-[#CFCAC0] bg-[#F6F5F2] px-1.5 py-0.5 font-mono text-[10px] text-[#141413]">⌘K</kbd>
+					</div>
+					<div class="flex items-center justify-between">
+						<span>Open Slash Commands</span>
+						<kbd class="rounded border border-[#CFCAC0] bg-[#F6F5F2] px-1.5 py-0.5 font-mono text-[10px] text-[#141413]">/</kbd>
+					</div>
+					<div class="flex items-center justify-between">
+						<span>Dismiss Popover / Guide</span>
+						<kbd class="rounded border border-[#CFCAC0] bg-[#F6F5F2] px-1.5 py-0.5 font-mono text-[10px] text-[#141413]">Esc</kbd>
+					</div>
+				</div>
+				<div class="border-t border-[#E4E0D8] pt-2 text-[11px] text-[#575551] space-y-1">
+					<p><strong class="text-[#141413]">Conversational Memory:</strong> Mention dietary, architectural, or currency preferences in any turn—they persist across turns and update <code class="font-mono">traveler://preferences</code>.</p>
+					<p><strong class="text-[#141413]">Interactive Choices:</strong> Ask for <em>"2 random options"</em> or <em>"4 options so I can select multiple"</em> to render on-demand choice cards.</p>
+				</div>
+			</div>
+		{/if}
 	</header>
 
-	<!-- Pane 1: Live Cluster Topology Rail (MCP :8081 & A2A :8082) -->
-	<ClusterStatePanel
+	<!-- Pane 1: Left Trip Dossier & Protocol Rail -->
+	<TripDossierPanel
+		tripDossierState={workbench.tripDossierState}
 		clusterState={workbench.clusterState}
+		{systemHealth}
+		messages={workbench.messages}
 		isStreaming={workbench.isStreaming}
-		onAdjustReplicas={handleAdjustReplicas}
 		onTriggerSkill={runScenarioPrompt}
+		onUpdateTripParams={handleUpdateTripParams}
+		onToggleHealthPopover={() => {
+			isHealthOpen = !isHealthOpen;
+			if (isHealthOpen) refreshSystemHealth();
+		}}
 	/>
 
-	<!-- Pane 2: Center AG-UI Conversational Feed (Strict Height Bounded) -->
+	<!-- Pane 2: Center Concierge Conversation & Modular AG-UI Component Kit -->
 	<section
-		class="workbench-chat cyber-card flex flex-col justify-between overflow-hidden rounded-2xl h-full min-h-0"
+		class="workbench-chat nomad-panel flex h-full min-h-0 flex-col justify-between overflow-hidden rounded-2xl"
+		aria-label="Concierge Conversation"
 	>
-		<!-- Feed Header Sub-bar -->
-		<div class="flex items-center justify-between border-b border-slate-800/80 bg-slate-950/40 px-5 py-2.5 shrink-0">
-			<div class="flex items-center gap-2">
-				<Terminal class="size-3.5 text-cyan-400" />
-				<span class="font-mono text-xs font-semibold text-slate-300">OpsPilot Stream Feed</span>
-			</div>
-			<div class="flex items-center gap-2 font-mono text-[11px] text-slate-400">
-				<span>Thread:</span>
-				<span class="text-cyan-300">{workbench.threadId}</span>
-			</div>
-		</div>
-
-		<!-- Chat Message Timeline with Auto-Scroll & In-Flight Stream Bubble -->
 		<MessageHistory
 			messages={workbench.messages}
 			isStreaming={workbench.isStreaming}
 			streamBuffer={workbench.streamBuffer}
 			statusText={workbench.statusText}
+			activeTurn={workbench.activeTurn}
+			pendingApproval={workbench.pendingApproval}
+			onSelectOption={handleSelectOption}
+			onConfirmMultiSelect={handleConfirmMultiSelect}
+			onTriggerPrompt={runScenarioPrompt}
+			onApproveHitl={(mods) => submitHitlDecision(true, mods)}
+			onRejectHitl={() => submitHitlDecision(false)}
 		/>
 
-		<!-- HITL Approval Barrier Notification (Pinned Floating Alert) -->
-		{#if workbench.pendingApproval}
-			<div
-				class="mx-5 mb-3 rounded-xl border border-amber-500/40 bg-gradient-to-r from-amber-950/80 via-amber-900/60 to-slate-950/90 p-4 text-xs shadow-2xl backdrop-blur-md shrink-0"
-				role="alert"
-			>
-				<div class="flex items-center gap-2.5 font-bold text-amber-300">
-					<div class="rounded-lg bg-amber-500/20 p-1.5 ring-1 ring-amber-500/40">
-						<ShieldAlert class="size-4 text-amber-400" />
-					</div>
-					<div>
-						<div class="text-sm font-semibold tracking-wide">Human-in-the-Loop Interruption</div>
-						<div class="font-mono text-[10px] font-normal text-amber-200/70">
-							AG-UI Protocol • RUN_FINISHED (interrupted: true)
-						</div>
-					</div>
-				</div>
-
-				<p class="mt-2.5 text-xs sm:text-sm text-slate-200">
-					Autonomous agent requested scaling
-					<span class="font-mono font-semibold text-cyan-300">{workbench.pendingApproval.serviceName}</span>
-					to
-					<span class="font-mono font-semibold text-amber-300">{workbench.pendingApproval.replicas} replicas</span>.
-					Safety guard threshold is &le;5 replicas.
-				</p>
-
-				<div class="mt-3 flex items-center gap-3">
-					<button
-						type="button"
-						onclick={() => submitHitlDecision(true)}
-						class="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 font-semibold text-white shadow-lg shadow-emerald-950/50 transition-all hover:bg-emerald-500 active:scale-95 text-xs"
-					>
-						<CheckCircle2 class="size-3.5" />
-						<span>Authorize Scale ({workbench.pendingApproval.replicas} Replicas)</span>
-					</button>
-					<button
-						type="button"
-						onclick={() => submitHitlDecision(false)}
-						class="inline-flex items-center gap-1.5 rounded-xl bg-slate-800 px-4 py-2 font-semibold text-slate-300 ring-1 ring-slate-700 transition-all hover:bg-rose-950/50 hover:text-rose-200 hover:ring-rose-500/50 active:scale-95 text-xs"
-					>
-						<XCircle class="size-3.5" />
-						<span>Abort Mutation</span>
-					</button>
-				</div>
-			</div>
-		{/if}
-
-		<!-- Fixed Sticky Input Controller -->
 		<InputBar
 			isStreaming={workbench.isStreaming}
 			onSubmit={runScenarioPrompt}
@@ -314,12 +698,12 @@
 		/>
 	</section>
 
-	<!-- Pane 3: SSE Protocol & Wire Inspector Drawer -->
+	<!-- Pane 3: Collapsible AG-UI Wire Telemetry Inspector -->
 	{#if isInspectorOpen}
 		<ProtocolInspector
 			events={workbench.events}
 			isOpen={isInspectorOpen}
-			onClose={() => isInspectorOpen = false}
+			onClose={() => (isInspectorOpen = false)}
 			onClear={clearInspectorEvents}
 		/>
 	{/if}

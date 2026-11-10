@@ -1,17 +1,19 @@
-# SPEC-06: Extract `quarkus-ag-ui-runtime` (`AgUiBridge`, `AgUiMcpBridge`, `AgUiA2aBridge`, Mutiny SSE)
+# SPEC-06: Orthogonal Java 17 AG-UI Adapter Modules (`ag-ui-quarkus`, `ag-ui-langchain4j`, `ag-ui-quarkus-langchain4j`, `ag-ui-a2a`)
 
 - **Linked Capability**: `CAP-06`
 - **Depends On**: `CAP-05`
-- **Ticket**: `#7`
-- **Module**: `quarkus-extension/runtime`
-- **Status**: `ACTIVE`
+- **Tickets**: `#7`, `#30`, `#68`, `#74`, `#81`
+- **Modules**: `ag-ui-quarkus`, `ag-ui-langchain4j`, `ag-ui-quarkus-langchain4j`, `ag-ui-a2a`
+- **Clean Architecture Layers (`ag-ui-quarkus`)**: `domain` (Level 0) <- `application` (Level 1) <- `adapters` (Level 2)
+- **Status**: `AMENDED (ADR-007)`
 
 ## 1. Problem Statement & Technical Scope
-Extracts the Quarkus runtime components into `quarkus-extension/runtime` (`org.agui:quarkus-ag-ui`):
-- `AgUiBridge`: Adapts LangChain4j `TokenStream` callbacks and tool invocations into SmallRye Mutiny `Multi<AgUiEvent<?>>` and SSE frames.
-- `AgUiMcpBridge`: Enriches MCP tool invocations with `McpToolMetadata` and emits `TOOL_CALL` / `TOOL_RESULT`.
-- `AgUiA2aBridge`: Wraps A2A task delegations into `STEP_STARTED`, `A2aHandoffPayload`, and `STEP_FINISHED` events.
+Provides 4 orthogonal Java 17 (`--release 17`) adapter modules over `com.ag-ui.community:0.1.1`:
+- **`ag-ui-quarkus`**: `AgUiJacksonMixins`, `AgUiObjectMapperCustomizer`, `AgUiQuarkusBridge`, `AgUiWebSocketHandler`, and `AgUiSessionRegistry` (zero LangChain4j/A2A dependencies).
+- **`ag-ui-langchain4j`**: Framework-agnostic `AgUiLangChain4jBridge`, per-run `AgUiLangChain4jRunSession`, RFC 6902 `AgUiStatePatch`, `AgUiMcpBridge`, and `AgUiRunOptions`.
+- **`ag-ui-quarkus-langchain4j`**: `AgUiQuarkusLangChain4jBridge` adapting Quarkiverse `Multi<ChatEvent>` to `Multi<Event>` / SSE.
+- **`ag-ui-a2a`**: `AgUiA2aBridge` adapting official `org.a2aproject.sdk` `1.4.0.Final` tasks into canonical `StepStartedEvent`, `ActivitySnapshotEvent`, and `StepFinishedEvent`.
 
-## 2. Acceptance Criteria (Gherkin / DoD)
-- **AC-01**: `AgUiBridge`, `AgUiMcpBridge`, and `AgUiA2aBridge` stream deterministic Mutiny `Multi<AgUiEvent<?>>` and formatted SSE frames.
-- **AC-02**: Dual-Gate verification passes with $\ge 85\%$ coverage and $\ge 80\%$ PITest mutation kill score.
+## 2. Acceptance Criteria (DoD)
+- **AC-01**: All 4 modules compile to Java 17 bytecode (`major version: 61`) with zero Archlens concentric layer inversions (`INV-03`).
+- **AC-02**: Dual-Gate verification passes (`98.80%–100%` line coverage, `88.35%–96.67%` PITest mutation score).

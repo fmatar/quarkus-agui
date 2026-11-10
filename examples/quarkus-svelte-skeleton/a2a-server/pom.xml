@@ -7,12 +7,12 @@
     <parent>
         <groupId>org.agui</groupId>
         <artifactId>quarkus-svelte-skeleton-parent</artifactId>
-        <version>0.1.0-SNAPSHOT</version>
+        <version>0.1.0</version>
     </parent>
 
     <artifactId>quarkus-svelte-skeleton-a2a-server</artifactId>
     <name>AG-UI Showcase - Quarkus A2A Specialist Server (:8082)</name>
-    <description>Quarkus 3.40.1.1 + Java 25 Agent2Agent (A2A) Specialist Server (/.well-known/agent.json &amp; Task API)</description>
+    <description>Quarkus 3.40.1.1 + Java 25 Agent2Agent (A2A) Specialist Server (/.well-known/agent-card.json &amp; JSON-RPC 2.0)</description>
 
     <dependencies>
         <dependency>
@@ -26,6 +26,14 @@
         <dependency>
             <groupId>org.a2aproject.sdk</groupId>
             <artifactId>a2a-java-sdk-reference-jsonrpc</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-smallrye-health</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-container-image-jib</artifactId>
         </dependency>
         <dependency>
             <groupId>io.quarkus</groupId>
@@ -62,6 +70,14 @@
             <plugin>
                 <groupId>org.pitest</groupId>
                 <artifactId>pitest-maven</artifactId>
+                <configuration>
+                    <targetClasses>
+                        <param>org.agui.showcase.a2a.*</param>
+                    </targetClasses>
+                    <targetTests>
+                        <param>org.agui.showcase.a2a.NomadTravelAdvisorServiceTest</param>
+                    </targetTests>
+                </configuration>
             </plugin>
         </plugins>
     </build>
