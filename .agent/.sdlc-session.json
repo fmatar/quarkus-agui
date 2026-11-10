@@ -7,8 +7,8 @@
       "type": "feat",
       "branch": "feature/issue-#83-headless-agui-svelte-sdk",
       "worktree": null,
-      "stage": 7,
-      "stageName": "Parallel Review & Quality Gate",
+      "stage": 8,
+      "stageName": "Release & Teardown",
       "remediationCount": 2,
       "maxRemediations": 3,
       "manifest": {
@@ -25,11 +25,11 @@
           "stage5": "2026-11-10T19:42:16.456Z",
           "stage6": "2026-11-10T19:42:46.499Z",
           "stage7": "2026-11-10T19:57:42.744Z",
-          "stage8": null
+          "stage8": "2026-11-10T20:01:29.999Z"
         }
       },
       "startedAt": "2026-11-10T19:18:44.185Z",
-      "updatedAt": "2026-11-10T19:57:42.969Z",
+      "updatedAt": "2026-11-10T20:01:30.258Z",
       "activeSubagents": [
         "peer-reviewer",
         "quality-gatekeeper"
