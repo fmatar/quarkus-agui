@@ -127,7 +127,7 @@ class NomadConciergeOrchestratorServiceTest {
                         "isError", false,
                         "city", city,
                         "baseCurrency", ctx.path("baseCurrency").asText("USD"),
-                        "targetCurrency", "EUR",
+                        "targetCurrency", ctx.path("targetCurrency").asText("EUR"),
                         "exchangeRate", 0.92,
                         "convertedTotal", 1840.0);
                 case "verify-travel-advisory" -> Map.of(
@@ -665,6 +665,26 @@ class NomadConciergeOrchestratorServiceTest {
         List<Map<String, Object>> autoMedia = (List<Map<String, Object>>) autoDelta.get("media");
         assertNotNull(autoMedia);
         assertEquals(2, autoMedia.size());
+
+        // Verify two-turn Beirut slot-filling with trailing currency symbol ("1. 2000$") and open.er-api.com FX source
+        dossierStore.beginTurn("th-beirut-2turn", "I want to plan a trip to Beirut, Lebanon");
+        assertTrue(dossierStore.finalizeTurnDossier("th-beirut-2turn", a2aClient).isEmpty());
+        dossierStore.beginTurn("th-beirut-2turn", "1. 2000$\n2. Food, nightlife\n3. 5 nights");
+        Map<String, Object> beirutDelta = dossierStore.finalizeTurnDossier("th-beirut-2turn", a2aClient);
+        assertFalse(beirutDelta.isEmpty());
+        Map<String, Object> beirutTrip = (Map<String, Object>) ((Map<String, Object>) beirutDelta.get("tripDossierState")).get("nomadTrip");
+        assertEquals("Beirut", beirutTrip.get("activeCity"));
+        assertEquals("Lebanon", beirutTrip.get("country"));
+        assertEquals("LBP", beirutTrip.get("currency"));
+        assertEquals(5, beirutTrip.get("nights"));
+        assertEquals(2000.0, beirutTrip.get("budgetUsd"));
+        assertEquals("USD", beirutTrip.get("homeCurrency"));
+        assertEquals(1300.0, beirutTrip.get("allocatedUsd"));
+
+        Map<String, Object> openErDelta = dossierStore.onToolExecuted("th-beirut-2turn", buildExecution(
+                ToolExecutionRequest.builder().id("fx-lbp").name("convertAndAuditBudget").arguments("{\"city\":\"Beirut\"}").build(),
+                false, "{\"status\":\"OK\",\"city\":\"Beirut\",\"country\":\"Lebanon\",\"baseCurrency\":\"USD\",\"targetCurrency\":\"LBP\",\"exchangeRate\":89500.0,\"budgetUsd\":2000.0,\"source\":\"open.er-api.com\"}"));
+        assertTrue(String.valueOf(openErDelta.get("sources")).contains("ExchangeRate-API ISO 4217 FX Reference"));
 
         dossierStore.onToolExecuted("th-tools", buildExecution(
                 ToolExecutionRequest.builder().id("rst-1").name("resetNomadState").arguments("not-json").build(),

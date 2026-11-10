@@ -55,9 +55,11 @@ public class TripDossierStore {
     private static final Pattern NIGHTS_PATTERN = Pattern.compile(
             "(?i)\\b(\\d{1,2})\\s*[- ]?\\s*(?:night|nights|day|days)\\b");
     private static final Pattern SYMBOL_BUDGET_PATTERN = Pattern.compile(
-            "(?i)(\\$|€|£)\\s*([\\d,]+(?:\\.\\d+)?)\\s*(USD|EUR|GBP|CHF)?\\b");
+            "(?i)(?<![\\d])(\\$|€|£)[ \\t]*([\\d,]+(?:\\.\\d+)?)[ \\t]*(USD|EUR|GBP|CHF)?\\b");
+    private static final Pattern TRAILING_SYMBOL_BUDGET_PATTERN = Pattern.compile(
+            "(?i)\\b([\\d,]+(?:\\.\\d+)?)[ \\t]*(\\$|€|£)(?:[ \\t]*(USD|EUR|GBP|CHF)\\b)?");
     private static final Pattern CODE_BUDGET_PATTERN = Pattern.compile(
-            "(?i)\\b([\\d,]+(?:\\.\\d+)?)\\s*(USD|EUR|GBP|CHF)\\b");
+            "(?i)\\b([\\d,]+(?:\\.\\d+)?)[ \\t]*(USD|EUR|GBP|CHF)\\b");
     private static final Pattern MEDIA_OR_DETAILS_PATTERN = Pattern.compile(
             "(?i)\\b(music|song|audio|listen|soundtrack|fado|koto|oud|culture|cultural|media|photo|picture|image|landmark|details)\\b");
     private static final Pattern RESERVATION_INTENT_PATTERN = Pattern.compile(
@@ -721,9 +723,11 @@ public class TripDossierStore {
     @SuppressWarnings("unchecked")
     private void applyBudgetResult(String threadKey, Map<String, Object> args, Map<String, Object> result, boolean isError) {
         Map<String, Object> report = result.get("report") instanceof Map<?, ?> r ? (Map<String, Object>) r : result;
+        String sourceHost = stringOrDefault(report.get("source"), "api.frankfurter.dev");
+        boolean isOpenErApi = "open.er-api.com".equalsIgnoreCase(sourceHost);
         appendSource(threadKey, Map.of(
-                "title", "Frankfurter ECB FX Reference",
-                "url", "https://api.frankfurter.dev/v1/latest",
+                "title", isOpenErApi ? "ExchangeRate-API ISO 4217 FX Reference" : "Frankfurter ECB FX Reference",
+                "url", isOpenErApi ? "https://open.er-api.com/v6/latest/USD" : "https://api.frankfurter.dev/v1/latest",
                 "status", isError ? "error" : "verified",
                 "error", isError ? stringOrDefault(result.get("error"), "FX API unavailable") : ""));
         if (isError) {
@@ -734,6 +738,9 @@ public class TripDossierStore {
             if (city != null) {
                 switchActiveCityLocked(normalizeCityName(city));
             }
+            if (report.get("country") instanceof String country && !country.isBlank()) {
+                nomadTrip.put("country", country);
+            }
             if (report.get("targetCurrency") instanceof String tc && !tc.isBlank()) {
                 nomadTrip.put("currency", tc);
             }
@@ -743,7 +750,8 @@ public class TripDossierStore {
             if (report.get("exchangeRate") instanceof Number rate) {
                 nomadTrip.put("exchangeRate", rate.doubleValue());
             }
-            if (args.get("budgetAmount") instanceof Number budget) {
+            Object budgetObj = args.get("budgetAmount") != null ? args.get("budgetAmount") : report.get("budgetUsd");
+            if (budgetObj instanceof Number budget && budget.doubleValue() > 0.0) {
                 nomadTrip.put("budgetUsd", budget.doubleValue());
                 nomadTrip.putIfAbsent("allocatedUsd", Math.round(budget.doubleValue() * 0.65 * 100.0) / 100.0);
             }
@@ -817,6 +825,23 @@ public class TripDossierStore {
             String symbol = symMatcher.group(1);
             String numberStr = symMatcher.group(2).replace(",", "");
             String explicitCode = symMatcher.group(3);
+            try {
+                double amount = Double.parseDouble(numberStr);
+                if (amount > 0.0) {
+                    String currency = explicitCode != null && !explicitCode.isBlank()
+                            ? explicitCode.toUpperCase(Locale.ROOT)
+                            : ("€".equals(symbol) ? "EUR" : ("£".equals(symbol) ? "GBP" : "USD"));
+                    return new ParsedBudget(amount, currency);
+                }
+            } catch (NumberFormatException ignored) {
+                return null;
+            }
+        }
+        Matcher trailingSymMatcher = TRAILING_SYMBOL_BUDGET_PATTERN.matcher(prompt);
+        if (trailingSymMatcher.find()) {
+            String numberStr = trailingSymMatcher.group(1).replace(",", "");
+            String symbol = trailingSymMatcher.group(2);
+            String explicitCode = trailingSymMatcher.group(3);
             try {
                 double amount = Double.parseDouble(numberStr);
                 if (amount > 0.0) {

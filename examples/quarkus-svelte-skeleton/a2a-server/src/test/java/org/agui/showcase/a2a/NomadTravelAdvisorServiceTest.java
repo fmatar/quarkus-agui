@@ -352,6 +352,65 @@ class NomadTravelAdvisorServiceTest {
         assertEquals("USD", NomadTravelAdvisorService.resolveStaticCurrencyForCountry(" "));
         assertEquals("JPY", NomadTravelAdvisorService.resolveStaticCurrencyForCountry("Japan"));
         assertEquals("USD", NomadTravelAdvisorService.resolveStaticCurrencyForCountry("UnknownLand"));
+
+        // Non-ECB currency (LBP for Beirut) falls back to open.er-api.com when api.frankfurter.dev returns 404 "not found"
+        service.setHttpProbe(url -> {
+            if (url.contains("/v1/latest")) {
+                return new NomadTravelAdvisorService.UpstreamHttpResult(
+                        404, "{\"message\":\"not found\"}", "HTTP 404 from api.frankfurter.dev", 18L);
+            }
+            if (url.contains("/v6/latest/")) {
+                return new NomadTravelAdvisorService.UpstreamHttpResult(
+                        200, "{\"result\":\"success\",\"base_code\":\"USD\",\"rates\":{\"USD\":1.0,\"LBP\":89500.0,\"MAD\":9.85}}", null, 24L);
+            }
+            return new NomadTravelAdvisorService.UpstreamHttpResult(500, null, "unexpected URL", 5L);
+        });
+
+        NomadTravelAdvisorService.AuditResult beirutFx = service.performAudit(
+                "convert-and-audit-budget",
+                "1. 2000$\n2. Food, nightlife in Beirut\n3. 5 nights",
+                Map.of("city", "Beirut", "targetCurrency", "LBP"));
+        assertEquals("OK", beirutFx.data().get("status"));
+        assertEquals("Beirut", beirutFx.data().get("city"));
+        assertEquals("Lebanon", beirutFx.data().get("country"));
+        assertEquals("USD", beirutFx.data().get("baseCurrency"));
+        assertEquals("LBP", beirutFx.data().get("targetCurrency"));
+        assertEquals(2000.0, beirutFx.data().get("budgetUsd"));
+        assertEquals(89500.0, beirutFx.data().get("exchangeRate"));
+        assertEquals(179000000.0, beirutFx.data().get("convertedTotal"));
+        assertEquals("open.er-api.com", beirutFx.data().get("source"));
+        assertTrue(beirutFx.summary().contains("ExchangeRate-API FX audit complete"));
+
+        // Also falls back when Frankfurter returns 200 without the target symbol
+        service.setHttpProbe(url -> {
+            if (url.contains("/v1/latest")) {
+                return new NomadTravelAdvisorService.UpstreamHttpResult(
+                        200, "{\"amount\":1.0,\"base\":\"USD\",\"rates\":{\"EUR\":0.91}}", null, 14L);
+            }
+            return new NomadTravelAdvisorService.UpstreamHttpResult(
+                    200, "{\"result\":\"success\",\"base_code\":\"USD\",\"rates\":{\"MAD\":9.85}}", null, 20L);
+        });
+        NomadTravelAdvisorService.AuditResult marrakechFx = service.performAudit(
+                "convert-and-audit-budget",
+                "Convert $1,000 for Marrakech",
+                Map.of("city", "Marrakech"));
+        assertEquals("OK", marrakechFx.data().get("status"));
+        assertEquals("MAD", marrakechFx.data().get("targetCurrency"));
+        assertEquals(9850.0, marrakechFx.data().get("convertedTotal"));
+        assertEquals("open.er-api.com", marrakechFx.data().get("source"));
+
+        // Fallback error branches (result != success or rate <= 0) return original Frankfurter error
+        service.setHttpProbe(url -> url.contains("/v1/latest")
+                ? new NomadTravelAdvisorService.UpstreamHttpResult(404, "{\"message\":\"not found\"}", "HTTP 404", 10L)
+                : new NomadTravelAdvisorService.UpstreamHttpResult(200, "{\"result\":\"error\"}", null, 10L));
+        assertEquals("ERROR", service.performAudit(
+                "convert-and-audit-budget", "Convert 2000$ for Beirut", Map.of("city", "Beirut")).data().get("status"));
+
+        service.setHttpProbe(url -> url.contains("/v1/latest")
+                ? new NomadTravelAdvisorService.UpstreamHttpResult(404, "{\"message\":\"not found\"}", "HTTP 404", 10L)
+                : new NomadTravelAdvisorService.UpstreamHttpResult(200, "{\"result\":\"success\",\"rates\":{\"LBP\":0.0}}", null, 10L));
+        assertEquals("ERROR", service.performAudit(
+                "convert-and-audit-budget", "Convert 2000$ for Beirut", Map.of("city", "Beirut")).data().get("status"));
     }
 
     @Test

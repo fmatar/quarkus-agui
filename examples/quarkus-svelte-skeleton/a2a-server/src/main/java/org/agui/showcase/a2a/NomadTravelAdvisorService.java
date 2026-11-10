@@ -34,7 +34,7 @@ public class NomadTravelAdvisorService {
     public static final String AGENT_NAME = "Nomad-A2A-Specialist";
 
     private static final Pattern BUDGET_AMOUNT_PATTERN = Pattern.compile(
-            "(?:[$€£¥]\\s*([0-9][0-9,]*(?:\\.[0-9]+)?)|\\b([0-9][0-9,]*(?:\\.[0-9]+)?)\\s*(?:usd|eur|gbp|chf|cad|aud|jpy|isk|mxn|dollars?|euros?|pounds?)\\b)",
+            "(?:(?<![0-9])[$€£¥][ \\t]*([0-9][0-9,]*(?:\\.[0-9]+)?)|\\b([0-9][0-9,]*(?:\\.[0-9]+)?)[ \\t]*(?:[$€£¥]|\\b(?:usd|eur|gbp|chf|cad|aud|jpy|isk|mxn|dollars?|euros?|pounds?)\\b))",
             Pattern.CASE_INSENSITIVE);
 
     private static final List<String> KNOWN_CITIES = List.of(
@@ -59,6 +59,9 @@ public class NomadTravelAdvisorService {
 
     @ConfigProperty(name = "frankfurter.base-url", defaultValue = "https://api.frankfurter.dev")
     String frankfurterBaseUrl = "https://api.frankfurter.dev";
+
+    @ConfigProperty(name = "openerapi.base-url", defaultValue = "https://open.er-api.com")
+    String openErApiBaseUrl = "https://open.er-api.com";
 
     @ConfigProperty(name = "restcountries.base-url", defaultValue = "https://api.restcountries.com")
     String restCountriesBaseUrl = "https://api.restcountries.com";
@@ -172,7 +175,10 @@ public class NomadTravelAdvisorService {
 
         String country = stringFromCtx(ctx, "country", resolveCountryForCity(city));
         String baseCurrency = stringFromCtx(ctx, "baseCurrency", detectCurrencyFromPrompt(prompt, "USD")).toUpperCase(Locale.ROOT);
-        String targetCurrency = stringFromCtx(ctx, "currency", resolveStaticCurrencyForCountry(country)).toUpperCase(Locale.ROOT);
+        String targetCurrency = stringFromCtx(
+                ctx,
+                "currency",
+                stringFromCtx(ctx, "targetCurrency", resolveStaticCurrencyForCountry(country))).toUpperCase(Locale.ROOT);
 
         String url = baseCurrency.equalsIgnoreCase(targetCurrency)
                 ? frankfurterBaseUrl + "/v1/latest?base=" + URLEncoder.encode(baseCurrency, StandardCharsets.UTF_8)
@@ -182,6 +188,10 @@ public class NomadTravelAdvisorService {
         UpstreamHttpResult res = httpProbe.apply(url);
         String apiError = inspectUpstreamError(res, "api.frankfurter.dev");
         if (apiError != null) {
+            AuditResult fallbackResult = tryOpenErApiFallback(city, country, baseCurrency, targetCurrency, budgetAmount);
+            if (fallbackResult != null) {
+                return fallbackResult;
+            }
             return buildServiceUnavailableResult(
                     "art-fx-1",
                     "Nomad Multi-Currency & Budget Audit",
@@ -196,6 +206,10 @@ public class NomadTravelAdvisorService {
             if (!baseCurrency.equalsIgnoreCase(targetCurrency)) {
                 JsonNode rates = objectMapper.readTree(res.body()).path("rates");
                 if (!rates.has(targetCurrency)) {
+                    AuditResult fallbackResult = tryOpenErApiFallback(city, country, baseCurrency, targetCurrency, budgetAmount);
+                    if (fallbackResult != null) {
+                        return fallbackResult;
+                    }
                     return buildServiceUnavailableResult(
                             "art-fx-1",
                             "Nomad Multi-Currency & Budget Audit",
@@ -207,26 +221,15 @@ public class NomadTravelAdvisorService {
                 rate = rates.path(targetCurrency).asDouble();
             }
 
-            double convertedTotal = Math.round(budgetAmount * rate * 100.0) / 100.0;
-            Map<String, Object> data = new LinkedHashMap<>();
-            data.put("status", "OK");
-            data.put("isError", false);
-            data.put("serviceAvailable", true);
-            data.put("city", city);
-            data.put("country", country);
-            data.put("baseCurrency", baseCurrency);
-            data.put("targetCurrency", targetCurrency);
-            data.put("exchangeRate", rate);
-            data.put("budgetUsd", budgetAmount);
-            data.put("convertedTotal", convertedTotal);
-            data.put("requiresHitlApprovalAboveUsd", 1500.0);
-            data.put("source", "api.frankfurter.dev");
-
-            String summary = String.format(
-                    Locale.ROOT,
-                    "Frankfurter FX audit complete for %s (%s): %,.0f %s = %,.2f %s (rate %.4f).",
-                    city, country, budgetAmount, baseCurrency, convertedTotal, targetCurrency, rate);
-            return new AuditResult(summary, "art-fx-1", "Nomad Multi-Currency & Budget Audit", data);
+            return buildFxSuccessAuditResult(
+                    city,
+                    country,
+                    baseCurrency,
+                    targetCurrency,
+                    budgetAmount,
+                    rate,
+                    "api.frankfurter.dev",
+                    "Frankfurter FX audit complete");
         } catch (Exception ex) {
             return buildServiceUnavailableResult(
                     "art-fx-1",
@@ -236,6 +239,78 @@ public class NomadTravelAdvisorService {
                     "Invalid JSON payload from api.frankfurter.dev: " + ex.getMessage(),
                     Map.of("city", city, "country", country));
         }
+    }
+
+    private AuditResult tryOpenErApiFallback(
+            String city,
+            String country,
+            String baseCurrency,
+            String targetCurrency,
+            double budgetAmount) {
+        String fallbackUrl = openErApiBaseUrl + "/v6/latest/" + URLEncoder.encode(baseCurrency, StandardCharsets.UTF_8);
+        UpstreamHttpResult fallbackRes = httpProbe.apply(fallbackUrl);
+        if (inspectUpstreamError(fallbackRes, "open.er-api.com") != null) {
+            return null;
+        }
+        try {
+            JsonNode root = objectMapper.readTree(fallbackRes.body());
+            if (root.hasNonNull("result") && !"success".equalsIgnoreCase(root.path("result").asText())) {
+                return null;
+            }
+            double rate = 1.0;
+            if (!baseCurrency.equalsIgnoreCase(targetCurrency)) {
+                JsonNode rates = root.path("rates");
+                if (!rates.has(targetCurrency) || !rates.path(targetCurrency).isNumber()) {
+                    return null;
+                }
+                rate = rates.path(targetCurrency).asDouble();
+                if (rate <= 0.0) {
+                    return null;
+                }
+            }
+            return buildFxSuccessAuditResult(
+                    city,
+                    country,
+                    baseCurrency,
+                    targetCurrency,
+                    budgetAmount,
+                    rate,
+                    "open.er-api.com",
+                    "ExchangeRate-API FX audit complete");
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private AuditResult buildFxSuccessAuditResult(
+            String city,
+            String country,
+            String baseCurrency,
+            String targetCurrency,
+            double budgetAmount,
+            double rate,
+            String source,
+            String summaryPrefix) {
+        double convertedTotal = Math.round(budgetAmount * rate * 100.0) / 100.0;
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("status", "OK");
+        data.put("isError", false);
+        data.put("serviceAvailable", true);
+        data.put("city", city);
+        data.put("country", country);
+        data.put("baseCurrency", baseCurrency);
+        data.put("targetCurrency", targetCurrency);
+        data.put("exchangeRate", rate);
+        data.put("budgetUsd", budgetAmount);
+        data.put("convertedTotal", convertedTotal);
+        data.put("requiresHitlApprovalAboveUsd", 1500.0);
+        data.put("source", source);
+
+        String summary = String.format(
+                Locale.ROOT,
+                "%s for %s (%s): %,.0f %s = %,.2f %s (rate %.4f).",
+                summaryPrefix, city, country, budgetAmount, baseCurrency, convertedTotal, targetCurrency, rate);
+        return new AuditResult(summary, "art-fx-1", "Nomad Multi-Currency & Budget Audit", data);
     }
 
     private AuditResult performTravelAdvisoryAudit(String prompt, Map<String, Object> ctx) {
