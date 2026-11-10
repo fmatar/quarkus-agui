@@ -15,6 +15,10 @@
     <packaging>pom</packaging>
     <name>AG-UI Tri-Protocol Showcase Parent (MCP + A2A + AG-UI + Quinoa + Jib)</name>
 
+    <properties>
+        <maven.compiler.release>25</maven.compiler.release>
+    </properties>
+
     <modules>
         <module>mcp-server</module>
         <module>a2a-server</module>

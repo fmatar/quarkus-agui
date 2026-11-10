@@ -21,11 +21,11 @@ Fill the gap in Java/JVM ecosystems for the **AG-UI (Agent–User Interaction Pr
 - **INV-01**: Zero direct commits, merges, or pushes to main or develop; 100% of changes flow via tracked ticket branches and Stage 7 SHA-256 Merkle Gate Receipts.
 - **INV-02**: Dual-Gate TDD Craftsmanship: >= 85% line and branch diff coverage AND >= 80% mutation kill score (PITest / Stryker) adhering to Robert C. Martin Three Laws of TDD.
 - **INV-03**: Clean Architecture Concentric Layer Governance (Archlens): Dependencies strictly point inward (Adapters -> Application -> Domain Core) with zero domain leaks.
-- **INV-04**: Zero-Dependency Core Library: ag-ui-core must remain plain Java 25 records, stream adapters, and formatters without Quarkus or web framework dependencies.
-- **INV-05**: Sub-10ms Serialization Overhead: Java core AG-UI event processing and SSE framing must add < 10ms p99 latency overhead.
-- **INV-06**: Portable GraalVM 25 Native Footprint: Native executable compiled with quarkus-ag-ui (-Dnative local GraalVM 25 or Mandrel JDK 25 container fallback) must maintain < 50MB RSS baseline memory footprint.
-- **INV-07**: Zero-Configuration Extension Defaults: Importing quarkus-ag-ui auto-configures Jackson, RESTEasy Reactive text/event-stream SSE bindings, and LangChain4j/MCP/A2A bridges under Apache License 2.0.
-- **INV-08**: Modern Frontend & Toolchain Standards: Java 25 + Quarkus 3.40.1.1 via ./mvnw on backend; pnpm + Svelte 5 Runes + @skeletonlabs/skeleton-svelte + @lucide/svelte (zero deprecated modules) on frontend.
+- **INV-04**: Upstream Protocol Fidelity & Java 17 Library Baseline (`ADR-007`): Reusable library modules (`ag-ui-quarkus`, `ag-ui-langchain4j`, `ag-ui-quarkus-langchain4j`, `ag-ui-a2a`) adopt upstream `com.ag-ui.community:{java-core,java-server}:0.1.1` compiled with `--release 17` and zero duplicate event POJOs.
+- **INV-05**: Sub-10ms Serialization Overhead: AG-UI Jackson MixIn serialization and SSE/WebSocket framing must add < 10ms p99 latency overhead.
+- **INV-06**: Portable GraalVM 25 Native Footprint: Native executable compiled with `ag-ui-quarkus` (`-Dnative` local GraalVM 25 or Mandrel JDK 25 container fallback) must maintain < 50MB RSS baseline memory footprint.
+- **INV-07**: Orthogonal Zero-Boilerplate Quarkus Adapters (`ADR-007`): Importing `ag-ui-quarkus` auto-configures `ObjectMapperCustomizer` MixIns, RESTEasy Reactive SSE bindings, reusable `AgUiWebSocketHandler`, and GraalVM `reflect-config.json` without pulling LangChain4j; `ag-ui-quarkus-langchain4j` bridges `Multi<ChatEvent>`; dual-licensed as `Apache-2.0 OR MIT`.
+- **INV-08**: Modern Multi-Release & Frontend Toolchain Standards: Java 17 for reusable libraries and Java 25 + Quarkus 3.40.1.1 for `examples/quarkus-svelte-skeleton` via `./mvnw`; `pnpm` workspaces + headless `@agui/svelte` (`@ag-ui/client` + `@ag-ui/core`) + Svelte 5 Runes + `@skeletonlabs/skeleton-svelte` + `@lucide/svelte` on frontend.
 
 ---
 
@@ -37,8 +37,8 @@ Fill the gap in Java/JVM ecosystems for the **AG-UI (Agent–User Interaction Pr
 | CAP-02 | OpsPilot Quarkus Orchestrator (:8080) & SvelteKit + pnpm 3-Pane Baseline (:5173) | `docs/specs/cap-02-orchestrator-svelte-baseline.md` | CAP-01 | `IMPLEMENTED (ADR-002)` |
 | CAP-03 | In-Place AG-UI Protocol Engine in Orchestrator (Core 6 + MCP/A2A + State + HITL) | `docs/specs/cap-03-inplace-agui-backend.md` | CAP-02 | `IMPLEMENTED (ADR-002)` |
 | CAP-04 | Full 3-Pane SvelteKit + Skeleton UI + @lucide/svelte AG-UI Workbench | `docs/specs/cap-04-svelte-agui-workbench.md` | CAP-02 | `IMPLEMENTED (ADR-002)` |
-| CAP-05 | Extract ag-ui-core Standalone Java 25 Library & Refactor Showcase | `docs/specs/cap-05-extract-agui-core.md` | CAP-03, CAP-04 | `IMPLEMENTED (ADR-002)` |
-| CAP-06 | Extract quarkus-ag-ui-runtime (AgUiBridge, AgUiMcpBridge, AgUiA2aBridge, Mutiny SSE) | `docs/specs/cap-06-extract-quarkus-runtime.md` | CAP-05 | `AMENDED (ADR-006)` |
+| CAP-05 | Extract ag-ui-core Standalone Java 25 Library & Refactor Showcase | `docs/specs/cap-05-extract-agui-core.md` | CAP-03, CAP-04 | `AMENDED (ADR-007)` |
+| CAP-06 | Extract quarkus-ag-ui-runtime (AgUiBridge, AgUiMcpBridge, AgUiA2aBridge, Mutiny SSE) | `docs/specs/cap-06-extract-quarkus-runtime.md` | CAP-05 | `AMENDED (ADR-007)` |
 | CAP-07 | Extract quarkus-ag-ui-deployment, GraalVM 25 Reflection, Dev UI & Integration Tests | `docs/specs/cap-07-extract-quarkus-deployment-it.md` | CAP-06 | `AMENDED (ADR-006)` |
 | CAP-08 | Migrate Showcase to quarkus-ag-ui Extension & Full E2E + Native Benchmarks | `docs/specs/cap-08-migrate-showcase-e2e-benchmarks.md` | CAP-07 | `IMPLEMENTED (ADR-002)` |
 
@@ -58,4 +58,5 @@ Fill the gap in Java/JVM ecosystems for the **AG-UI (Agent–User Interaction Pr
 | ADR-002 | Example-First Tri-Protocol (AG-UI + MCP + A2A) Evolution on Java 25, Quarkus 3.40.1.1 & pnpm | `product` | `accepted` | #2 | CAP-01, CAP-02, CAP-03, CAP-04, CAP-05, CAP-06, CAP-07, CAP-08 |
 | ADR-003 | Multi-Extension BOM and Concentric Transport Architecture (Core, SSE, WebSockets) | `technical` | `accepted` | #30 | CAP-06, CAP-07 |
 | ADR-006 | Framework-Agnostic Module Topology (ag-ui-core, ag-ui-a2a, ag-ui-langchain4j, ag-ui-quarkus) and Removal of Quarkus Deployment Processors | `technical` | `accepted` | ##9450 | CAP-06, CAP-07, ADR-003 |
+| ADR-007 | Adopt Upstream AG-UI SDKs (com.ag-ui.community & @ag-ui/client) and Orthogonal Java 17 Quarkus Modules | `technical` | `accepted` | #81 | CAP-05, CAP-06, ADR-006 |
 <!-- ADR_INDEX_END -->

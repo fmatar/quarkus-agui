@@ -1,35 +1,35 @@
 {
-  "activeSessionId": null,
+  "activeSessionId": 81,
   "sessions": {
-    "29": {
-      "active": false,
-      "issueId": 29,
+    "81": {
+      "active": true,
+      "issueId": 81,
       "type": "feat",
-      "branch": "feature/issue-#29-extract-agui-svelte-package",
+      "branch": "feature/issue-#81-adopt-upstream-ag-ui-java-sdks",
       "worktree": null,
       "stage": 8,
-      "stageName": "Done & Released",
+      "stageName": "Release & Teardown",
       "remediationCount": 0,
       "maxRemediations": 3,
       "manifest": {
         "specPath": null,
-        "prNumber": 80,
-        "coverageReport": "packages/agui-svelte/tests/agui-svelte.test.mjs",
-        "mutationScore": 100,
+        "prNumber": null,
+        "coverageReport": null,
+        "mutationScore": null,
         "uiScreenshotPath": null,
         "checkpoints": {
-          "stage1": "2026-11-10T07:46:00.000Z",
-          "stage2": "2026-11-10T07:46:30.000Z",
-          "stage3": "2026-11-10T07:47:00.000Z",
-          "stage4": "2026-11-10T07:53:38.000Z",
-          "stage5": "2026-11-10T07:53:40.000Z",
-          "stage6": "2026-11-10T07:54:00.000Z",
-          "stage7": "2026-11-10T07:54:10.000Z",
-          "stage8": "2026-11-10T07:54:20.000Z"
+          "stage1": null,
+          "stage2": null,
+          "stage3": null,
+          "stage4": null,
+          "stage5": null,
+          "stage6": null,
+          "stage7": null,
+          "stage8": "2026-11-10T19:07:43.797Z"
         }
       },
-      "startedAt": "2026-11-10T07:46:00.000Z",
-      "updatedAt": "2026-11-10T07:54:20.000Z",
+      "startedAt": "2026-11-10T19:07:43.796Z",
+      "updatedAt": "2026-11-10T19:07:43.797Z",
       "activeSubagents": []
     }
   }
