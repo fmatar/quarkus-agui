@@ -27,7 +27,8 @@ test('Docker Compose topology uses Jib-built images for mcp-server, a2a-server, 
 	assert.match(content, /AGUI_A2A_PUBLIC_URL=http:\/\/a2a-server:8082/);
 	assert.match(content, /AGUI_MCP_URL=http:\/\/mcp-server:8081\/mcp/);
 	assert.match(content, /RESTCOUNTRIES_API_KEY=/);
-	assert.match(content, /\/q\/health\/ready/);
+	assert.match(content, /\/q\/health\/live/);
+	assert.doesNotMatch(content, /GET \/q\/health\/ready/);
 });
 
 test('Quinoa SPA static adapter, Jib container extensions, -Pnative profile, and run-showcase.sh are configured while legacy Dockerfiles are removed', () => {

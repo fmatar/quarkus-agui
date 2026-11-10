@@ -342,10 +342,19 @@ class NomadMcpConciergeServiceTest {
 
         assertEquals(2, ((List<?>) resource.listPrompts().get("prompts")).size());
         assertEquals(6, ((List<?>) resource.listTools().get("tools")).size());
+        java.util.concurrent.atomic.AtomicInteger healthProbes = new java.util.concurrent.atomic.AtomicInteger();
+        var baseProbe = service.httpProbe;
+        service.healthCacheTtlMs = 300_000L;
+        service.setHttpProbe(url -> {
+            healthProbes.incrementAndGet();
+            return baseProbe.apply(url);
+        });
         assertEquals("UP", resource.health().get("status"));
+        assertEquals(3, healthProbes.get());
         assertEquals(
                 org.eclipse.microprofile.health.HealthCheckResponse.Status.UP,
                 readinessCheck.call().getStatus());
+        assertEquals(3, healthProbes.get(), "Repeated readiness check within TTL must use cached upstream health report");
         assertEquals("nomad-mcp-upstreams", readinessCheck.call().getName());
 
         Map<String, Object> updates = new HashMap<>();

@@ -27,7 +27,7 @@ public class NomadUiSurfaceTools {
         this.dossierStore = dossierStore;
     }
 
-    @Tool("Present an interactive AG-UI choice card of curated neighborhood, architectural, and acoustic experiences for a destination city.")
+    @Tool("Present an interactive AG-UI choice card of curated neighborhood, architectural, and acoustic experiences for a destination city. Call this when the traveler asks for activity/experience suggestions or says 'go ahead' to explore experiences in a city.")
     public String presentTravelChoices(
             @ToolMemoryId Object memoryId,
             @P("Destination city name (required)") String city,
@@ -94,13 +94,13 @@ public class NomadUiSurfaceTools {
                 "interaction", interaction));
     }
 
-    @Tool("Request a sanctuary or hotel reservation hold. Holds of $1,500 USD or above automatically pause at the Human-in-the-Loop (HITL) traveler approval gate before committing.")
+    @Tool("Request a sanctuary or hotel reservation hold ONLY when the traveler explicitly asks to book or reserve a specific stay with an explicit city, stopTitle, positive nights, and positive costUsd. Never call this tool to suggest activities or when arguments are unknown. Holds of $1,500 USD or above pause at the HITL approval gate.")
     public String requestSanctuaryReservation(
             @ToolMemoryId Object memoryId,
-            @P("Destination city name (required)") String city,
-            @P("Sanctuary, hotel, or ryokan name (required)") String stopTitle,
-            @P("Number of nights as a positive integer (required)") Integer nights,
-            @P("Total reservation hold amount in USD as a positive number (required)") Double costUsd) {
+            @P("Destination city name explicitly stated by the traveler (required)") String city,
+            @P("Sanctuary, hotel, or ryokan name explicitly stated by the traveler (required)") String stopTitle,
+            @P("Number of nights as a positive integer explicitly stated by the traveler (required; never pass 0 or guess)") Integer nights,
+            @P("Total reservation hold amount in USD as a positive number explicitly stated by the traveler (required; never pass 0 or guess)") Double costUsd) {
         if (city == null || city.isBlank()
                 || stopTitle == null || stopTitle.isBlank()
                 || nights == null || nights <= 0

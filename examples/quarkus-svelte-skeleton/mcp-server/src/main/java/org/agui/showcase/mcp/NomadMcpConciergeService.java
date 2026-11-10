@@ -19,6 +19,7 @@ import io.quarkiverse.mcp.server.ToolArg;
 import io.quarkiverse.mcp.server.ToolResponse;
 import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.net.URI;
 import java.net.URLEncoder;
@@ -63,10 +64,16 @@ public class NomadMcpConciergeService {
     String openMeteoGeoBaseUrl = "https://geocoding-api.open-meteo.com";
     String wikipediaBaseUrl = "https://en.wikipedia.org";
     String itunesBaseUrl = "https://itunes.apple.com";
+    @ConfigProperty(name = "agui.health.cache-ttl-ms", defaultValue = "300000")
+    long healthCacheTtlMs = 300_000L;
+    private volatile Map<String, Object> cachedHealthReport;
+    private volatile long cachedHealthExpiresAtMs;
     Function<String, UpstreamHttpResult> httpProbe = this::probeUrlViaHttp;
 
     void setHttpProbe(Function<String, UpstreamHttpResult> probe) {
         this.httpProbe = probe == null ? this::probeUrlViaHttp : probe;
+        this.cachedHealthReport = null;
+        this.cachedHealthExpiresAtMs = 0L;
     }
 
     public record UpstreamHttpResult(int statusCode, String body, String error, long latencyMs) {
@@ -488,6 +495,11 @@ public class NomadMcpConciergeService {
     }
 
     public Map<String, Object> checkHealth() {
+        long now = System.currentTimeMillis();
+        Map<String, Object> cached = cachedHealthReport;
+        if (cached != null && now < cachedHealthExpiresAtMs) {
+            return cached;
+        }
         List<Map<String, Object>> upstreams = new ArrayList<>();
         upstreams.add(probeUpstreamHealth(
                 "open-meteo",
@@ -510,8 +522,11 @@ public class NomadMcpConciergeService {
         report.put("status", overall);
         report.put("healthyCount", upCount);
         report.put("totalCount", upstreams.size());
-        report.put("upstreams", upstreams);
-        return report;
+        report.put("upstreams", List.copyOf(upstreams));
+        Map<String, Object> snapshot = Collections.unmodifiableMap(report);
+        cachedHealthReport = snapshot;
+        cachedHealthExpiresAtMs = now + Math.max(0L, healthCacheTtlMs);
+        return snapshot;
     }
 
     private Map<String, Object> probeUpstreamHealth(String id, String name, String url) {

@@ -365,14 +365,21 @@ class NomadTravelAdvisorServiceTest {
         assertEquals(1L, ((Number) degraded.get("healthyCount")).longValue());
         assertEquals(org.eclipse.microprofile.health.HealthCheckResponse.Status.DOWN, readinessCheck.call().getStatus());
 
-        // 2. UP health
-        service.setHttpProbe(url -> url.contains("frankfurter")
-                ? new NomadTravelAdvisorService.UpstreamHttpResult(200, "{\"rates\":{\"EUR\":0.92}}", null, 15L)
-                : new NomadTravelAdvisorService.UpstreamHttpResult(200, REST_COUNTRIES_V5_FRANCE_JSON, null, 18L));
+        // 2. UP health + TTL caching (second call within TTL does not re-probe upstreams)
+        java.util.concurrent.atomic.AtomicInteger probeCount = new java.util.concurrent.atomic.AtomicInteger();
+        service.healthCacheTtlMs = 300_000L;
+        service.setHttpProbe(url -> {
+            probeCount.incrementAndGet();
+            return url.contains("frankfurter")
+                    ? new NomadTravelAdvisorService.UpstreamHttpResult(200, "{\"rates\":{\"EUR\":0.92}}", null, 15L)
+                    : new NomadTravelAdvisorService.UpstreamHttpResult(200, REST_COUNTRIES_V5_FRANCE_JSON, null, 18L);
+        });
         assertEquals("UP", healthResource.health().get("status"));
+        assertEquals(2, probeCount.get());
         assertEquals(org.eclipse.microprofile.health.HealthCheckResponse.Status.UP, readinessCheck.call().getStatus());
+        assertEquals(2, probeCount.get(), "Second checkHealth() within TTL window must serve cached report without hitting restcountries.com");
 
-        // 3. DOWN health
+        // 3. DOWN health (setHttpProbe invalidates cache)
         service.setHttpProbe(url -> new NomadTravelAdvisorService.UpstreamHttpResult(503, null, "down", 5L));
         assertEquals("DOWN", healthResource.health().get("status"));
         assertEquals(org.eclipse.microprofile.health.HealthCheckResponse.Status.DOWN, readinessCheck.call().getStatus());

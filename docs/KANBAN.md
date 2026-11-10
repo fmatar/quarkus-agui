@@ -5,7 +5,7 @@
 > To refresh this board: `.agent/skills/sdlc-kanban/scripts/kanban-sync.sh`
 
 > **Repository**: `fmatar/quarkus-agui`  
-> **Last Synced**: `2026-11-10 00:56:47 UTC`
+> **Last Synced**: `2026-11-10 02:56:13 UTC`
 
 ---
 
@@ -13,7 +13,7 @@
 
 | 📥 Backlog | 📋 Ready | ⚡ In Progress | 🔍 In Review | ✅ Done |
 | :--- | :--- | :--- | :--- | :--- |
-|  | [#29 feat(client): extract standalone AG-UI Svelte 5 library (packages/agui-svelte)](https://github.com/fmatar/quarkus-agui/issues/29) |  |  | [#70 chore(kanban): sync merged develop issues (#38-#68) to Done & prune stale branches](https://github.com/fmatar/quarkus-agui/issues/70) |
+|  | [#29 feat(client): extract standalone AG-UI Svelte 5 library (packages/agui-svelte)](https://github.com/fmatar/quarkus-agui/issues/29) | [#72 fix(showcase): eliminate 10s restcountries healthcheck polling and harden tool elicitation prompts](https://github.com/fmatar/quarkus-agui/issues/72) |  | [#70 chore(kanban): sync merged develop issues (#38-#68) to Done & prune stale branches](https://github.com/fmatar/quarkus-agui/issues/70) |
 |  |  |  |  | [#68 feat(langchain4j-mcp): Idiomatic quarkus-langchain4j-mcp, Multi<ChatEvent> AG-UI Bridge, SmallRye Health & REST Countries v5](https://github.com/fmatar/quarkus-agui/issues/68) |
 |  |  |  |  | [#66 feat(showcase): honest upstream error surfacing, live healthchecks, native quarkus-mcp, intent-driven travel chatbot & domain naming cleanup](https://github.com/fmatar/quarkus-agui/issues/66) |
 |  |  |  |  | [#64 fix(orchestrator): Handle destination-free greetings & profile updates without defaulting to Kyoto (#64)](https://github.com/fmatar/quarkus-agui/issues/64) |
@@ -56,8 +56,9 @@
 
 | Issue | Status | Priority | Component | Quality Gate | Spec Link |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| [#70 chore(kanban): sync merged develop issues (#38-#68) to Done & prune stale branches](https://github.com/fmatar/quarkus-agui/issues/70) | `status:done` | P2 - Medium | Architecture | `Passed` | — |
-| [#68 feat(langchain4j-mcp): Idiomatic quarkus-langchain4j-mcp, Multi<ChatEvent> AG-UI Bridge, SmallRye Health & REST Countries v5](https://github.com/fmatar/quarkus-agui/issues/68) | `status:done` | P1 - High | Architecture | `Passed` | [ADR-005](docs/adr/ADR-005-quarkus-langchain4j-mcp-and-smallrye-health.md) |
+| [#72 fix(showcase): eliminate 10s restcountries healthcheck polling and harden tool elicitation prompts](https://github.com/fmatar/quarkus-agui/issues/72) | `status:in-progress` | P2 - Medium | Architecture | `Pending` | — |
+| [#70 chore(kanban): sync merged develop issues (#38-#68) to Done & prune stale branches](https://github.com/fmatar/quarkus-agui/issues/70) | `status:done` | P2 - Medium | Architecture | `Pending` | — |
+| [#68 feat(langchain4j-mcp): Idiomatic quarkus-langchain4j-mcp, Multi<ChatEvent> AG-UI Bridge, SmallRye Health & REST Countries v5](https://github.com/fmatar/quarkus-agui/issues/68) | `status:done` | P2 - Medium | Architecture | `Pending` | — |
 | [#66 feat(showcase): honest upstream error surfacing, live healthchecks, native quarkus-mcp, intent-driven travel chatbot & domain naming cleanup](https://github.com/fmatar/quarkus-agui/issues/66) | `status:done` | P2 - Medium | Architecture | `Pending` | — |
 | [#64 fix(orchestrator): Handle destination-free greetings & profile updates without defaulting to Kyoto (#64)](https://github.com/fmatar/quarkus-agui/issues/64) | `status:done` | P2 - Medium | Architecture | `Pending` | — |
 | [#62 feat(ui): Replace hardcoded Kyoto initial state with interactive Destination Picker & Awaiting Destination Dossier](https://github.com/fmatar/quarkus-agui/issues/62) | `status:done` | P2 - Medium | Architecture | `Pending` | — |
