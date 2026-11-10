@@ -70,8 +70,8 @@
 			</div>
 
 			<!-- Filter Strip -->
-			<div class="mb-3 flex items-center justify-between gap-1.5 shrink-0" role="tablist" aria-label="Protocol Filter">
-				<div class="flex items-center gap-1">
+			<div class="mb-3 flex items-center justify-between gap-1.5 shrink-0">
+				<div class="flex items-center gap-1" role="tablist" aria-label="Protocol Filter">
 					{#each FILTERS as filter (filter)}
 						<button
 							type="button"
@@ -111,6 +111,7 @@
 					<div class="overflow-hidden rounded-xl border {isFrameError ? 'border-[#C84B31]/55 bg-[#FBEEE9]/40' : 'border-[#E4E0D8] bg-[#FAF9F6]'}">
 						<button
 							type="button"
+							aria-expanded={expandedEventId === evtKey}
 							onclick={() => toggleExpand(evtKey)}
 							class="flex w-full items-center justify-between gap-2 p-2.5 text-left font-mono text-xs transition-colors hover:bg-[#EFECE6]/60"
 						>
@@ -122,7 +123,7 @@
 								{/if}
 								<span
 									class="inline-flex items-center gap-0.5 rounded px-1 py-0.5 font-mono text-[9px] font-bold shrink-0 {isClient
-										? 'bg-[#FBEEE9] text-[#C84B31]'
+										? 'bg-[#FBEEE9] text-[#9E331D]'
 										: 'bg-[#EFECE6] text-[#141413]'}"
 									title={isClient ? 'Client to Server (Outbound WebSocket Frame)' : 'Server to Client (Inbound WebSocket Frame)'}
 								>

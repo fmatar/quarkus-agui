@@ -494,7 +494,7 @@
 						? 'border-[#1F6E50]/30 bg-[#EAF4EF] text-[#1F6E50]'
 						: healthSummary.status === 'UNKNOWN'
 							? 'border-[#E4E0D8] bg-[#F6F5F2] text-[#575551]'
-							: 'border-[#C84B31]/40 bg-[#FBEEE9] text-[#C84B31]'}"
+							: 'border-[#9E331D]/35 bg-[#FBEEE9] text-[#9E331D]'}"
 					title="Live MicroProfile SmallRye Readiness Check (/q/health/ready)"
 				>
 					{#if healthSummary.status === 'UP'}
@@ -523,6 +523,8 @@
 				<button
 					type="button"
 					onclick={() => (isInspectorOpen = !isInspectorOpen)}
+					aria-expanded={isInspectorOpen}
+					aria-label={isInspectorOpen ? 'Collapse Wire Telemetry Inspector' : 'Expand Wire Telemetry Inspector'}
 					class="inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 font-mono text-xs font-semibold transition-colors {isInspectorOpen
 						? 'border-[#141413] bg-[#141413] text-white'
 						: 'border-[#E4E0D8] bg-white text-[#141413] hover:bg-[#EFECE6]'}"

@@ -54,3 +54,27 @@ test('renderMarkdownToHtml converts markdown tables cleanly with tabular-nums on
 	assert.ok(html.includes('<h2'));
 	assert.ok(html.includes('tabular-nums'));
 });
+
+test('renderMarkdownToHtml neutralizes unsafe link schemes and single-quote breakout in fenced code copy buttons', () => {
+	const xssMd = [
+		'[JS Payload](javascript:alert%281%29)',
+		'[Data Payload](data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==)',
+		'[Protocol Relative](//evil.example/payload)',
+		'[Safe Mail](mailto:concierge@nomad.travel)',
+		'[Safe Anchor](#itinerary)',
+		'[Safe Path](/api/agent/catalog)',
+		"```js\nconst trap = \"'-alert(1)-'\";\n```"
+	].join('\n');
+
+	const html = renderMarkdownToHtml(xssMd);
+	assert.ok(!html.includes('javascript:'), 'javascript: scheme must be stripped');
+	assert.ok(!html.includes('data:text/html'), 'data: scheme must be stripped');
+	assert.ok(!html.includes('href="//evil.example'), 'protocol-relative // href must be rejected');
+	assert.ok(html.includes('href="mailto:concierge@nomad.travel"'));
+	assert.ok(html.includes('href="#itinerary"'));
+	assert.ok(html.includes('href="/api/agent/catalog"'));
+	assert.ok(
+		html.includes('%27-alert%281%29-%27'),
+		'single quotes and parentheses in fenced code payload must be percent-encoded'
+	);
+});

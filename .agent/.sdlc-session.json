@@ -7,8 +7,8 @@
       "type": "feat",
       "branch": "feature/issue-#85-nomad-showcase-cutover-delete-core",
       "worktree": null,
-      "stage": 6,
-      "stageName": "Pull Request Creation",
+      "stage": 7,
+      "stageName": "Parallel Peer Review & Quality Gate",
       "remediationCount": 0,
       "maxRemediations": 3,
       "manifest": {
@@ -24,12 +24,12 @@
           "stage4": "2026-11-10T20:48:18.401Z",
           "stage5": "2026-11-10T21:21:30.410Z",
           "stage6": "2026-11-10T21:22:00.322Z",
-          "stage7": null,
+          "stage7": "2026-11-10T21:24:55.873Z",
           "stage8": null
         }
       },
       "startedAt": "2026-11-10T20:06:18.941Z",
-      "updatedAt": "2026-11-10T21:22:00.493Z",
+      "updatedAt": "2026-11-10T21:24:56.035Z",
       "activeSubagents": []
     }
   }

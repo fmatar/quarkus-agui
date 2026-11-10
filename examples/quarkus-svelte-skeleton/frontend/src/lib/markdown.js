@@ -140,16 +140,31 @@ function processSingleLine(line, ctx) {
 	consumeParagraphOrSpacer(line, trimmed, ctx);
 }
 
+function encodeSafeCodePayload(code) {
+	return encodeURIComponent(code)
+		.replace(/'/g, '%27')
+		.replace(/\(/g, '%28')
+		.replace(/\)/g, '%29');
+}
+
+function sanitizeLinkHref(rawHref) {
+	const trimmed = rawHref.trim();
+	if (trimmed.startsWith('#')) return trimmed;
+	if (trimmed.startsWith('/') && !trimmed.startsWith('//')) return trimmed;
+	return /^(?:https?:|mailto:)/i.test(trimmed) ? trimmed : '#';
+}
+
 function restoreCodeBlocks(html, codeBlocks) {
 	let result = html;
 	codeBlocks.forEach((block, idx) => {
 		const langBadge = escapeHtml(block.lang.toUpperCase());
 		const escapedCode = escapeHtml(block.code);
+		const safePayload = encodeSafeCodePayload(block.code);
 		const card = [
 			'<div class="my-3 overflow-hidden rounded-xl border border-[#E4E0D8] bg-[#F6F5F2] text-xs">',
 			`\t<div class="flex items-center justify-between border-b border-[#E4E0D8] bg-[#EFECE6] px-3.5 py-1.5 font-mono text-[11px]">`,
 			`\t\t<span class="font-bold text-[#141413] uppercase tracking-wider">${langBadge}</span>`,
-			`\t\t<button type="button" class="copy-code-btn rounded px-2 py-0.5 text-[10px] text-[#575551] hover:bg-white hover:text-[#141413] transition-colors" onclick="navigator.clipboard.writeText(decodeURIComponent('${encodeURIComponent(block.code)}')).then(() => { this.innerText = 'Copied!'; setTimeout(() => this.innerText = 'Copy', 1500); })">Copy</button>`,
+			`\t\t<button type="button" class="copy-code-btn rounded px-2 py-0.5 text-[10px] text-[#575551] hover:bg-white hover:text-[#141413] transition-colors" onclick="navigator.clipboard.writeText(decodeURIComponent('${safePayload}')).then(() => { this.innerText = 'Copied!'; setTimeout(() => this.innerText = 'Copy', 1500); })">Copy</button>`,
 			`\t</div>`,
 			`\t<pre class="overflow-x-auto p-3.5 font-mono text-[11px] leading-relaxed text-[#141413]"><code>${escapedCode}</code></pre>`,
 			'</div>'
@@ -184,6 +199,7 @@ function parseInline(text) {
 		.replace(/_([^_]+)_/g, '<em class="italic text-[#575551]">$1</em>')
 		.replace(
 			/\[([^\]]+)\]\(([^)]+)\)/g,
-			'<a href="$2" target="_blank" rel="noopener noreferrer" class="text-[#C84B31] underline hover:text-[#141413]">$1</a>'
+			(_, label, href) =>
+				`<a href="${sanitizeLinkHref(href)}" target="_blank" rel="noopener noreferrer" class="text-[#9E331D] underline hover:text-[#141413]">${label}</a>`
 		);
 }

@@ -1151,4 +1151,9 @@ test('Boundary & mutation defense across envelope builders, reducer branches, he
 	assert.equal(labelAndSubErrHealth.services[1].name, 'Ollama Local LLM');
 	const parentA2a = labelAndSubErrHealth.services.find((s) => s.id === 'nomad-a2a-specialist');
 	assert.equal(parentA2a.error, 'First real sub error');
+
+	assert.deepEqual(toRootStateDeltaOps(['not', 'an', 'object']), []);
+	assert.deepEqual(toRootStateDeltaOps({ 'nested/key~flag': 7 }), [
+		{ op: 'add', path: '/nested~1key~0flag', value: 7 }
+	]);
 });

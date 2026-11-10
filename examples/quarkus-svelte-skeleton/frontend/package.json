@@ -2,6 +2,7 @@
   "name": "quarkus-svelte-skeleton-frontend",
   "version": "0.1.0",
   "private": true,
+  "license": "Apache-2.0 OR MIT",
   "type": "module",
   "description": "Reference SvelteKit (Svelte 5 Runes) + Skeleton UI + @lucide/svelte Streaming Workbench for AG-UI Protocol",
   "scripts": {

@@ -351,14 +351,18 @@ function buildResumePayload(approved, reason, modifiedArgs) {
 	return { reason };
 }
 
+function escapeJsonPointerSegment(segment) {
+	return String(segment).replace(/~/g, '~0').replace(/\//g, '~1');
+}
+
 /**
  * Converts a root key-value delta object into RFC 6902 JSON Patch `add` operations.
  */
 export function toRootStateDeltaOps(fields) {
-	if (!fields || typeof fields !== 'object') return [];
+	if (!fields || typeof fields !== 'object' || Array.isArray(fields)) return [];
 	return Object.entries(fields).map(([key, value]) => ({
 		op: 'add',
-		path: `/${key}`,
+		path: `/${escapeJsonPointerSegment(key)}`,
 		value
 	}));
 }
