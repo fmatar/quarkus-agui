@@ -1,70 +1,36 @@
 {
-  "activeSessionId": 70,
+  "activeSessionId": 74,
   "sessions": {
-    "68": {
+    "74": {
       "active": true,
-      "issueId": 68,
+      "issueId": 74,
       "type": "feat",
-      "branch": "feature/issue-#68-quarkus-langchain4j-mcp-v5",
+      "branch": "feature/issue-#74-framework-agnostic-agui-and-showcase-media",
       "worktree": null,
-      "stage": 7,
-      "stageName": "Parallel Fork-Join Peer Review & Quality Gate",
-      "remediationCount": 1,
-      "maxRemediations": 3,
-      "manifest": {
-        "specPath": null,
-        "prNumber": 69,
-        "coverageReport": null,
-        "mutationScore": null,
-        "uiScreenshotPath": null,
-        "checkpoints": {
-          "stage1": null,
-          "stage2": null,
-          "stage3": "2026-11-09T20:25:30.434Z",
-          "stage4": "2026-11-10T00:10:39.516Z",
-          "stage5": "2026-11-10T00:10:42.382Z",
-          "stage6": "2026-11-10T00:10:45.065Z",
-          "stage7": "2026-11-10T00:18:33.883Z",
-          "stage8": null
-        }
-      },
-      "startedAt": "2026-11-09T20:25:30.433Z",
-      "updatedAt": "2026-11-10T00:32:22.424Z",
-      "activeSubagents": []
-    },
-    "70": {
-      "active": true,
-      "issueId": 70,
-      "type": "feat",
-      "branch": "chore/issue-#70-sync-develop-kanban-state",
-      "worktree": null,
-      "stage": 7,
-      "stageName": "Parallel Review & Quality Gate",
+      "stage": 6,
+      "stageName": "Pull Request Opening",
       "remediationCount": 0,
       "maxRemediations": 3,
       "manifest": {
-        "specPath": null,
+        "specPath": "docs/adr/ADR-006-framework-agnostic-module-topology-ag-ui-core-ag.md",
         "prNumber": null,
         "coverageReport": null,
         "mutationScore": null,
         "uiScreenshotPath": null,
         "checkpoints": {
-          "stage1": null,
-          "stage2": null,
-          "stage3": null,
-          "stage4": null,
-          "stage5": "2026-11-10T00:55:09.970Z",
-          "stage6": null,
-          "stage7": "2026-11-10T00:59:10.698Z",
+          "stage1": "2026-11-10T06:00:00.000Z",
+          "stage2": "2026-11-10T06:00:30.000Z",
+          "stage3": "2026-11-10T06:01:00.000Z",
+          "stage4": "2026-11-10T06:01:30.000Z",
+          "stage5": "2026-11-10T06:02:00.000Z",
+          "stage6": "2026-11-10T06:03:00.000Z",
+          "stage7": null,
           "stage8": null
         }
       },
-      "startedAt": "2026-11-10T00:55:09.969Z",
-      "updatedAt": "2026-11-10T00:59:10.857Z",
-      "activeSubagents": [
-        "peer-reviewer",
-        "quality-gatekeeper"
-      ]
+      "startedAt": "2026-11-10T06:00:00.000Z",
+      "updatedAt": "2026-11-10T06:03:00.000Z",
+      "activeSubagents": []
     }
   }
 }

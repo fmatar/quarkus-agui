@@ -432,6 +432,38 @@ test('Nomad AG-UI Component Kit reducer populates timeline callTypes, reasoning,
 	assert.equal(streamState.events.length, 2);
 	assert.equal(streamState.events[1].payload.content, 'Hello Oaxaca world!');
 	assert.equal(streamState.events[1].payload.chunks, 3);
+
+	// TOOL_RESULT for discoverLocalCultureAndMedia extracts image & audio media and subsequent empty STATE_DELTA preserves it
+	let mediaState = createInitialWorkbenchState('thread-media');
+	mediaState = reduceAgUiEvent(mediaState, { id: 'm1', type: 'RUN_STARTED', payload: {} });
+	mediaState = reduceAgUiEvent(mediaState, {
+		id: 'm2',
+		type: 'TOOL_RESULT',
+		payload: {
+			callId: 'call-c1',
+			tool: 'discoverLocalCultureAndMedia',
+			status: 'OK',
+			result: {
+				destination: 'Beirut',
+				heroImageUrl: 'https://upload.wikimedia.org/beirut.jpg',
+				audioTrack: {
+					trackName: 'Li Beirut',
+					artistName: 'Fairuz',
+					previewUrl: 'https://audio-ssl.itunes.apple.com/fairuz.m4a',
+					durationSeconds: 30
+				}
+			}
+		}
+	});
+	assert.equal(mediaState.activeTurn.media.length, 2);
+	assert.equal(mediaState.activeTurn.media[0].type, 'image');
+	assert.equal(mediaState.activeTurn.media[1].type, 'audio');
+	mediaState = reduceAgUiEvent(mediaState, {
+		id: 'm3',
+		type: 'STATE_DELTA',
+		payload: { media: [], sources: [], followUps: [] }
+	});
+	assert.equal(mediaState.activeTurn.media.length, 2);
 });
 
 test('WebSocket transport, conversational memory, LangChain4j guardrails/RAG/specialists, and Trip Dossier Markdown export', () => {

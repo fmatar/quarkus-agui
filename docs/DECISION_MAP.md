@@ -39,10 +39,14 @@ flowchart TD
   ADR_003["ADR-003: Multi-Extension BOM and Concentric Transport Architecture (Core, SSE, WebSockets)"]
   _30["Ticket #30 (feat/bom-multi-extension-clean-arch)"]
   ADR_004["ADR-004: ADR-004: Nomad Cultural Concierge Showcase & Modular Svelte 5 AG-UI Component Kit"]
-  ADR_005["ADR-005: Quarkus LangChain4j Reactive AG-UI Bridge, Declarative @McpToolBox & SmallRye Health + REST Countries v5"]
+  ADR_005["ADR-005: ADR-005: Quarkus LangChain4j Reactive AG-UI Bridge, Declarative `@McpToolBox` & SmallRye Health + REST Countries v5"]
+  ADR_006["ADR-006: Framework-Agnostic Module Topology (ag-ui-core, ag-ui-a2a, ag-ui-langchain4j, ag-ui-quarkus) and Removal of Quarkus Deployment Processors"]
+  _74["Ticket #74"]
+  __9450["##9450"]
   _66["Ticket #66 (feature/issue-#66-nomad-travel-chatbot-mcp-health)"]
   _68["Ticket #68 (feature/issue-#68-quarkus-langchain4j-mcp-v5)"]
   _72["Ticket #72 (fix/issue-#72-healthcheck-ttl-and-tool-prompts)"]
+  _70["Ticket #70 (chore/issue-#70-sync-develop-kanban-state)"]
   CAP_01 -->|specified_by| SPEC_01
   CAP_02 -->|specified_by| SPEC_02
   CAP_01 -->|depends_on| CAP_02
@@ -76,6 +80,10 @@ flowchart TD
   _30 -->|triggered_drift_adr| ADR_003
   CAP_06 -.->|ADR Drift| ADR_003
   CAP_07 -.->|ADR Drift| ADR_003
+  _74 -->|triggered_drift_adr| ADR_006
+  CAP_06 -.->|ADR Drift| ADR_006
+  CAP_07 -.->|ADR Drift| ADR_006
+  ADR_003 -.->|ADR Drift| ADR_006
   CAP_01 -->|realized_by| CAP_02
   CAP_01 -->|realized_by| CAP_03
   CAP_02 -->|realized_by| CAP_03
@@ -101,13 +109,7 @@ flowchart TD
   CAP_07 -->|realized_by| ADR_002
   CAP_08 -->|realized_by| ADR_002
   _30 -.->|ADR Drift| ADR_003
-  _68 -->|triggered_drift_adr| ADR_005
-  _72 -->|realized_by| ADR_005
-  CAP_03 -.->|ADR Drift| ADR_005
-  CAP_04 -.->|ADR Drift| ADR_005
-  CAP_06 -.->|ADR Drift| ADR_005
-  CAP_07 -.->|ADR Drift| ADR_005
-  CAP_08 -.->|ADR Drift| ADR_005
+  __9450 -.->|ADR Drift| ADR_006
 ```
 
 ---
@@ -119,8 +121,9 @@ flowchart TD
 | **ADR-001** | Multi-Module Maven & SvelteKit Clean Architecture for AG-UI Protocol | `technical` | `accepted` | #1 | CAP-01, CAP-03, CAP-04, CAP-07 |
 | **ADR-002** | Example-First Tri-Protocol (AG-UI + MCP + A2A) Evolution on Java 25, Quarkus 3.40.1.1 & pnpm | `product` | `accepted` | #2 | CAP-01, CAP-02, CAP-03, CAP-04, CAP-05, CAP-06, CAP-07, CAP-08 |
 | **ADR-003** | Multi-Extension BOM and Concentric Transport Architecture (Core, SSE, WebSockets) | `technical` | `accepted` | #30 | CAP-06, CAP-07 |
-| **ADR-004** | ADR-004: Nomad Cultural Concierge Showcase & Modular Svelte 5 AG-UI Component Kit | `technical` | `accepted` | #32 | CAP-01..CAP-08 |
-| **ADR-005** | Quarkus LangChain4j Reactive AG-UI Bridge, Declarative `@McpToolBox` & SmallRye Health + REST Countries v5 | `technical` | `accepted` | #68, #72 | CAP-03, CAP-04, CAP-06, CAP-07, CAP-08 |
+| **ADR-004** | ADR-004: Nomad Cultural Concierge Showcase & Modular Svelte 5 AG-UI Component Kit | `technical` | `accepted` | N/A | None |
+| **ADR-005** | ADR-005: Quarkus LangChain4j Reactive AG-UI Bridge, Declarative `@McpToolBox` & SmallRye Health + REST Countries v5 | `technical` | `accepted` | N/A | None |
+| **ADR-006** | Framework-Agnostic Module Topology (ag-ui-core, ag-ui-a2a, ag-ui-langchain4j, ag-ui-quarkus) and Removal of Quarkus Deployment Processors | `technical` | `accepted` | #74 | CAP-06, CAP-07, ADR-003 |
 
 ---
 

@@ -44,7 +44,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
-import org.agui.quarkus.langchain4j.runtime.adapters.AgUiLangChain4jBridge;
+import org.agui.quarkus.adapters.AgUiQuarkusLangChain4jBridge;
 import org.eclipse.microprofile.health.HealthCheckResponse;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -76,7 +76,7 @@ class NomadConciergeOrchestratorServiceTest {
     private NomadA2aAgentTools a2aTools;
     private NomadUiSurfaceTools uiTools;
     private NomadBackendReadinessChecks readinessChecks;
-    private AgUiLangChain4jBridge langChain4jBridge;
+    private AgUiQuarkusLangChain4jBridge langChain4jBridge;
     private NomadConciergeOrchestratorService orchestrator;
 
     @BeforeAll
@@ -189,7 +189,7 @@ class NomadConciergeOrchestratorServiceTest {
         readinessChecks.ollamaBaseUrl = baseUrl;
         readinessChecks.defaultOllamaModel = "llama3.2:latest";
 
-        langChain4jBridge = new AgUiLangChain4jBridge();
+        langChain4jBridge = new AgUiQuarkusLangChain4jBridge();
         NomadConciergeAiService stubAiService = this::scriptedChatStream;
 
         orchestrator = new NomadConciergeOrchestratorService(
@@ -236,6 +236,31 @@ class NomadConciergeOrchestratorServiceTest {
                                     ? MAPPER.createObjectNode()
                                     : MAPPER.readTree(req.arguments());
                             String json = switch (req.name()) {
+                                case "fetchCityWeather" -> {
+                                    String wCity = parsedArgs.path("city").asText("Kyoto");
+                                    yield MAPPER.writeValueAsString(Map.of(
+                                            "status", "OK",
+                                            "isError", false,
+                                            "city", wCity,
+                                            "country", A2aGatewayClient.resolveCountryForCity(wCity),
+                                            "temperatureC", 18.4,
+                                            "condition", "Clear Sky & Crisp Light",
+                                            "source", "api.open-meteo.com"));
+                                }
+                                case "discoverLocalCultureAndMedia" -> {
+                                    String dest = parsedArgs.path("destination").asText("Rome");
+                                    yield MAPPER.writeValueAsString(Map.of(
+                                            "status", "OK",
+                                            "isError", false,
+                                            "destination", dest,
+                                            "culturalSummary", dest + " architectural heritage",
+                                            "heroImageUrl", "https://upload.wikimedia.org/" + dest.toLowerCase() + ".jpg",
+                                            "audioTrack", Map.of(
+                                                    "trackName", dest + " Acoustic Prelude",
+                                                    "artistName", dest + " Ensemble",
+                                                    "previewUrl", "https://itunes.example/" + dest.toLowerCase() + ".m4a",
+                                                    "durationSeconds", 30)));
+                                }
                                 case "updateTripItinerary" -> MAPPER.writeValueAsString(Map.of(
                                         "status", "OK",
                                         "activeCity", parsedArgs.path("city").asText("Kyoto"),
@@ -599,7 +624,7 @@ class NomadConciergeOrchestratorServiceTest {
                 true, "{\"status\":\"ERROR\",\"isError\":true,\"error\":\"FX 503\"}"));
         assertTrue(String.valueOf(fxErrDelta.get("sources")).contains("FX 503"));
 
-        dossierStore.onToolExecuted("th-tools", buildExecution(
+        Map<String, Object> romeDelta = dossierStore.onToolExecuted("th-tools", buildExecution(
                 ToolExecutionRequest.builder().id("itin-1").name("updateTripItinerary").arguments("{}").build(),
                 false, "{\"status\":\"OK\",\"activeCity\":\"Rome\",\"stopTitle\":\"Villa Borghese\",\"nights\":3,\"allocatedUsd\":1100.0}"));
         Map<String, Object> romeTrip = (Map<String, Object>) dossierStore.readTripDossierState().get("nomadTrip");
@@ -607,6 +632,39 @@ class NomadConciergeOrchestratorServiceTest {
         assertEquals("Villa Borghese", romeTrip.get("stopTitle"));
         assertEquals(3, romeTrip.get("nights"));
         assertEquals(1100.0, romeTrip.get("allocatedUsd"));
+        List<Map<String, Object>> romeMedia = (List<Map<String, Object>>) romeDelta.get("media");
+        assertNotNull(romeMedia, "Trip itinerary tool execution should auto-enrich turn media when LLM omits discoverLocalCultureAndMedia");
+        assertEquals(2, romeMedia.size());
+        assertEquals("image", romeMedia.get(0).get("type"));
+        assertEquals("audio", romeMedia.get(1).get("type"));
+        assertNotNull(romeTrip.get("soundtrack"));
+        assertEquals("https://upload.wikimedia.org/rome.jpg", romeTrip.get("heroImageUrl"));
+
+        // Verify misrouted destination city in saveTravelerPreferences does not pollute preferences.travelerName
+        dossierStore.onToolExecuted("th-tools", buildExecution(
+                ToolExecutionRequest.builder().id("p-city").name("saveTravelerPreferences")
+                        .arguments("{\"travelerName\":\"Kyoto\"}").build(),
+                false, "{\"status\":\"OK\",\"travelerName\":\"Kyoto\"}"));
+        assertEquals("Nadia", ((Map<?, ?>) dossierStore.readTripDossierState().get("preferences")).get("travelerName"));
+        assertEquals("Kyoto", ((Map<?, ?>) dossierStore.readTripDossierState().get("nomadTrip")).get("activeCity"));
+
+        // Verify finalizeTurnDossier populates full Trip Dossier + Media even when small LLM omits trip tools
+        dossierStore.beginTurn("th-kyoto-auto", "Plan a 4-night architecture and koto music trip in Kyoto with $2,400 USD");
+        Map<String, Object> autoDelta = dossierStore.finalizeTurnDossier("th-kyoto-auto", a2aClient);
+        assertFalse(autoDelta.isEmpty());
+        Map<String, Object> autoDossier = (Map<String, Object>) autoDelta.get("tripDossierState");
+        Map<String, Object> autoTrip = (Map<String, Object>) autoDossier.get("nomadTrip");
+        assertEquals("Kyoto", autoTrip.get("activeCity"));
+        assertEquals(4, autoTrip.get("nights"));
+        assertEquals(2400.0, autoTrip.get("budgetUsd"));
+        assertEquals("USD", autoTrip.get("homeCurrency"));
+        assertEquals(18.4, autoTrip.get("temperatureC"));
+        assertNotNull(autoTrip.get("exchangeRate"));
+        assertEquals("https://upload.wikimedia.org/kyoto.jpg", autoTrip.get("heroImageUrl"));
+        assertNotNull(autoTrip.get("soundtrack"));
+        List<Map<String, Object>> autoMedia = (List<Map<String, Object>>) autoDelta.get("media");
+        assertNotNull(autoMedia);
+        assertEquals(2, autoMedia.size());
 
         dossierStore.onToolExecuted("th-tools", buildExecution(
                 ToolExecutionRequest.builder().id("rst-1").name("resetNomadState").arguments("not-json").build(),

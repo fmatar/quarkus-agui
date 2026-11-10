@@ -11,10 +11,15 @@
     </parent>
 
     <artifactId>ag-ui-core</artifactId>
-    <name>AG-UI Core Java Library (ag-ui-java-core)</name>
-    <description>Standalone Java 17+ library for AG-UI Event records, SSE formatters, and Flow.Publisher adapters</description>
+    <name>AG-UI Core Java Library (ag-ui-core)</name>
+    <description>Framework-agnostic Java 25 library for AG-UI Event records, SSE formatters, Flow.Publisher adapters, Transport Sessions, and MCP Bridge</description>
 
     <dependencies>
+        <dependency>
+            <groupId>jakarta.enterprise</groupId>
+            <artifactId>jakarta.enterprise.cdi-api</artifactId>
+            <scope>provided</scope>
+        </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>

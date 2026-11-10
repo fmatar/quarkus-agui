@@ -114,7 +114,18 @@ public class NomadMcpConciergeService {
             Map.entry("marrakech", "gnawa oud"),
             Map.entry("oaxaca", "Lila Downs Oaxaca"),
             Map.entry("buenos aires", "Astor Piazzolla tango"),
-            Map.entry("beirut", "Fairuz"));
+            Map.entry("beirut", "Fairuz"),
+            Map.entry("amman", "Marcel Khalife oud"),
+            Map.entry("cairo", "Umm Kulthum"),
+            Map.entry("athens", "Mikis Theodorakis bouzouki"),
+            Map.entry("istanbul", "Mercan Dede ney"),
+            Map.entry("seoul", "gayageum traditional"),
+            Map.entry("vienna", "Mozart Vienna Philharmonic"),
+            Map.entry("berlin", "Nils Frahm piano"),
+            Map.entry("copenhagen", "Agnes Obel piano"),
+            Map.entry("rio de janeiro", "Antonio Carlos Jobim bossa nova"),
+            Map.entry("london", "Max Richter strings"),
+            Map.entry("new york", "Bill Evans Trio jazz"));
 
     private static final Map<String, String> CITY_ARCHITECTURE = Map.of(
             "lisbon", "Alfama Azulejo Terraces, Chiado Pombaline Ironwork & MAAT Riverfront",
@@ -175,6 +186,7 @@ public class NomadMcpConciergeService {
             activeTrip.put("budgetUsd", null);
             activeTrip.put("allocatedUsd", null);
             activeTrip.put("homeCurrency", null);
+            activeTrip.put("heroImageUrl", null);
             activeTrip.put("soundtrack", null);
         }
 
@@ -194,8 +206,8 @@ public class NomadMcpConciergeService {
         long startNs = System.nanoTime();
         try {
             HttpRequest req = HttpRequest.newBuilder(URI.create(url))
-                    .timeout(Duration.ofMillis(2000))
-                    .header("User-Agent", "Nomad-Quarkus-AGUI/1.0")
+                    .timeout(Duration.ofMillis(3500))
+                    .header("User-Agent", "Nomad-Quarkus-AGUI/1.0 (https://github.com/fmatar/quarkus-agui; contact@agui.org)")
                     .GET()
                     .build();
             HttpResponse<String> res = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
@@ -355,7 +367,7 @@ public class NomadMcpConciergeService {
     @Tool(description = "Discover local cultural landmarks via Wikipedia REST v1 and a 30s local music preview via Apple iTunes Search API for an explicit destination. Never invent a default destination.")
     public ToolResponse discoverLocalCultureAndMedia(
             @ToolArg(description = "Explicit destination city or country stated by the traveler (never invent a default)", required = true) String destination,
-            @ToolArg(description = "Optional music or cultural genre stated by the traveler; pass empty string if not specified", required = false) String genre) {
+            @ToolArg(description = "Optional regional music artist or instrument explicitly requested by the traveler", required = false) String genre) {
         if (destination == null || destination.isBlank()) {
             return errorToolResponse(
                     "MISSING_REQUIRED_ARGUMENTS",
@@ -367,6 +379,16 @@ public class NomadMcpConciergeService {
 
         Map<String, Object> wikiData = fetchWikipediaSummary(resolvedCity);
         Map<String, Object> itunesData = fetchItunesPreview(searchQuery);
+        if (!"OK".equals(itunesData.get("status"))) {
+            String fallbackQuery = defaultCityMusicQuery(resolvedCity);
+            if (!fallbackQuery.equalsIgnoreCase(searchQuery)) {
+                Map<String, Object> fallbackItunes = fetchItunesPreview(fallbackQuery);
+                if ("OK".equals(fallbackItunes.get("status"))) {
+                    itunesData = fallbackItunes;
+                    searchQuery = fallbackQuery;
+                }
+            }
+        }
 
         boolean wikiOk = "OK".equals(wikiData.get("status"));
         boolean itunesOk = "OK".equals(itunesData.get("status"));
@@ -398,6 +420,9 @@ public class NomadMcpConciergeService {
             payload.put("culturalSummary", wikiData.get("extract"));
             payload.put("heroImageUrl", wikiData.get("imageUrl"));
             payload.put("wikiSourceUrl", "https://en.wikipedia.org/wiki/" + URLEncoder.encode(resolvedCity.replace(' ', '_'), StandardCharsets.UTF_8));
+            if (wikiData.get("imageUrl") != null) {
+                activeTrip.put("heroImageUrl", wikiData.get("imageUrl"));
+            }
         } else {
             payload.put("wikipediaError", wikiData.get("error"));
         }
@@ -441,8 +466,8 @@ public class NomadMcpConciergeService {
     @Tool(description = "Sample a twilight acoustic listening mood profile for an explicit destination city, optional weather condition, and optional music genre. Never guess a default city.")
     public ToolResponse sampleAcousticMood(
             @ToolArg(description = "Explicit destination city name stated by the traveler", required = true) String city,
-            @ToolArg(description = "Observed weather condition if known, otherwise empty string", required = false) String weatherCondition,
-            @ToolArg(description = "Preferred regional or musical genre if stated by the traveler, otherwise empty string", required = false) String genre) {
+            @ToolArg(description = "Observed weather condition if known", required = false) String weatherCondition,
+            @ToolArg(description = "Preferred regional or musical genre if stated by the traveler", required = false) String genre) {
         Map<String, Object> result = sampleAcousticMoodProfile(city, weatherCondition, genre);
         if ("ERROR".equals(result.get("status"))) {
             return errorToolResponse(
@@ -453,22 +478,31 @@ public class NomadMcpConciergeService {
         return successToolResponse(result);
     }
 
-    @Tool(description = "Persist explicit traveler preferences (name, architectural/travel style, dietary needs, music taste, pace, home currency) into the MCP traveler://preferences resource. Only pass fields the traveler actually stated.")
+    @Tool(description = "Persist explicit human traveler profile preferences (personal given name when the user introduces themselves, architectural/travel style, dietary needs, music taste, pace, home currency) into the MCP traveler://preferences resource. Never call this tool with a destination city name as travelerName.")
     public ToolResponse saveTravelerPreferences(
-            @ToolArg(description = "Traveler name if explicitly stated", required = false) String travelerName,
+            @ToolArg(description = "Human traveler's personal given name ONLY when they introduce themselves (never pass a destination city name like Kyoto, Lisbon, Paris, or Beirut)", required = false) String travelerName,
             @ToolArg(description = "Travel or architectural style if explicitly stated", required = false) String style,
             @ToolArg(description = "Dietary preference if explicitly stated", required = false) String dietary,
             @ToolArg(description = "Music taste if explicitly stated", required = false) String musicTaste,
             @ToolArg(description = "Trip pace if explicitly stated", required = false) String pace,
             @ToolArg(description = "3-letter ISO home currency code if explicitly stated", required = false) String homeCurrency) {
         Map<String, Object> updates = new LinkedHashMap<>();
-        putIfNonBlank(updates, "travelerName", travelerName);
-        putIfNonBlank(updates, "style", style);
-        putIfNonBlank(updates, "dietary", dietary);
-        putIfNonBlank(updates, "musicTaste", musicTaste);
-        putIfNonBlank(updates, "pace", pace);
-        putIfNonBlank(updates, "homeCurrency", homeCurrency);
-        if (updates.isEmpty()) {
+        String sanitizedName = sanitizeOptionalText(travelerName);
+        boolean cityMisroutedAsName = false;
+        if (!sanitizedName.isEmpty()) {
+            if (isKnownCityName(sanitizedName)) {
+                activeTrip.putIfAbsent("activeCity", normalizeCity(sanitizedName));
+                cityMisroutedAsName = true;
+            } else {
+                updates.put("travelerName", sanitizedName);
+            }
+        }
+        putIfNonBlank(updates, "style", sanitizeOptionalText(style));
+        putIfNonBlank(updates, "dietary", sanitizeOptionalText(dietary));
+        putIfNonBlank(updates, "musicTaste", sanitizeOptionalText(musicTaste));
+        putIfNonBlank(updates, "pace", sanitizeOptionalText(pace));
+        putIfNonBlank(updates, "homeCurrency", sanitizeOptionalText(homeCurrency));
+        if (updates.isEmpty() && !cityMisroutedAsName) {
             return errorToolResponse(
                     "MISSING_REQUIRED_ARGUMENTS",
                     "saveTravelerPreferences requires at least one non-blank preference stated by the traveler.",
@@ -592,8 +626,10 @@ public class NomadMcpConciergeService {
                     "error", "Required argument 'city' was not supplied for acoustic mood sampling.");
         }
         String resolvedCity = normalizeCity(city);
-        String cond = (weatherCondition == null || weatherCondition.isBlank()) ? "Ambient local sky" : weatherCondition;
-        String resolvedGenre = (genre == null || genre.isBlank()) ? "regional acoustic" : genre;
+        String cleanWeather = sanitizeOptionalText(weatherCondition);
+        String cleanGenre = sanitizeOptionalText(genre);
+        String cond = cleanWeather.isEmpty() ? "Ambient local sky" : cleanWeather;
+        String resolvedGenre = cleanGenre.isEmpty() ? "regional acoustic" : cleanGenre;
         String baseMood = CITY_ACOUSTIC_MOODS.get(resolvedCity.toLowerCase(Locale.ROOT));
         String moodDistillation = baseMood != null
                 ? baseMood + " (" + cond + ")."
@@ -773,16 +809,92 @@ public class NomadMcpConciergeService {
     }
 
     private String resolveMusicQuery(String city, String genre) {
-        String trimmedGenre = genre == null ? "" : genre.trim();
+        String trimmedGenre = sanitizeOptionalText(genre);
+        String lower = trimmedGenre.toLowerCase(Locale.ROOT);
         boolean isGeneric = trimmedGenre.isEmpty()
-                || List.of("traditional", "jazz", "ambient", "fado", "acoustic", "classical", "folk")
-                        .contains(trimmedGenre.toLowerCase(Locale.ROOT));
+                || List.of(
+                        "traditional", "jazz", "ambient", "fado", "acoustic", "classical", "folk",
+                        "koto", "koto music", "oud", "strings", "music", "local", "local music",
+                        "architecture", "culinary", "food", "museums", "culture", "nature", "design")
+                        .contains(lower)
+                || lower.contains("music")
+                || lower.contains("traditional")
+                || lower.contains("regional")
+                || lower.contains("acoustic")
+                || lower.contains("classical")
+                || lower.contains("folk")
+                || lower.contains("ambient")
+                || lower.contains("jazz")
+                || lower.contains("fado")
+                || lower.contains("koto")
+                || lower.contains("shakuhachi")
+                || lower.contains("oud")
+                || lower.contains("strings")
+                || lower.contains("piano")
+                || lower.contains("guitar")
+                || lower.contains("tango")
+                || lower.contains("bossa")
+                || lower.contains("architecture")
+                || lower.contains("culinary")
+                || lower.contains("azulejo")
+                || lower.contains("museum")
+                || lower.contains("food")
+                || lower.contains("terroir")
+                || lower.contains("sanctuary")
+                || lower.contains("itinerary")
+                || lower.contains("culture")
+                || lower.contains("cultural")
+                || lower.contains("nature")
+                || lower.contains("design");
         if (!isGeneric) {
             return trimmedGenre;
         }
         return CITY_MUSIC_QUERIES.getOrDefault(
                 city.toLowerCase(Locale.ROOT),
-                city + (trimmedGenre.isEmpty() ? " acoustic" : " " + trimmedGenre));
+                city + (trimmedGenre.isEmpty() || lower.contains("architecture") ? " acoustic" : " " + trimmedGenre));
+    }
+
+    static String sanitizeOptionalText(String raw) {
+        if (raw == null) {
+            return "";
+        }
+        String trimmed = raw.trim();
+        if (trimmed.isEmpty()) {
+            return "";
+        }
+        String lower = trimmed.toLowerCase(Locale.ROOT);
+        if (lower.contains("empty string")
+                || lower.equals("empty")
+                || lower.equals("<empty>")
+                || lower.equals("none")
+                || lower.equals("null")
+                || lower.equals("nil")
+                || lower.equals("n/a")
+                || lower.equals("na")
+                || lower.equals("unspecified")
+                || lower.equals("not specified")
+                || lower.equals("unknown")
+                || lower.equals("default")
+                || lower.equals("optional")
+                || lower.equals("any")
+                || lower.equals("-")) {
+            return "";
+        }
+        return trimmed;
+    }
+
+    boolean isKnownCityName(String candidate) {
+        String norm = normalizeCity(candidate == null ? "" : candidate).toLowerCase(Locale.ROOT);
+        if (norm.isEmpty()) {
+            return false;
+        }
+        return KNOWN_COORDINATES.containsKey(norm)
+                || CITY_MUSIC_QUERIES.containsKey(norm)
+                || CURATED_GLOBAL_CITIES.stream().anyMatch(c -> c.equalsIgnoreCase(norm));
+    }
+
+    private String defaultCityMusicQuery(String city) {
+        return CITY_MUSIC_QUERIES.getOrDefault(city.toLowerCase(Locale.ROOT), city + " acoustic");
     }
 
     private String architecturalHighlightFor(String city) {
@@ -797,6 +909,10 @@ public class NomadMcpConciergeService {
 
     private String normalizeCity(String raw) {
         String trimmed = raw.trim();
+        int commaIdx = trimmed.indexOf(',');
+        if (commaIdx > 0) {
+            trimmed = trimmed.substring(0, commaIdx).trim();
+        }
         if (trimmed.isEmpty()) {
             return "";
         }
