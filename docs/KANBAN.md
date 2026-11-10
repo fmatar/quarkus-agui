@@ -13,7 +13,7 @@
 
 | 📥 Backlog | 📋 Ready | ⚡ In Progress | 🔍 In Review | ✅ Done |
 | :--- | :--- | :--- | :--- | :--- |
-| [#64 fix(orchestrator): Handle destination-free greetings & profile updates without defaulting to Kyoto (#64)](https://github.com/fmatar/quarkus-agui/issues/64) | [#29 feat(client): extract standalone AG-UI Svelte 5 library (packages/agui-svelte)](https://github.com/fmatar/quarkus-agui/issues/29) | [#68 feat(langchain4j-mcp): Idiomatic quarkus-langchain4j-mcp, Multi<ChatEvent> AG-UI Bridge, SmallRye Health & REST Countries v5](https://github.com/fmatar/quarkus-agui/issues/68) |  | [#66 feat(showcase): honest upstream error surfacing, live healthchecks, native quarkus-mcp, intent-driven travel chatbot & domain naming cleanup](https://github.com/fmatar/quarkus-agui/issues/66) |
+|  |  |  | [#68 feat(langchain4j-mcp): Idiomatic quarkus-langchain4j-mcp, Multi<ChatEvent> AG-UI Bridge, SmallRye Health & REST Countries v5](https://github.com/fmatar/quarkus-agui/issues/68) |  |
 | [#62 feat(ui): Replace hardcoded Kyoto initial state with interactive Destination Picker & Awaiting Destination Dossier](https://github.com/fmatar/quarkus-agui/issues/62) |  |  |  | [#59 feat(showcase): Package SvelteKit Frontend with Quarkus Quinoa & Build Containers with Jib](https://github.com/fmatar/quarkus-agui/issues/59) |
 | [#57 feat(ui): Wide-Resolution Editorial Layout & Deep-Linked Verified Sources](https://github.com/fmatar/quarkus-agui/issues/57) |  |  |  | [#55 feat(ui): GSAP motion choreography across AG-UI studio & /impeccable critique 40/40 score](https://github.com/fmatar/quarkus-agui/issues/55) |
 | [#48 feat(showcase): On-demand LLM-generated interactive single-select and multi-select choice surface (tool:ui)](https://github.com/fmatar/quarkus-agui/issues/48) |  |  |  | [#54 feat(mcp): @ResourceTemplate city dossiers, @CompletePrompt argument completion, real mcp:sampling step & .md export](https://github.com/fmatar/quarkus-agui/issues/54) |
@@ -45,7 +45,7 @@
 
 | Issue | Status | Priority | Component | Quality Gate | Spec Link |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| [#68 feat(langchain4j-mcp): Idiomatic quarkus-langchain4j-mcp, Multi<ChatEvent> AG-UI Bridge, SmallRye Health & REST Countries v5](https://github.com/fmatar/quarkus-agui/issues/68) | `status:in-progress` | P2 - Medium | Architecture | `Pending` | — |
+| [#68 feat(langchain4j-mcp): Idiomatic quarkus-langchain4j-mcp, Multi<ChatEvent> AG-UI Bridge, SmallRye Health & REST Countries v5](https://github.com/fmatar/quarkus-agui/issues/68) | `status:in-review` | P1 - High | Architecture | `Passed` | [ADR-005](docs/adr/ADR-005-quarkus-langchain4j-mcp-and-smallrye-health.md) |
 | [#66 feat(showcase): honest upstream error surfacing, live healthchecks, native quarkus-mcp, intent-driven travel chatbot & domain naming cleanup](https://github.com/fmatar/quarkus-agui/issues/66) | `status:done` | P2 - Medium | Architecture | `Pending` | — |
 | [#64 fix(orchestrator): Handle destination-free greetings & profile updates without defaulting to Kyoto (#64)](https://github.com/fmatar/quarkus-agui/issues/64) | `status:backlog` | P2 - Medium | Architecture | `Pending` | — |
 | [#62 feat(ui): Replace hardcoded Kyoto initial state with interactive Destination Picker & Awaiting Destination Dossier](https://github.com/fmatar/quarkus-agui/issues/62) | `status:backlog` | P2 - Medium | Architecture | `Pending` | — |

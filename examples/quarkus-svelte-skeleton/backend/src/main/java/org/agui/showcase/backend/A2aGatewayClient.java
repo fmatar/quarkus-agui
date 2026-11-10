@@ -9,20 +9,17 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 /**
  * A2A Specialist Gateway Client (:8080 -> :8082) for {@code Nomad-A2A-Specialist}.
- * Invokes real Frankfurter FX, REST Countries Travel Advisory, and Neighborhood Cadence skills
+ * Invokes real Frankfurter FX, REST Countries v5 Travel Advisory, and Neighborhood Cadence skills
  * on {@code :8082} and surfaces upstream errors honestly without fabricating {@code "CLEAR"} verdicts.
  */
 @ApplicationScoped
@@ -85,18 +82,6 @@ public class A2aGatewayClient {
             Map.entry("Peru", "PEN"), Map.entry("Chile", "CLP"), Map.entry("Argentina", "ARS"),
             Map.entry("Brazil", "BRL"));
 
-    private static final List<String> RECOGNIZED_CITIES = List.of(
-            "Beirut", "Byblos", "Batroun", "Amman", "Petra", "Dubai", "Abu Dhabi", "Riyadh", "Doha", "Muscat",
-            "Lisbon", "Porto", "Reykjavik", "Tokyo", "Kyoto", "Osaka", "Paris", "Lyon", "Nice",
-            "Rome", "Milan", "Florence", "Venice", "Barcelona", "Madrid", "Seville",
-            "London", "Edinburgh", "Dublin", "Berlin", "Munich", "Vienna", "Zurich", "Geneva",
-            "Amsterdam", "Brussels", "Copenhagen", "Stockholm", "Oslo", "Helsinki", "Prague", "Budapest",
-            "Warsaw", "Dubrovnik", "Athens", "Santorini", "Istanbul", "Marrakech", "Casablanca",
-            "Tunis", "Cairo", "Nairobi", "Cape Town", "Seoul", "Bangkok", "Singapore", "Taipei",
-            "Hong Kong", "Shanghai", "Bali", "Mumbai", "Sydney", "Auckland", "New York", "San Francisco",
-            "Chicago", "Toronto", "Vancouver", "Montreal", "Oaxaca", "Mexico City", "Bogota", "Lima",
-            "Cusco", "Santiago", "Buenos Aires", "Rio de Janeiro");
-
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final HttpClient httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofMillis(1800))
@@ -114,18 +99,14 @@ public class A2aGatewayClient {
     public Map<String, Object> getAgentCard() {
         return Map.of(
                 "name", "Nomad-A2A-Specialist",
-                "description", "Autonomous A2A Travel Specialist Agent for Frankfurter ECB multi-currency budget auditing, REST Countries destination advisories, and architectural neighborhood cadence curation.",
+                "description", "Autonomous A2A Travel Specialist Agent for Frankfurter ECB multi-currency budget auditing, REST Countries v5 destination advisories, and architectural neighborhood cadence curation.",
                 "endpoint", a2aBaseUrl,
-                "version", "1.4.0",
+                "version", "1.5.0",
                 "protocol", "A2A-1.0-JSONRPC",
                 "skills", List.of(
                         Map.of("id", "convert-and-audit-budget", "name", "Frankfurter Multi-Currency & Budget Audit"),
-                        Map.of("id", "verify-travel-advisory", "name", "REST Countries Destination & Cultural Advisory"),
+                        Map.of("id", "verify-travel-advisory", "name", "REST Countries v5 Destination & Cultural Advisory"),
                         Map.of("id", "curate-neighborhood-cadence", "name", "Neighborhood Architectural & Acoustic Cadence Curation")));
-    }
-
-    public Map<String, Object> delegateTask(String taskId, String skillId, String prompt) {
-        return delegateTask(taskId, skillId, prompt, Map.of());
     }
 
     public Map<String, Object> delegateTask(String taskId, String skillId, String prompt, Map<String, Object> context) {
@@ -133,16 +114,7 @@ public class A2aGatewayClient {
         if (!SUPPORTED_SKILLS.contains(resolvedSkill)) {
             throw new IllegalArgumentException("Unsupported A2A skill: " + resolvedSkill);
         }
-        Map<String, Object> execCtx = new LinkedHashMap<>();
-        if (context != null) {
-            execCtx.putAll(context);
-        }
-        if (!execCtx.containsKey("city")) {
-            String extracted = resolveNomadCityFromPrompt(prompt);
-            if (extracted != null && !extracted.isBlank()) {
-                execCtx.put("city", extracted);
-            }
-        }
+        Map<String, Object> execCtx = context == null ? Map.of() : new LinkedHashMap<>(context);
 
         try {
             String reqBody = objectMapper.writeValueAsString(Map.of(
@@ -150,7 +122,7 @@ public class A2aGatewayClient {
                     "prompt", prompt == null ? "" : prompt,
                     "context", execCtx));
             HttpRequest req = HttpRequest.newBuilder(URI.create(a2aBaseUrl + "/api/a2a/audit"))
-                    .timeout(Duration.ofSeconds(4))
+                    .timeout(Duration.ofSeconds(5))
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(reqBody))
                     .build();
@@ -212,89 +184,6 @@ public class A2aGatewayClient {
                 Map.entry("summary", "⚠️ " + errorMsg),
                 Map.entry("prompt", prompt == null ? "" : prompt),
                 Map.entry("report", errReport));
-    }
-
-    public List<Map<String, Object>> checkA2aHealth() {
-        List<Map<String, Object>> entries = new ArrayList<>();
-        long startNs = System.nanoTime();
-        try {
-            HttpRequest req = HttpRequest.newBuilder(URI.create(a2aBaseUrl + "/api/a2a/health"))
-                    .timeout(Duration.ofMillis(2500))
-                    .GET()
-                    .build();
-            HttpResponse<String> res = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
-            long elapsedMs = Math.max(1L, Duration.ofNanos(System.nanoTime() - startNs).toMillis());
-            if (res.statusCode() >= 200 && res.statusCode() < 300 && res.body() != null) {
-                JsonNode root = objectMapper.readTree(res.body());
-                entries.add(Map.of(
-                        "id", "a2a-server",
-                        "name", "Quarkus A2A Specialist (:8082)",
-                        "category", "protocol",
-                        "status", "UP",
-                        "latencyMs", elapsedMs));
-
-                JsonNode upstreams = root.path("upstreams");
-                if (upstreams.isArray()) {
-                    for (JsonNode u : upstreams) {
-                        Map<String, Object> item = objectMapper.convertValue(u, new TypeReference<Map<String, Object>>() {});
-                        item.put("category", "upstream-api");
-                        item.put("via", "a2a-server (:8082)");
-                        entries.add(item);
-                    }
-                }
-                return entries;
-            }
-            entries.add(Map.of(
-                    "id", "a2a-server",
-                    "name", "Quarkus A2A Specialist (:8082)",
-                    "category", "protocol",
-                    "status", "DOWN",
-                    "latencyMs", elapsedMs,
-                    "error", "HTTP " + res.statusCode()));
-        } catch (Exception ex) {
-            long elapsedMs = Math.max(1L, Duration.ofNanos(System.nanoTime() - startNs).toMillis());
-            entries.add(Map.of(
-                    "id", "a2a-server",
-                    "name", "Quarkus A2A Specialist (:8082)",
-                    "category", "protocol",
-                    "status", "DOWN",
-                    "latencyMs", elapsedMs,
-                    "error", ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage()));
-        }
-        return entries;
-    }
-
-    static String resolveNomadCityFromPrompt(String prompt) {
-        if (prompt == null || prompt.isBlank()) {
-            return null;
-        }
-        String raw = prompt.trim();
-        String lower = raw.toLowerCase(Locale.ROOT);
-        if (lower.startsWith("/kyoto")) {
-            return "Kyoto";
-        }
-        if (lower.startsWith("/lisbon")) {
-            return "Lisbon";
-        }
-        if (lower.startsWith("/reykjavik")) {
-            return "Reykjavik";
-        }
-        for (String candidate : RECOGNIZED_CITIES) {
-            Pattern wordBound = Pattern.compile("\\b" + Pattern.quote(candidate.toLowerCase(Locale.ROOT)) + "\\b");
-            if (wordBound.matcher(lower).find()) {
-                return candidate;
-            }
-        }
-        Matcher m = Pattern.compile(
-                "\\b(?:in|to|for|visit|explore|around|about)\\s+([A-Z][a-zA-Z]+(?:\\s+[A-Z][a-zA-Z]+)?)\\b")
-                .matcher(raw);
-        if (m.find()) {
-            String candidate = m.group(1).trim();
-            if (!Set.of("USD", "EUR", "GBP", "JPY", "CHF", "CAD", "AUD").contains(candidate.toUpperCase(Locale.ROOT))) {
-                return candidate;
-            }
-        }
-        return null;
     }
 
     static String resolveCountryForCity(String city) {

@@ -304,5 +304,14 @@ class AgUiLangChain4jBridgeTest {
         @SuppressWarnings("unchecked")
         Map<String, Object> failPayload = (Map<String, Object>) nullMsgFail.get(nullMsgFail.size() - 1).payload();
         assertEquals("RuntimeException", failPayload.get("error"));
+
+        List<AgUiEvent<?>> accEvents = bridge.adapt(
+                        "thread-acc",
+                        Multi.createFrom().items(
+                                new ChatEvent.AccumulatedResponseEvent("Validated reply", null),
+                                new ChatEvent.AccumulatedResponseEvent("", null)))
+                .collect().asList().await().indefinitely();
+        assertTrue(accEvents.stream().anyMatch(e -> AgUiEventType.TEXT_DELTA.name().equals(e.type())));
+        assertTrue(accEvents.stream().anyMatch(e -> AgUiEventType.RUN_FINISHED.name().equals(e.type())));
     }
 }

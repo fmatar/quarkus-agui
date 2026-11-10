@@ -92,6 +92,9 @@ public class AgUiLangChain4jBridge {
         if (event instanceof ChatEvent.PartialResponseEvent partial) {
             return mapPartialResponseEvent(threadId, partial);
         }
+        if (event instanceof ChatEvent.AccumulatedResponseEvent accumulated) {
+            return mapAccumulatedResponseEvent(threadId, accumulated, options);
+        }
         if (event instanceof ChatEvent.ChatCompletedEvent) {
             return mapCompletedEvent(threadId, options);
         }
@@ -252,6 +255,19 @@ public class AgUiLangChain4jBridge {
             return List.of();
         }
         return List.of(AgUiEvent.of(AgUiEventType.TEXT_DELTA, threadId, new TextDeltaPayload(chunk)));
+    }
+
+    private List<AgUiEvent<?>> mapAccumulatedResponseEvent(
+            String threadId,
+            ChatEvent.AccumulatedResponseEvent accumulated,
+            AgUiRunOptions options) {
+        List<AgUiEvent<?>> out = new ArrayList<>(3);
+        String msg = accumulated.getMessage();
+        if (msg != null && !msg.isEmpty()) {
+            out.add(AgUiEvent.of(AgUiEventType.TEXT_DELTA, threadId, new TextDeltaPayload(msg)));
+        }
+        out.addAll(mapCompletedEvent(threadId, options));
+        return out;
     }
 
     private List<AgUiEvent<?>> mapCompletedEvent(String threadId, AgUiRunOptions options) {

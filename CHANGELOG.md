@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- feat(langchain4j,mcp,health,a2a): introduce `quarkus-ag-ui-langchain4j` + `-deployment` extension (`AgUiLangChain4jBridge`, `AgUiRunOptions`, `AgUiToolClassifier`) in `quarkus-ag-ui-bom`, refactor showcase `backend` to idiomatic `@ApplicationScoped @RegisterAiService` (`NomadConciergeAiService`) + `@McpToolBox("nomad")` (`QuarkusStreamableHttpMcpTransport`) + `@McpClientName("nomad")` (deleting custom `McpGatewayClient.java` and `deterministic` engine), wire MicroProfile SmallRye Health (`/q/health/ready`) across `mcp-server`, `a2a-server`, `backend`, and Svelte Top-Bar Health Pill, and migrate `NomadTravelAdvisorService` from deprecated `restcountries.com/v3.1` to authenticated REST Countries v5 (`api.restcountries.com/countries/v5/names.common/{country}` with `RESTCOUNTRIES_API_KEY`) (`ADR-005`, [#68](https://github.com/fmatar/quarkus-agui/issues/68))
+
 ### Changed
 - refactor(showcase): retire legacy DevOps filenames (`NomadMcpConciergeService`, `NomadTravelAdvisorService`, `NomadA2aAgentConfiguration`, `NomadConciergeOrchestratorService`, `TripDossierPanel.svelte`), wire native `quarkus-mcp` (`quarkus-mcp-server-http` `ToolResponse` + `quarkus-langchain4j-mcp` `StreamableHttpMcpTransport`), enforce Ollama-first `TravelIntent` conversational routing with zero assumed defaults & interactive `TripSlotState` slot-filling, and surface honest upstream errors (`restcountries.com/v3.1` deprecation) alongside live `/api/agent/health`, `/api/mcp/health`, and `/api/a2a/health` Top-Bar Health Pill diagnostics ([#66](https://github.com/fmatar/quarkus-agui/issues/66))
 

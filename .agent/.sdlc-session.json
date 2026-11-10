@@ -1,14 +1,14 @@
 {
-  "activeSessionId": 66,
+  "activeSessionId": 68,
   "sessions": {
-    "66": {
+    "68": {
       "active": true,
-      "issueId": 66,
+      "issueId": 68,
       "type": "feat",
-      "branch": "feature/issue-#66-nomad-travel-chatbot-mcp-health",
+      "branch": "feature/issue-#68-quarkus-langchain4j-mcp-v5",
       "worktree": null,
-      "stage": 5,
-      "stageName": "Documentation & Showcase Sync",
+      "stage": 6,
+      "stageName": "Pre-PR Quality Gate & Pull Request",
       "remediationCount": 0,
       "maxRemediations": 3,
       "manifest": {
@@ -20,16 +20,16 @@
         "checkpoints": {
           "stage1": null,
           "stage2": null,
-          "stage3": "2026-11-09T15:52:03.611Z",
-          "stage4": "2026-11-09T17:40:36.765Z",
-          "stage5": "2026-11-09T18:41:10.328Z",
-          "stage6": null,
+          "stage3": "2026-11-09T20:25:30.434Z",
+          "stage4": "2026-11-10T00:10:39.516Z",
+          "stage5": "2026-11-10T00:10:42.382Z",
+          "stage6": "2026-11-10T00:10:45.065Z",
           "stage7": null,
           "stage8": null
         }
       },
-      "startedAt": "2026-11-09T15:52:03.611Z",
-      "updatedAt": "2026-11-09T18:41:10.561Z",
+      "startedAt": "2026-11-09T20:25:30.433Z",
+      "updatedAt": "2026-11-10T00:10:45.246Z",
       "activeSubagents": []
     }
   }

@@ -4,30 +4,41 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 MODE="${1:---docker}"
+ENV_FILE_ARGS=()
+if [[ -f "${ROOT_DIR}/.env" ]]; then
+  ENV_FILE_ARGS=(--env-file "${ROOT_DIR}/.env")
+fi
 
 if [[ "${MODE}" == "--docker" ]]; then
   echo "📦 Building Quarkus AG-UI extensions & Jib layered containers (with Quinoa SPA bundled)..."
-  (cd "${ROOT_DIR}" && ./mvnw clean install -DskipTests -pl :quarkus-ag-ui-deployment,:quarkus-ag-ui-bom -am)
+  (cd "${ROOT_DIR}" && ./mvnw clean install -DskipTests -pl :quarkus-ag-ui-deployment,:quarkus-ag-ui-langchain4j-deployment,:quarkus-ag-ui-bom -am)
   (cd "${ROOT_DIR}" && ./mvnw -f examples/quarkus-svelte-skeleton/pom.xml clean package -Dquarkus.container-image.build=true -DskipTests)
 
-  echo "🚀 Starting Nomad Tri-Protocol Showcase via Docker Compose (Jib + Quinoa)..."
-  echo "   • MCP Server:                        http://localhost:8081"
-  echo "   • A2A Specialist:                    http://localhost:8082"
-  echo "   • Nomad Studio UI + AG-UI Backend:   http://localhost:8080"
-  docker compose -f "${SCRIPT_DIR}/docker-compose.yml" up --remove-orphans
+  echo "🚀 Starting Nomad Tri-Protocol Showcase via Docker Compose (Jib + Quinoa + SmallRye Health)..."
+  echo "   • MCP Server:                        http://localhost:8081/q/health/ready"
+  echo "   • A2A Specialist (REST Countries v5):http://localhost:8082/q/health/ready"
+  echo "   • Nomad Studio UI + AG-UI Backend:   http://localhost:8080/q/health/ready"
+  docker compose -f "${SCRIPT_DIR}/docker-compose.yml" "${ENV_FILE_ARGS[@]}" up --remove-orphans
 elif [[ "${MODE}" == "--docker-native" ]]; then
   echo "📦 Building Quarkus AG-UI extensions & GraalVM/Mandrel Native Jib containers (-Pnative)..."
-  (cd "${ROOT_DIR}" && ./mvnw clean install -DskipTests -pl :quarkus-ag-ui-deployment,:quarkus-ag-ui-bom -am)
+  (cd "${ROOT_DIR}" && ./mvnw clean install -DskipTests -pl :quarkus-ag-ui-deployment,:quarkus-ag-ui-langchain4j-deployment,:quarkus-ag-ui-bom -am)
   (cd "${ROOT_DIR}" && ./mvnw -f examples/quarkus-svelte-skeleton/pom.xml clean package -Pnative -Dquarkus.container-image.build=true -DskipTests)
 
   echo "🚀 Starting Nomad Tri-Protocol Native Showcase via Docker Compose..."
-  echo "   • MCP Server:                        http://localhost:8081"
-  echo "   • A2A Specialist:                    http://localhost:8082"
-  echo "   • Nomad Studio UI + AG-UI Backend:   http://localhost:8080"
-  docker compose -f "${SCRIPT_DIR}/docker-compose.yml" up --remove-orphans
+  echo "   • MCP Server:                        http://localhost:8081/q/health/ready"
+  echo "   • A2A Specialist (REST Countries v5):http://localhost:8082/q/health/ready"
+  echo "   • Nomad Studio UI + AG-UI Backend:   http://localhost:8080/q/health/ready"
+  docker compose -f "${SCRIPT_DIR}/docker-compose.yml" "${ENV_FILE_ARGS[@]}" up --remove-orphans
 elif [[ "${MODE}" == "--local" ]]; then
   echo "🔧 Building Quarkus AG-UI extensions locally..."
-  (cd "${ROOT_DIR}" && ./mvnw clean install -DskipTests -pl :quarkus-ag-ui-deployment,:quarkus-ag-ui-bom -am)
+  (cd "${ROOT_DIR}" && ./mvnw clean install -DskipTests -pl :quarkus-ag-ui-deployment,:quarkus-ag-ui-langchain4j-deployment,:quarkus-ag-ui-bom -am)
+
+  if [[ -f "${ROOT_DIR}/.env" ]]; then
+    set -a
+    # shellcheck disable=SC1090
+    source "${ROOT_DIR}/.env"
+    set +a
+  fi
 
   trap 'echo "Stopping local showcase processes..."; kill 0' INT TERM EXIT
 
