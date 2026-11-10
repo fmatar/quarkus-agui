@@ -1,31 +1,30 @@
 # SPEC-01: Quarkus MCP Server (`:8081`) & Quarkus A2A Server (`:8082`) in Reference Showcase
 
 - **Linked Capability**: `CAP-01`
-- **Ticket**: `#2`
+- **Tickets**: `#2`, `#19`, `#32`, `#54`, `#66`, `#68`, `#76`, `#78`
 - **Modules**: `examples/quarkus-svelte-skeleton/mcp-server` & `examples/quarkus-svelte-skeleton/a2a-server`
-- **Stack**: Java 25 + Quarkus `3.40.1.1` + Portable GraalVM 25 Native (`-Dnative` / `-Dnative-container`)
-- **Status**: `ACTIVE`
+- **Stack**: Java 25 + Quarkus `3.40.1.1` + SmallRye Health + Jib + Portable GraalVM 25 Native (`-Dnative` / `-Dnative-container`)
+- **Status**: `IMPLEMENTED (Amended by ADR-004 & ADR-005)`
 
 ## 1. Problem Statement & Technical Scope
-Before building the AG-UI orchestrator and extracting the extension, the showcase needs real, standalone **MCP (Model Context Protocol)** and **A2A (Agent-to-Agent)** servers built on Quarkus `3.40.1.1` and Java 25 so the orchestrator can execute real tool and multi-agent delegations.
+Provides standalone **MCP (Model Context Protocol)** and **A2A (Agent-to-Agent)** microservices built on Quarkus `3.40.1.1` and Java 25 for the Nomad Travel & Culture Concierge showcase.
 
 ## 2. Module Specifications
 
 ### 2.1 `mcp-server` (Port `8081` — `io.quarkiverse.mcp:quarkus-mcp-server-http`)
-- **MCP `@Tool` Methods & HTTP Tool Execution Endpoints (`/api/mcp/tools`)**:
-  1. `inspectClusterHealth(String region)`: Returns cluster status, CPU/Memory utilization, and pod statuses for `api-gateway`, `payment-service`, and `auth-service`.
-  2. `queryServiceLogs(String serviceName, String severity, int limit)`: Returns structured log entries matching the service and severity.
-  3. `scaleDeployment(String serviceName, int targetReplicas)`: Mutates live cluster replica count and returns updated deployment state.
-- **MCP `@Resource` (`cluster://topology`) & `/api/mcp/topology`**: Returns current cluster state snapshot.
+- **MCP `@Tool` Methods & Companion REST Endpoints (`/mcp` & `/api/mcp/tools`)**:
+  1. `fetchCityWeather(String city)`: Live Open-Meteo geocoding & weather telemetry.
+  2. `discoverLocalCultureAndMedia(String city, String interest)`: Wikipedia REST landmark dossiers & photography.
+  3. `updateTripItinerary(String city, int nights, double budgetUsd, String style)`: Mutates live trip itinerary state.
+  4. `saveTravelerPreferences(String travelerName, String homeCurrency, String musicGenre, String dietaryNotes)`: Idempotent `traveler://preferences` persistence.
+  5. `sampleAcousticMood(String city, String genre)`: Curated 30s Apple iTunes audio preview sampling.
+  6. `resetNomadState()`: Resets session dossier state.
+- **MCP `@ResourceTemplate` (`nomad://city/{city}`) & `@CompletePrompt`**: Structured city dossiers and prompt argument completion.
 
-### 2.2 `a2a-server` (Port `8082` — `org.a2aproject.sdk` / A2A JSON-RPC & REST)
-- **A2A Discovery (`GET /.well-known/agent.json`)**:
-  Returns standard A2A `AgentCard` JSON (`name`, `description`, `url`, `version`, `capabilities` with `streaming: true`, and `skills`: `audit-clean-architecture`, `assess-security-posture`, `plan-incident-remediation`).
-- **A2A Task Execution (`POST /api/a2a/tasks/send`)**:
-  Accepts `A2aTaskRequest(String taskId, String skillId, String prompt, Map<String, Object> context)` and returns `A2aTaskResponse(String taskId, String agentName, String status, List<A2aArtifact> artifacts)` with detailed security & Clean Architecture audit findings.
+### 2.2 `a2a-server` (Port `8082` — `org.a2aproject.sdk:1.4.0.Final`)
+- **A2A Discovery (`GET /.well-known/agent-card.json`)**: Official `Nomad-A2A-Specialist` `AgentCard`.
+- **A2A Task Execution (JSON-RPC 2.0 & `POST /api/a2a/audit`)**: Executes `convert-and-audit-budget` (Frankfurter FX + `open.er-api.com` ISO 4217 fallback) and `verify-travel-advisory` (REST Countries v5).
 
-## 3. Acceptance Criteria (Gherkin / DoD)
-- **AC-01**: Both `mcp-server` and `a2a-server` compile and run on Java 25 and Quarkus `3.40.1.1` with ephemeral test port `0` (`quarkus.http.test-port=0`).
-- **AC-02**: `mcp-server` exposes MCP tools (`inspectClusterHealth`, `queryServiceLogs`, `scaleDeployment`) and topology snapshot with full input validation.
-- **AC-03**: `a2a-server` exposes `GET /.well-known/agent.json` and `POST /api/a2a/tasks/send` returning structured A2A artifacts.
-- **AC-04**: Dual-Gate verification passes with $\ge 85\%$ line/branch coverage and $\ge 80\%$ PITest mutation kill score.
+## 3. Acceptance Criteria (DoD)
+- **AC-01**: Both servers compile on Java 25, expose `/q/health/live` & `/q/health/ready` (5-minute TTL external probe cache), and run tests on ephemeral port `0`.
+- **AC-02**: Dual-Gate verification passes (`>= 85%` coverage, `>= 80%` PITest mutation score).
