@@ -7,30 +7,33 @@
       "type": "feat",
       "branch": "feature/issue-#81-adopt-upstream-ag-ui-java-sdks",
       "worktree": null,
-      "stage": 6,
-      "stageName": "Pull Request Opening",
-      "remediationCount": 0,
+      "stage": 3,
+      "stageName": "Remediating Peer Review Feedback",
+      "remediationCount": 2,
       "maxRemediations": 3,
       "manifest": {
         "specPath": null,
-        "prNumber": null,
+        "prNumber": 82,
         "coverageReport": null,
         "mutationScore": null,
         "uiScreenshotPath": null,
         "checkpoints": {
           "stage1": "2026-11-10T17:41:52.716Z",
           "stage2": null,
-          "stage3": "2026-11-10T17:42:20.692Z",
+          "stage3": "2026-11-10T18:47:17.433Z",
           "stage4": "2026-11-10T18:10:25.921Z",
           "stage5": "2026-11-10T18:13:59.363Z",
           "stage6": "2026-11-10T18:17:23.580Z",
-          "stage7": null,
+          "stage7": "2026-11-10T18:30:02.739Z",
           "stage8": null
         }
       },
       "startedAt": "2026-11-10T17:41:52.715Z",
-      "updatedAt": "2026-11-10T18:17:23.745Z",
-      "activeSubagents": []
+      "updatedAt": "2026-11-10T18:47:17.607Z",
+      "activeSubagents": [
+        "peer-reviewer",
+        "quality-gatekeeper"
+      ]
     }
   }
 }

@@ -67,7 +67,7 @@ public final class AgUiLangChain4jRunSession {
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper must not be null");
     }
 
-    public List<Event> onStart() {
+    public synchronized List<Event> onStart() {
         long now = System.currentTimeMillis();
         List<Event> out = new ArrayList<>(2);
         out.add(new RunStartedEvent(
@@ -83,7 +83,7 @@ public final class AgUiLangChain4jRunSession {
         return List.copyOf(out);
     }
 
-    public List<Event> onPartialThinking(String text) {
+    public synchronized List<Event> onPartialThinking(String text) {
         if (text == null || text.isBlank()) {
             return List.of();
         }
@@ -99,7 +99,7 @@ public final class AgUiLangChain4jRunSession {
         return List.copyOf(out);
     }
 
-    public List<Event> onRetrieved(List<Content> contents) {
+    public synchronized List<Event> onRetrieved(List<Content> contents) {
         long now = System.currentTimeMillis();
         int count = contents == null ? 0 : contents.size();
         String stepId = "rag-" + shortId();
@@ -125,7 +125,7 @@ public final class AgUiLangChain4jRunSession {
         return List.copyOf(out);
     }
 
-    public List<Event> onBeforeTool(ToolExecutionRequest req) {
+    public synchronized List<Event> onBeforeTool(ToolExecutionRequest req) {
         long now = System.currentTimeMillis();
         List<Event> out = new ArrayList<>(5);
         closeOpenStreamsInto(out, now);
@@ -164,7 +164,7 @@ public final class AgUiLangChain4jRunSession {
         return List.copyOf(out);
     }
 
-    public List<Event> onToolExecuted(ToolExecution exec) {
+    public synchronized List<Event> onToolExecuted(ToolExecution exec) {
         long now = System.currentTimeMillis();
         List<Event> out = new ArrayList<>(4);
         closeOpenStreamsInto(out, now);
@@ -190,7 +190,7 @@ public final class AgUiLangChain4jRunSession {
         return List.copyOf(out);
     }
 
-    public List<Event> onPartialResponse(String chunk) {
+    public synchronized List<Event> onPartialResponse(String chunk) {
         if (chunk == null || chunk.isEmpty()) {
             return List.of();
         }
@@ -206,7 +206,7 @@ public final class AgUiLangChain4jRunSession {
         return List.copyOf(out);
     }
 
-    public List<Event> onAccumulatedResponse(String message) {
+    public synchronized List<Event> onAccumulatedResponse(String message) {
         if (streamedAnyText || message == null || message.isEmpty()) {
             return List.of();
         }
@@ -217,7 +217,7 @@ public final class AgUiLangChain4jRunSession {
         return List.copyOf(out);
     }
 
-    public List<Event> onComplete() {
+    public synchronized List<Event> onComplete() {
         if (terminated) {
             return List.of();
         }
@@ -241,7 +241,7 @@ public final class AgUiLangChain4jRunSession {
         return List.copyOf(out);
     }
 
-    public List<Event> onError(Throwable failure) {
+    public synchronized List<Event> onError(Throwable failure) {
         if (terminated) {
             return List.of();
         }

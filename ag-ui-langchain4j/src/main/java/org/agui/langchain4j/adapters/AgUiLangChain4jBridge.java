@@ -29,24 +29,45 @@ public class AgUiLangChain4jBridge {
     public Flow.Publisher<Event> adapt(String threadId, TokenStream tokenStream, AgUiRunOptions options) {
         validateInputs(threadId, tokenStream);
         AgUiRunOptions resolved = options == null ? AgUiRunOptions.defaults() : options;
+        AtomicBoolean streamConsumed = new AtomicBoolean(false);
 
         return subscriber -> {
             Objects.requireNonNull(subscriber, "subscriber must not be null");
+            Object signalLock = new Object();
             AtomicBoolean started = new AtomicBoolean(false);
-            AtomicBoolean cancelled = new AtomicBoolean(false);
+            AtomicBoolean terminated = new AtomicBoolean(false);
 
             subscriber.onSubscribe(new Flow.Subscription() {
                 @Override
                 public void request(long n) {
-                    if (cancelled.get() || n <= 0 || !started.compareAndSet(false, true)) {
+                    if (terminated.get()) {
                         return;
                     }
-                    startRunSession(threadId, tokenStream, resolved, subscriber, cancelled);
+                    if (n <= 0) {
+                        signalErrorOnce(
+                                subscriber,
+                                signalLock,
+                                terminated,
+                                new IllegalArgumentException("Reactive Streams §3.9: request n must be > 0, got " + n));
+                        return;
+                    }
+                    if (!started.compareAndSet(false, true)) {
+                        return;
+                    }
+                    if (!streamConsumed.compareAndSet(false, true)) {
+                        signalErrorOnce(
+                                subscriber,
+                                signalLock,
+                                terminated,
+                                new IllegalStateException("TokenStream can only be subscribed to once"));
+                        return;
+                    }
+                    startRunSession(threadId, tokenStream, resolved, subscriber, signalLock, terminated);
                 }
 
                 @Override
                 public void cancel() {
-                    cancelled.set(true);
+                    terminated.set(true);
                 }
             });
         };
@@ -86,58 +107,74 @@ public class AgUiLangChain4jBridge {
             TokenStream tokenStream,
             AgUiRunOptions options,
             Flow.Subscriber<? super Event> subscriber,
-            AtomicBoolean cancelled) {
+            Object signalLock,
+            AtomicBoolean terminated) {
         AgUiLangChain4jRunSession session = newSession(threadId, options);
-        emitAll(subscriber, cancelled, session.onStart());
+        emitAll(subscriber, signalLock, terminated, session.onStart());
 
         tokenStream.onPartialThinking(thinking -> {
             if (thinking != null) {
-                emitAll(subscriber, cancelled, session.onPartialThinking(thinking.text()));
+                emitAll(subscriber, signalLock, terminated, session.onPartialThinking(thinking.text()));
             }
         });
-        tokenStream.onRetrieved(contents -> emitAll(subscriber, cancelled, session.onRetrieved(contents)));
+        tokenStream.onRetrieved(contents -> emitAll(subscriber, signalLock, terminated, session.onRetrieved(contents)));
         tokenStream.beforeToolExecution(before -> {
             if (before != null && before.request() != null) {
-                emitAll(subscriber, cancelled, session.onBeforeTool(before.request()));
+                emitAll(subscriber, signalLock, terminated, session.onBeforeTool(before.request()));
             }
         });
         tokenStream.onToolExecuted(exec -> {
             if (exec != null) {
-                emitAll(subscriber, cancelled, session.onToolExecuted(exec));
+                emitAll(subscriber, signalLock, terminated, session.onToolExecuted(exec));
             }
         });
-        tokenStream.onPartialResponse(chunk -> emitAll(subscriber, cancelled, session.onPartialResponse(chunk)));
-        tokenStream.onCompleteResponse(resp -> {
-            emitAll(subscriber, cancelled, session.onComplete());
-            completeOnce(subscriber, cancelled);
-        });
-        tokenStream.onError(failure -> {
-            emitAll(subscriber, cancelled, session.onError(failure));
-            completeOnce(subscriber, cancelled);
-        });
+        tokenStream.onPartialResponse(chunk -> emitAll(subscriber, signalLock, terminated, session.onPartialResponse(chunk)));
+        tokenStream.onCompleteResponse(resp -> finishWithEvents(subscriber, signalLock, terminated, session.onComplete()));
+        tokenStream.onError(failure -> finishWithEvents(subscriber, signalLock, terminated, session.onError(failure)));
 
         try {
             tokenStream.start();
-        } catch (Throwable failure) {
-            emitAll(subscriber, cancelled, session.onError(failure));
-            completeOnce(subscriber, cancelled);
+        } catch (Exception failure) {
+            finishWithEvents(subscriber, signalLock, terminated, session.onError(failure));
         }
     }
 
     private static void emitAll(
             Flow.Subscriber<? super Event> subscriber,
-            AtomicBoolean cancelled,
+            Object signalLock,
+            AtomicBoolean terminated,
             List<Event> events) {
-        for (Event event : events) {
-            if (!cancelled.get()) {
-                subscriber.onNext(event);
+        synchronized (signalLock) {
+            for (Event event : events) {
+                if (!terminated.get()) {
+                    subscriber.onNext(event);
+                }
             }
         }
     }
 
-    private static void completeOnce(Flow.Subscriber<? super Event> subscriber, AtomicBoolean cancelled) {
-        if (!cancelled.getAndSet(true)) {
-            subscriber.onComplete();
+    private static void finishWithEvents(
+            Flow.Subscriber<? super Event> subscriber,
+            Object signalLock,
+            AtomicBoolean terminated,
+            List<Event> events) {
+        synchronized (signalLock) {
+            emitAll(subscriber, signalLock, terminated, events);
+            if (!terminated.getAndSet(true)) {
+                subscriber.onComplete();
+            }
+        }
+    }
+
+    private static void signalErrorOnce(
+            Flow.Subscriber<? super Event> subscriber,
+            Object signalLock,
+            AtomicBoolean terminated,
+            Throwable error) {
+        synchronized (signalLock) {
+            if (!terminated.getAndSet(true)) {
+                subscriber.onError(error);
+            }
         }
     }
 }

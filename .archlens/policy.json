@@ -24,7 +24,6 @@
     "jakarta.",
     "io.quarkus.",
     "io.smallrye.",
-    "dev.langchain4j.",
     "com.fasterxml.jackson.",
     "com.agui.community."
   ],

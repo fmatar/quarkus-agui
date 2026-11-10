@@ -91,7 +91,7 @@ public class AgUiWebSocketHandler {
             bridge.runAsJsonPayloads(agent, input)
                     .onItem().invoke(json -> sendRawJson(connection, json))
                     .collect().last().await().indefinitely();
-        } catch (Throwable failure) {
+        } catch (Exception failure) {
             String msg = (failure.getMessage() == null || failure.getMessage().isBlank())
                     ? failure.getClass().getSimpleName()
                     : failure.getMessage();

@@ -46,6 +46,9 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.Flow;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import org.agui.langchain4j.domain.AgUiStatePatch;
 import org.agui.langchain4j.domain.McpToolMetadata;
@@ -58,6 +61,7 @@ class AgUiLangChain4jBridgeTest {
     private static List<Event> collectAll(Flow.Publisher<Event> publisher) {
         List<Event> collected = new ArrayList<>();
         List<Throwable> errors = new ArrayList<>();
+        AtomicInteger completions = new AtomicInteger();
         publisher.subscribe(new Flow.Subscriber<>() {
             @Override
             public void onSubscribe(Flow.Subscription subscription) {
@@ -76,11 +80,13 @@ class AgUiLangChain4jBridgeTest {
 
             @Override
             public void onComplete() {
+                completions.incrementAndGet();
             }
         });
         if (!errors.isEmpty()) {
             throw new RuntimeException(errors.get(0));
         }
+        assertEquals(1, completions.get(), "Publisher must invoke onComplete() exactly once");
         return collected;
     }
 
@@ -494,30 +500,68 @@ class AgUiLangChain4jBridgeTest {
         assertEquals("langchain4j-mcp", def.classify(null, Map.of()).serverOrAgent());
         assertEquals("mcp-tool", def.classify("  ", Map.of()).skillOrLabel());
 
-        AgUiLangChain4jRunSession session = bridge.newSession("thread-sess", AgUiRunOptions.defaults());
+        AgUiRunOptions blankOpts = AgUiRunOptions.builder().runId("  ").llmMode("  ").build();
+        assertTrue(blankOpts.runId().startsWith("run-"));
+        assertEquals("langchain4j", blankOpts.llmMode());
+        assertEquals(blankOpts, blankOpts.withRunId(null));
+        assertEquals(blankOpts, blankOpts.withRunId("   "));
+
+        AgUiLangChain4jRunSession session = bridge.newSession("thread-sess", null);
         assertEquals(1, session.onStart().size());
+        assertTrue(session.onPartialThinking(null).isEmpty());
+        assertTrue(session.onPartialResponse(null).isEmpty());
+        assertTrue(session.onAccumulatedResponse(null).isEmpty());
         assertTrue(session.onAccumulatedResponse("").isEmpty());
-        List<Event> accEvents = session.onAccumulatedResponse("Full reply");
+
+        // Partial text followed by partial thinking closes the open text message stream first
+        List<Event> firstText = session.onPartialResponse("Draft ");
+        assertEquals(2, firstText.size());
+        List<Event> switchToThink = session.onPartialThinking("Reconsidering...");
+        assertEquals(List.of(
+                        EventType.TEXT_MESSAGE_END,
+                        EventType.REASONING_START,
+                        EventType.REASONING_MESSAGE_START,
+                        EventType.REASONING_MESSAGE_CONTENT),
+                switchToThink.stream().map(Event::type).toList());
+        // Subsequent accumulated response after text was emitted should not duplicate text
+        assertTrue(session.onAccumulatedResponse("Duplicate").isEmpty());
+        assertEquals(3, session.onComplete().size()); // REASONING_MESSAGE_END, REASONING_END, RUN_FINISHED
+        // Duplicate complete or error after termination must be no-op
+        assertTrue(session.onComplete().isEmpty());
+        assertTrue(session.onError(new RuntimeException("late")).isEmpty());
+
+        AgUiLangChain4jRunSession accSession = bridge.newSession("thread-acc", AgUiRunOptions.builder()
+                .interruptSupplier(List::of)
+                .postRunStatePatchProvider(List::of)
+                .build());
+        List<Event> accEvents = accSession.onAccumulatedResponse("Full reply");
         assertEquals(List.of(
                         EventType.TEXT_MESSAGE_START,
                         EventType.TEXT_MESSAGE_CONTENT,
                         EventType.TEXT_MESSAGE_END),
                 accEvents.stream().map(Event::type).toList());
-        // Subsequent accumulated response after text was emitted should not duplicate text
-        assertTrue(session.onAccumulatedResponse("Duplicate").isEmpty());
-        assertEquals(1, session.onComplete().size());
-        // Duplicate complete or error after termination must be no-op
-        assertTrue(session.onComplete().isEmpty());
-        assertTrue(session.onError(new RuntimeException("late")).isEmpty());
+        RunFinishedEvent accFin = assertInstanceOf(RunFinishedEvent.class, accSession.onComplete().get(0));
+        assertInstanceOf(SuccessOutcome.class, accFin.outcome());
 
-        // Standalone onToolExecuted without preceding onBeforeTool + null callbacks + UI tool protocol
-        ToolExecution standaloneExec = toolExecution(ToolExecutionRequest.builder().build(), "  ", true);
-        AgUiLangChain4jRunSession standaloneSession = bridge.newSession("thread-st", AgUiRunOptions.builder()
+        // Null interrupt list and null postToolStatePatchProvider return + fallback error message
+        AgUiLangChain4jRunSession nullPatchSession = bridge.newSession("thread-np", AgUiRunOptions.builder()
                 .toolClassifier((n, a) -> AgUiToolClassifier.ToolDescriptor.uiSurface("ui", n))
+                .postToolStatePatchProvider(e -> null)
+                .interruptSupplier(() -> null)
                 .build());
-        assertEquals(1, standaloneSession.onToolExecuted(standaloneExec).size());
+        ToolExecution standaloneExec = toolExecution(ToolExecutionRequest.builder().build(), "  ", true);
+        ToolCallResultEvent fallbackErrRes = assertInstanceOf(
+                ToolCallResultEvent.class, nullPatchSession.onToolExecuted(standaloneExec).get(0));
+        assertEquals("Tool execution failed", ((Map<?, ?>) fallbackErrRes.rawEvent()).get("error"));
+
+        ToolExecution jsonBlankMsgErr = toolExecution(
+                ToolExecutionRequest.builder().name("ui").build(),
+                "{\"isError\":true,\"error\":\"  \",\"message\":\"  \"}",
+                false);
+        assertEquals(1, nullPatchSession.onToolExecuted(jsonBlankMsgErr).size());
         ToolExecution rawTextErr = toolExecution(ToolExecutionRequest.builder().name("ui").build(), "Plain failure", true);
-        assertEquals(1, standaloneSession.onToolExecuted(rawTextErr).size());
+        assertEquals(1, nullPatchSession.onToolExecuted(rawTextErr).size());
+        assertEquals(1, nullPatchSession.onComplete().size());
         assertThrows(NullPointerException.class, () -> bridge.newSession(null, null));
         assertThrows(IllegalArgumentException.class, () -> bridge.newSession("  ", null));
 
@@ -528,17 +572,114 @@ class AgUiLangChain4jBridgeTest {
             s.toolExecutedHandler.accept(null);
             s.completeHandler.accept(ChatResponse.builder().build());
         });
-        Agent defaultOptsAgent = bridge.asAgent((in, opts) -> nullCallbacksStream, null);
+        Agent defaultOptsAgent = bridge.asAgent((in, opts) -> nullCallbacksStream, in -> null);
         List<Event> nullCbEvents = collectAll(defaultOptsAgent.run(new RunAgentInput("thread-ncb", "", List.of(), List.of())));
         assertEquals(4, nullCbEvents.size());
 
-        // Subscription cancel and invalid request(0)
-        var pub = bridge.adapt("thread-cancel", new StubTokenStream(s -> s.partialResponseHandler.accept("x")));
-        pub.subscribe(new Flow.Subscriber<>() {
+        // Reactive Streams §3.9: request(0) signals IllegalArgumentException to onError without starting stream
+        AtomicBoolean badReqStarted = new AtomicBoolean(false);
+        AtomicReference<Throwable> badReqErr = new AtomicReference<>();
+        List<Event> badReqEvents = new ArrayList<>();
+        bridge.adapt("thread-bad-req", new StubTokenStream(s -> badReqStarted.set(true)))
+                .subscribe(new Flow.Subscriber<>() {
+                    @Override
+                    public void onSubscribe(Flow.Subscription subscription) {
+                        subscription.request(0);
+                        subscription.request(1);
+                    }
+
+                    @Override
+                    public void onNext(Event item) {
+                        badReqEvents.add(item);
+                    }
+
+                    @Override
+                    public void onError(Throwable throwable) {
+                        badReqErr.set(throwable);
+                    }
+
+                    @Override
+                    public void onComplete() {
+                    }
+                });
+        assertFalse(badReqStarted.get());
+        assertTrue(badReqEvents.isEmpty());
+        assertInstanceOf(IllegalArgumentException.class, badReqErr.get());
+
+        // Pre-request cancel prevents stream start; mid-stream cancel suppresses trailing events & onComplete
+        AtomicBoolean cancelledBeforeStart = new AtomicBoolean(false);
+        List<Event> preCancelEvents = new ArrayList<>();
+        bridge.adapt("thread-precancel", new StubTokenStream(s -> cancelledBeforeStart.set(true)))
+                .subscribe(new Flow.Subscriber<>() {
+                    @Override
+                    public void onSubscribe(Flow.Subscription subscription) {
+                        subscription.cancel();
+                        subscription.request(1);
+                    }
+
+                    @Override
+                    public void onNext(Event item) {
+                        preCancelEvents.add(item);
+                    }
+
+                    @Override
+                    public void onError(Throwable throwable) {
+                    }
+
+                    @Override
+                    public void onComplete() {
+                    }
+                });
+        assertFalse(cancelledBeforeStart.get());
+        assertTrue(preCancelEvents.isEmpty());
+
+        List<Event> midCancelEvents = new ArrayList<>();
+        AtomicInteger midCancelCompletes = new AtomicInteger();
+        bridge.adapt("thread-midcancel", new StubTokenStream(s -> {
+            s.partialResponseHandler.accept("chunk-1");
+            s.partialResponseHandler.accept("chunk-2");
+            s.completeHandler.accept(ChatResponse.builder().build());
+        })).subscribe(new Flow.Subscriber<>() {
+            private Flow.Subscription sub;
+
             @Override
             public void onSubscribe(Flow.Subscription subscription) {
-                subscription.request(0);
-                subscription.cancel();
+                this.sub = subscription;
+                subscription.request(Long.MAX_VALUE);
+            }
+
+            @Override
+            public void onNext(Event item) {
+                midCancelEvents.add(item);
+                if (item.type() == EventType.TEXT_MESSAGE_START) {
+                    sub.cancel();
+                }
+            }
+
+            @Override
+            public void onError(Throwable throwable) {
+            }
+
+            @Override
+            public void onComplete() {
+                midCancelCompletes.incrementAndGet();
+            }
+        });
+        assertEquals(List.of(EventType.RUN_STARTED, EventType.TEXT_MESSAGE_START),
+                midCancelEvents.stream().map(Event::type).toList());
+        assertEquals(0, midCancelCompletes.get());
+
+        // Single-use TokenStream publisher rejects second subscriber via onError(IllegalStateException)
+        AtomicInteger singleUseStarts = new AtomicInteger();
+        var singleUsePub = bridge.adapt("thread-single", new StubTokenStream(s -> {
+            singleUseStarts.incrementAndGet();
+            s.completeHandler.accept(ChatResponse.builder().build());
+        }));
+        assertEquals(2, collectAll(singleUsePub).size());
+        AtomicReference<Throwable> secondSubErr = new AtomicReference<>();
+        singleUsePub.subscribe(new Flow.Subscriber<>() {
+            @Override
+            public void onSubscribe(Flow.Subscription subscription) {
                 subscription.request(1);
             }
 
@@ -548,12 +689,22 @@ class AgUiLangChain4jBridgeTest {
 
             @Override
             public void onError(Throwable throwable) {
+                secondSubErr.set(throwable);
             }
 
             @Override
             public void onComplete() {
             }
         });
+        assertEquals(1, singleUseStarts.get());
+        assertInstanceOf(IllegalStateException.class, secondSubErr.get());
+
+        // JVM Error (e.g., AssertionError) must propagate rather than being swallowed into RunErrorEvent
+        var fatalPub = bridge.adapt("thread-fatal", new StubTokenStream(s -> {
+            throw new AssertionError("fatal-jvm-error");
+        }));
+        assertThrows(AssertionError.class, () -> collectAll(fatalPub));
+
         assertNotNull(bridge.getClass().getClassLoader().getResourceAsStream("META-INF/beans.xml"));
     }
 }

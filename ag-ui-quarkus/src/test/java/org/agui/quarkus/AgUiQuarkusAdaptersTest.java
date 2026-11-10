@@ -158,6 +158,7 @@ class AgUiQuarkusAdaptersTest {
         List<String> sseFrames = bridge.runAsSse(echoAgent, input).collect().asList().await().indefinitely();
         assertEquals(5, sseFrames.size());
         assertTrue(sseFrames.get(0).startsWith("data: {"));
+        assertTrue(sseFrames.get(1).contains("\"role\":\"assistant\""));
         String unwrapped = AgUiQuarkusBridge.unwrapSseData(sseFrames.get(2));
         assertTrue(unwrapped.contains("Hello Quarkus!"));
 
@@ -242,9 +243,11 @@ class AgUiQuarkusAdaptersTest {
         handler.onOpen(connection);
         handler.onError(connection, new RuntimeException("ws error"));
         assertEquals(0, registry.activeCount());
+        int frameCountBeforeNullGuards = sentFrames.size();
         handler.onClose(null);
         handler.sendEvent(connection, null);
         handler.sendEvent(null, new RunStartedEvent("t", "r"));
+        assertEquals(frameCountBeforeNullGuards, sentFrames.size());
         assertTrue(handler.handleControlFrame(null, connection));
         assertTrue(handler.handleControlFrame("{\"type\": \"ping\"}", connection));
         registry.unregister(null);
@@ -252,9 +255,19 @@ class AgUiQuarkusAdaptersTest {
 
         AgUiQuarkusWebSocketTransportSession nullSession = new AgUiQuarkusWebSocketTransportSession("null-id", null);
         assertFalse(nullSession.isOpen());
+        int frameCountBeforeNullSession = sentFrames.size();
         nullSession.sendJson(null);
         nullSession.sendJson("x");
         nullSession.close();
+        assertEquals(frameCountBeforeNullSession, sentFrames.size());
+
+        Agent fatalWsAgent = in -> {
+            throw new AssertionError("fatal-ws-jvm-error");
+        };
+        assertThrows(AssertionError.class, () -> handler.runAndSend(
+                fatalWsAgent,
+                "{\"threadId\":\"t1\",\"runId\":\"r1\",\"messages\":[],\"tools\":[]}",
+                connection));
 
         assertNotNull(handler.getClass().getClassLoader().getResourceAsStream("META-INF/beans.xml"));
         assertNotNull(handler.getClass().getClassLoader()
