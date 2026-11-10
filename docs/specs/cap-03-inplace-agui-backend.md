@@ -11,7 +11,7 @@ Streams the canonical **AG-UI Protocol** (`com.ag-ui.community:java-core:0.1.1`)
 - Accepts canonical `RunAgentInput` (`threadId`, `runId`, `state`, `messages`, `tools`, `context`, `forwardedProps`, `resume`).
 - Emits `RUN_STARTED`, `REASONING_*`, `STEP_STARTED`/`STEP_FINISHED`, `ACTIVITY_SNAPSHOT`, `TOOL_CALL_*`, `STATE_SNAPSHOT`, RFC 6902 `STATE_DELTA` (`List<JsonPatchOperation>`), `TEXT_MESSAGE_*`, and `RUN_FINISHED` / `RUN_ERROR`.
 - Attaches Tri-Protocol provenance (`AG-UI`, `MCP`, `A2A`) in `Event.rawEvent()`.
-- Emits native AG-UI `InterruptOutcome(List<Interrupt>)` for high-budget (`> $2,500 USD`) sanctuary reservations and resumes via `RunAgentInput.resume()`.
+- Emits native AG-UI `InterruptOutcome(List<Interrupt>)` for high-budget (`>= $1,500 USD`) sanctuary reservations and resumes via `RunAgentInput.resume()`.
 
 ## 2. Acceptance Criteria (DoD)
 - **AC-01**: Wire frames pass `@ag-ui/client` (`HttpAgent` & `WebSocketAgent`) Zod schema validation end-to-end.

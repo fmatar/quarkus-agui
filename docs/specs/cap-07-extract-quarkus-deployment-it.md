@@ -7,7 +7,7 @@
 - **Status**: `AMENDED (ADR-006 & ADR-007)`
 
 ## 1. Problem Statement & Technical Scope
-Per [`ADR-006`](../adr/ADR-006-framework-agnostic-module-topology-ag-ui-core-ag.md) and [`ADR-007`](../adr/ADR-007-adopt-upstream-ag-ui-sdks-com-ag-ui-community-ag.md), Quarkus build-time `-deployment` extension processors were replaced with standard CDI `META-INF/beans.xml` discovery (`AgUiObjectMapperCustomizer`, `AgUiQuarkusBridge`, `AgUiSessionRegistry`) and an embedded 59-entry `META-INF/native-image/org.agui/ag-ui-quarkus/reflect-config.json` registering all upstream `com.agui.community.core.*` event, message, tool, state patch, interrupt, and Jackson MixIn types for GraalVM / Mandrel native compilation.
+Per [`ADR-006`](../adr/ADR-006-framework-agnostic-module-topology-ag-ui-core-ag.md) and [`ADR-007`](../adr/ADR-007-adopt-upstream-ag-ui-sdks-com-ag-ui-community-ag.md), Quarkus build-time `-deployment` extension processors were replaced with standard CDI `META-INF/beans.xml` discovery (`AgUiObjectMapperCustomizer`, `AgUiQuarkusBridge`, `AgUiSessionRegistry`) and an embedded 57-entry `META-INF/native-image/org.agui/ag-ui-quarkus/reflect-config.json` registering all upstream `com.agui.community.core.*` event, message, tool, state patch, interrupt, and Jackson MixIn types for GraalVM / Mandrel native compilation.
 
 ## 2. Acceptance Criteria (DoD)
 - **AC-01**: Importing `org.agui:ag-ui-quarkus` auto-registers Jackson MixIns and GraalVM reflection hints with zero manual configuration.
