@@ -1,10 +1,11 @@
 # Product Requirements Document (PRD): Java/Quarkus Implementation of the AG-UI Protocol (`quarkus-agui`)
 
 - **Author:** Agentic SDLC Product Autopilot (`sdlc-product`)
-- **Status:** `APPROVED (Amended by ADR-002)`
-- **License:** Apache License 2.0
+- **Status:** `APPROVED (Amended by ADR-004, ADR-005, ADR-006 & ADR-007)`
+- **Version:** `0.1.0`
+- **License:** Apache-2.0 OR MIT
 - **Constitution Link:** [`PRODUCT.md`](../../PRODUCT.md)
-- **ADR Links:** [`ADR-001`](../adr/ADR-001-multi-module-maven-sveltekit-clean-architecture-fo.md), [`ADR-002`](../adr/ADR-002-example-first-tri-protocol-ag-ui-mcp-a2a-evoluti.md)
+- **ADR Links:** [`ADR-001`](../adr/ADR-001-multi-module-maven-sveltekit-clean-architecture-.md), [`ADR-002`](../adr/ADR-002-example-first-tri-protocol-ag-ui-mcp-a2a-evoluti.md), [`ADR-003`](../adr/ADR-003-multi-extension-bom-and-concentric-transport-arc.md), [`ADR-004`](../adr/ADR-004-nomad-concierge-and-svelte5-agui-component-kit.md), [`ADR-005`](../adr/ADR-005-quarkus-langchain4j-mcp-and-smallrye-health.md), [`ADR-006`](../adr/ADR-006-framework-agnostic-module-topology-ag-ui-core-ag.md), [`ADR-007`](../adr/ADR-007-adopt-upstream-ag-ui-sdks-com-ag-ui-community-ag.md)
 
 ---
 
@@ -12,11 +13,17 @@
 
 The **AG-UI (Agent–User Interaction Protocol)** standardizes real-time, bidirectional streaming interaction between AI agents and front-end user interfaces, working alongside **MCP (Model Context Protocol)** for tool/resource discovery and **A2A (Agent-to-Agent Protocol)** for specialist sub-agent delegation.
 
-**`quarkus-agui`** delivers a complete **Tri-Protocol (`AG-UI + MCP + A2A`)** solution for **Java 25** and **Quarkus `3.40.1.1` (JVM & GraalVM Native)** via a **4-Wave Example-First Evolution**:
-1. **Wave 1 (`CAP-01`, `CAP-02`) — Tri-Protocol Agent Baseline (`examples/quarkus-svelte-skeleton`)**: Build a working Quarkus MCP Server (`:8081`), Quarkus A2A Specialist Server (`:8082`), Quarkus LangChain4j Orchestrator (`:8080`), and a `pnpm` + SvelteKit (Svelte 5 Runes) + `@skeletonlabs/skeleton-svelte` + `@lucide/svelte` 3-pane workbench (`:5173`).
-2. **Wave 2 (`CAP-03`, `CAP-04`) — Full AG-UI Protocol Evolution In-Place (`examples/quarkus-svelte-skeleton`)**: Evolve the orchestrator and SvelteKit client in-place to stream all 10 AG-UI event types (`RUN_STARTED`, `STATUS`, `TEXT_DELTA`, `TOOL_CALL`, `TOOL_RESULT`, `RUN_FINISHED`, `STEP_STARTED`, `STEP_FINISHED`, `STATE_SNAPSHOT`, `STATE_DELTA`) plus Human-in-the-Loop (`interrupted`) approvals.
-3. **Wave 3 (`CAP-05`) — Core Java 25 Library Extraction (`ag-ui-core`)**: Extract battle-tested AG-UI event records, `< 10ms` SSE wire formatters, and `Flow.Publisher` reactive adapters into a standalone zero-dependency Java 25 library governed by Archlens concentric rings.
-4. **Wave 4 (`CAP-06`, `CAP-07`, `CAP-08`) — Quarkus Extension Packaging (`quarkus-ag-ui`) & Showcase Migration**: Extract `AgUiBridge`, `AgUiMcpBridge`, `AgUiA2aBridge`, GraalVM 25 `ReflectiveClassBuildItem`s (`< 50MB` native RSS), and the Quarkus Dev UI Inspector Card into `quarkus-extension/`, then migrate the showcase backend to consume `org.agui:quarkus-ag-ui`.
+**`quarkus-agui` (`v0.1.0`)** delivers orthogonal **Java 17** adapters built directly on upstream `com.ag-ui.community:{java-core,java-server,java-client}:0.1.1`, a headless **Svelte 5 Runes** client library (`@agui/svelte`) built on `@ag-ui/client` + `@ag-ui/core` (`^1.0.4`), and the **Nomad Tri-Protocol (`AG-UI + MCP + A2A`) Travel & Culture Concierge** showcase running on **Java 25 + Virtual Threads + Quarkus `3.40.1.1` (JVM & GraalVM/Mandrel Native)**:
+
+1. **Java 17 Orthogonal Library Modules (`org.agui` managed by `ag-ui-bom`)**:
+   - `ag-ui-quarkus`: Quarkus CDI `AgUiObjectMapperCustomizer` (Jackson MixIns matching `@ag-ui/core` Zod schemas), `AgUiQuarkusBridge` (Mutiny `Multi` SSE), reusable `AgUiWebSocketHandler` + `AgUiSessionRegistry`, and 57-type GraalVM `reflect-config.json` with zero LangChain4j/A2A lock-in.
+   - `ag-ui-langchain4j`: Framework-agnostic `dev.langchain4j` `TokenStream` & `Agent` bridge (`AgUiLangChain4jBridge`, per-run `AgUiLangChain4jRunSession`, RFC 6902 `AgUiStatePatch`, `AgUiMcpBridge`, and native HITL `InterruptOutcome`).
+   - `ag-ui-quarkus-langchain4j`: Reactive Quarkiverse `Multi<ChatEvent>` adapter (`AgUiQuarkusLangChain4jBridge`).
+   - `ag-ui-a2a`: Official `org.a2aproject.sdk` `1.4.0.Final` adapter (`AgUiA2aBridge` emitting canonical `StepStartedEvent`, `ActivitySnapshotEvent`, and `StepFinishedEvent`).
+2. **Headless Svelte 5 SDK (`packages/agui-svelte` / `@agui/svelte`)**:
+   - Wraps `@ag-ui/client` (`HttpAgent`, `AbstractAgent`) and `@ag-ui/core` with full-duplex `WebSocketAgent`, immutable RFC 6902 `applyJsonPatch` (with CWE-1321 prototype-pollution guards), `rawEvent` Tri-Protocol taxonomy extraction, and `createAgUiStore` / `useAgUiAgent`.
+3. **Nomad Tri-Protocol Reference Showcase (`examples/quarkus-svelte-skeleton`)**:
+   - `mcp-server` (`:8081`), `a2a-server` (`:8082`), and `backend` (`:8080`, bundling the SvelteKit 5 + Skeleton v4 + Tailwind v4 SPA via **Quarkus Quinoa** and packaging daemonless **Jib** containers).
 
 ---
 
@@ -24,36 +31,35 @@ The **AG-UI (Agent–User Interaction Protocol)** standardizes real-time, bidire
 
 | Persona | Primary Need | Success Metric |
 | :--- | :--- | :--- |
-| **Java 25 / JVM Library Author** | Framework-agnostic AG-UI records & SSE formatters (`ag-ui-core`) | Zero external framework dependencies; $< 10\text{ms}$ serialization overhead |
-| **Quarkus 3.40.1.1 AI Engineer** | Drop-in `quarkus-ag-ui` extension bridging LangChain4j, MCP, and A2A to SSE | Zero boilerplate configuration; $< 50\text{MB}$ GraalVM 25 native RSS |
-| **Full-Stack Frontend Engineer** | Reactive `pnpm` + SvelteKit + `@skeletonlabs/skeleton-svelte` + `@lucide/svelte` workbench | Real-time token streaming, MCP tool badges, A2A handoff cards, and HITL approvals |
+| **Java 17+ / JVM Framework Author** | Framework-agnostic LangChain4j & A2A bridges over `com.ag-ui.community` | `--release 17` compatibility; zero duplicate event POJOs; `< 10ms` framing |
+| **Quarkus 3.40.1.1 AI Engineer** | Drop-in `ag-ui-quarkus` & `ag-ui-quarkus-langchain4j` modules for SSE, WebSockets Next, and GraalVM Native | Zero boilerplate; zero unwanted transitive deps; `< 50MB` native RSS |
+| **Full-Stack Svelte 5 Engineer** | Headless `@agui/svelte` SDK + 3-Pane Nomad Studio reference UI | Real-time token streaming, RFC 6902 `STATE_DELTA`, MCP/A2A telemetry, and native HITL `resume` |
 
 ---
 
 ## 3. User Stories & Acceptance Criteria
 
-### US-001 (`CAP-01`, #2): Quarkus MCP Server (`:8081`) & Quarkus A2A Server (`:8082`)
-- [x] `mcp-server` (`:8081`) exposes MCP tools (`inspectClusterHealth`, `queryServiceLogs`, `scaleDeployment`) and `cluster://topology` resource on Java 25 & Quarkus `3.40.1.1`.
-- [x] `a2a-server` (`:8082`) exposes `GET /.well-known/agent.json` (`AgentCard`) and `POST /api/a2a/tasks/send` (`audit-clean-architecture`, `assess-security-posture`, `plan-incident-remediation`).
+### US-001 (`CAP-01`, #2, #32, #76, #78): Quarkus MCP Server (`:8081`) & Quarkus A2A Server (`:8082`)
+- [x] `mcp-server` (`:8081`) exposes 6 `@Tool` endpoints (`fetchCityWeather`, `discoverLocalCultureAndMedia`, `updateTripItinerary`, `saveTravelerPreferences`, `sampleAcousticMood`, `resetNomadState`), `@ResourceTemplate` city dossiers, and `/q/health/ready`.
+- [x] `a2a-server` (`:8082`) exposes `GET /.well-known/agent-card.json` (`Nomad-A2A-Specialist`) and JSON-RPC / REST delegation (`convert-and-audit-budget` via Frankfurter + `open.er-api.com` fallback, `verify-travel-advisory` via REST Countries v5).
 
-### US-002 (`CAP-02`, #3): OpsPilot Quarkus Orchestrator (`:8080`) & SvelteKit + `pnpm` Baseline (`:5173`)
-- [x] Dual-Mode LangChain4j Orchestrator (`:8080`) invoking `:8081` MCP and `:8082` A2A.
-- [x] `pnpm` SvelteKit + `@skeletonlabs/skeleton-svelte` + `@lucide/svelte` 3-pane baseline UI (`:5173`).
+### US-002 (`CAP-02`, #3, #59, #68): Nomad Quarkus Orchestrator (`:8080`) & Quinoa SvelteKit 5 SPA
+- [x] `@RegisterAiService` (`NomadConciergeAiService`) + `@McpToolBox("nomad")` orchestrator on Java 25 Virtual Threads (`@RunOnVirtualThread`) bundling the SvelteKit 5 SPA via Quarkus Quinoa and Jib containers.
 
-### US-003 (`CAP-03`, #4): In-Place AG-UI Protocol Engine in Orchestrator (`:8080`)
-- [x] Streams Core 6 + `STEP_STARTED`/`STEP_FINISHED` + `STATE_SNAPSHOT`/`STATE_DELTA` + HITL `interrupted` approvals (`POST /api/agent/approve`).
+### US-003 (`CAP-03`, #4, #51, #85): Canonical AG-UI Streaming, RFC 6902 State & Native HITL
+- [x] Streams canonical AG-UI events over `POST /api/agent/run` (`text/event-stream`) and `/api/agent/ws` (`WebSockets Next`), RFC 6902 `StateDeltaEvent` patches, and native `InterruptOutcome` resumed via `RunAgentInput.resume()`.
 
-### US-004 (`CAP-04`, #5): Full 3-Pane SvelteKit + Skeleton UI + `@lucide/svelte` AG-UI Workbench (`:5173`)
-- [x] `AgentChatContainer.svelte`, `MessageHistory.svelte`, `StreamRenderer.svelte`, `InputBar.svelte`, `ClusterStatePanel.svelte`, and `ProtocolInspector.svelte` (`\n\n` SSE frame parser + `AbortController`).
+### US-004 (`CAP-04`, #5, #29, #83, #85): Headless `@agui/svelte` & 3-Pane Nomad Studio Workbench
+- [x] Headless `packages/agui-svelte` (`HttpAgent`, `WebSocketAgent`, `createAgUiStore`) + 3-Pane Nomad Studio (`AgentChatContainer.svelte`, `TripDossierPanel.svelte`, `ProtocolInspector.svelte`).
 
-### US-005 (`CAP-05`, #6): Extract `ag-ui-core` Standalone Java 25 Library
-- [x] Zero-dependency Java 25 library (`org.agui.core.domain`, `application`, `adapters`) governed by Archlens concentric rings.
+### US-005 (`CAP-05`, #6, #81, #85): Upstream `com.ag-ui.community` Java 17 Adoption (`ADR-007`)
+- [x] Retired custom `ag-ui-core` in favor of upstream `com.ag-ui.community:{java-core,java-server,java-client}:0.1.1` managed by `ag-ui-bom`.
 
-### US-006 (`CAP-06`, #7): Extract `quarkus-ag-ui-runtime`
-- [x] `AgUiBridge`, `AgUiMcpBridge`, `AgUiA2aBridge`, and SmallRye Mutiny `Multi<AgUiEvent<?>>` SSE support.
+### US-006 (`CAP-06`, #7, #74, #81): Orthogonal Java 17 Bridges (`ag-ui-quarkus`, `ag-ui-langchain4j`, `ag-ui-quarkus-langchain4j`, `ag-ui-a2a`)
+- [x] Four focused Java 17 (`major version: 61`) modules governed by Archlens concentric rings (`domain <- application <- adapters`).
 
-### US-007 (`CAP-07`, #8): Extract `quarkus-ag-ui-deployment` & Integration Tests
-- [x] `AgUiProcessor`, `ReflectiveClassBuildItem`s for GraalVM 25, Quarkus Dev UI Inspector Card, and `@QuarkusTest`/`@QuarkusIntegrationTest` suites.
+### US-007 (`CAP-07`, #8, #74, #81): Standard CDI Discovery & GraalVM 25 Reflection Metadata
+- [x] Standard `META-INF/beans.xml` + `AgUiObjectMapperCustomizer` + 57-type `reflect-config.json` verified under `Mandrel-25.0.5.0-Final`.
 
-### US-008 (`CAP-08`, #9): Migrate Showcase to `quarkus-ag-ui` Extension & Native Benchmarks
-- [x] Showcase `backend` consumes `org.agui:quarkus-ag-ui`; verified `< 10ms` serialization overhead and portable `-Dnative` / `-Dnative-container` GraalVM 25 builds (`< 50MB` RSS).
+### US-008 (`CAP-08`, #9, #85, #87): Full Showcase Cutover, E2E Wire Validation & `v0.1.0` Release
+- [x] Live 3-service E2E stack verified against `@ag-ui/client` Zod wire schemas; Dual-Gate coverage (`>= 85%`) and mutation kill scores (`81%–97%`) verified across all modules.

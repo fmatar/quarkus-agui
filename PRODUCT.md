@@ -57,6 +57,8 @@ Fill the gap in Java/JVM ecosystems for the **AG-UI (Agent–User Interaction Pr
 | ADR-001 | Multi-Module Maven & SvelteKit Clean Architecture for AG-UI Protocol | `technical` | `accepted` | #1 | CAP-01, CAP-03, CAP-04, CAP-07 |
 | ADR-002 | Example-First Tri-Protocol (AG-UI + MCP + A2A) Evolution on Java 25, Quarkus 3.40.1.1 & pnpm | `product` | `accepted` | #2 | CAP-01, CAP-02, CAP-03, CAP-04, CAP-05, CAP-06, CAP-07, CAP-08 |
 | ADR-003 | Multi-Extension BOM and Concentric Transport Architecture (Core, SSE, WebSockets) | `technical` | `accepted` | #30 | CAP-06, CAP-07 |
-| ADR-006 | Framework-Agnostic Module Topology (ag-ui-core, ag-ui-a2a, ag-ui-langchain4j, ag-ui-quarkus) and Removal of Quarkus Deployment Processors | `technical` | `accepted` | ##9450 | CAP-06, CAP-07, ADR-003 |
+| ADR-004 | Nomad Cultural Concierge Showcase & Modular Svelte 5 AG-UI Component Kit | `product` | `accepted` | #32 | CAP-01, CAP-02, CAP-03, CAP-04, CAP-06, CAP-07, CAP-08 |
+| ADR-005 | Quarkus LangChain4j Reactive AG-UI Bridge, Declarative @McpToolBox & SmallRye Health + REST Countries v5 | `technical` | `accepted` | #68 | CAP-03, CAP-04, CAP-06, CAP-07, CAP-08 |
+| ADR-006 | Framework-Agnostic Module Topology (ag-ui-core, ag-ui-a2a, ag-ui-langchain4j, ag-ui-quarkus) and Removal of Quarkus Deployment Processors | `technical` | `accepted` | #74 | CAP-06, CAP-07, ADR-003 |
 | ADR-007 | Adopt Upstream AG-UI SDKs (com.ag-ui.community & @ag-ui/client) and Orthogonal Java 17 Quarkus Modules | `technical` | `accepted` | #81 | CAP-05, CAP-06, ADR-006 |
 <!-- ADR_INDEX_END -->

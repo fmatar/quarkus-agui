@@ -1,18 +1,16 @@
-# SPEC-04: Full 3-Pane SvelteKit + Skeleton UI + `@lucide/svelte` AG-UI Workbench
+# SPEC-04: Headless `@agui/svelte` SDK & 3-Pane Nomad Studio Workbench
 
 - **Linked Capability**: `CAP-04`
 - **Depends On**: `CAP-02`
-- **Ticket**: `#5`
-- **Module**: `examples/quarkus-svelte-skeleton/frontend`
-- **Status**: `ACTIVE`
+- **Tickets**: `#5`, `#29`, `#32`, `#57`, `#83`, `#85`
+- **Modules**: `packages/agui-svelte` & `examples/quarkus-svelte-skeleton/frontend`
+- **Status**: `IMPLEMENTED (Amended by ADR-004 & ADR-007)`
 
 ## 1. Problem Statement & Technical Scope
-Evolves the SvelteKit + Skeleton UI + `@lucide/svelte` client into the complete 3-Pane AG-UI Workbench:
-1. **`AgentChatContainer.svelte`**, **`MessageHistory.svelte`**, **`StreamRenderer.svelte`**, **`InputBar.svelte`** with 1-Click Scenario Chips, MCP Tool Badges, A2A Agent Handoff Cards, and Inline HITL Approve/Reject buttons.
-2. **`ClusterStatePanel.svelte`** rendering live `STATE_SNAPSHOT` and `STATE_DELTA` updates with bidirectional UI-to-Agent state editing.
-3. **`ProtocolInspector.svelte`** displaying live AG-UI SSE frames, MCP calls, and A2A task envelopes with `< 10ms` overhead metrics.
+Splits client responsibilities cleanly across two workspace packages:
+1. **`packages/agui-svelte` (`@agui/svelte`)**: Headless, CSS-framework-free Svelte 5 Runes & JS SDK wrapping `@ag-ui/client` + `@ag-ui/core` (`^1.0.4`) with `WebSocketAgent extends AbstractAgent`, immutable RFC 6902 `applyJsonPatch` (with CWE-1321 prototype-pollution protection), `rawEvent` Tri-Protocol taxonomy helpers, and `createAgUiStore` / `useAgUiAgent`.
+2. **`examples/quarkus-svelte-skeleton/frontend`**: 3-Pane Nomad Concierge Studio (`AgentChatContainer.svelte`, `TripDossierPanel.svelte`, `ProtocolInspector.svelte`) built with Svelte 5 Runes, Skeleton v4, Tailwind v4, OWASP XSS URL/attribute sanitization, and WCAG 2.1 AA contrast (`>= 4.5:1`).
 
-## 2. Acceptance Criteria (Gherkin / DoD)
-- **AC-01**: `ReadableStream` SSE consumer splits frames on `\n\n` and routes all AG-UI event types accurately across network chunk boundaries.
-- **AC-02**: Uses `@lucide/svelte` icons and Svelte 5 Runes (`$state`, `$derived`, `$props`).
-- **AC-03**: `pnpm test` and `pnpm run build` pass with $\ge 85\%$ coverage.
+## 2. Acceptance Criteria (DoD)
+- **AC-01**: `@agui/svelte` has zero UI/CSS framework dependencies and passes `tsc --noEmit` with `skipLibCheck: false`.
+- **AC-02**: Dual-Gate verification passes (`99.53%–100%` line coverage, `86.58%–92.94%` AST mutation kill score).

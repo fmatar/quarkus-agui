@@ -1,16 +1,16 @@
-# SPEC-02: OpsPilot Quarkus Orchestrator (`:8080`) & SvelteKit + `pnpm` 3-Pane Baseline (`:5173`)
+# SPEC-02: Nomad Quarkus Orchestrator (`:8080`) & Quinoa SvelteKit 5 SPA
 
 - **Linked Capability**: `CAP-02`
 - **Depends On**: `CAP-01`
-- **Ticket**: `#3`
+- **Tickets**: `#3`, `#32`, `#59`, `#68`, `#85`
 - **Modules**: `examples/quarkus-svelte-skeleton/backend` & `examples/quarkus-svelte-skeleton/frontend`
-- **Stack**: Java 25 + Quarkus `3.40.1.1` + LangChain4j; Svelte 5 + `@skeletonlabs/skeleton-svelte` + `@lucide/svelte` via `pnpm`
-- **Status**: `ACTIVE`
+- **Stack**: Java 25 + Quarkus `3.40.1.1` + `quarkus-langchain4j-mcp` + `quarkus-quinoa` + Jib; Svelte 5 + `@agui/svelte` + `@skeletonlabs/skeleton-svelte` + `@lucide/svelte` via `pnpm`
+- **Status**: `IMPLEMENTED (Amended by ADR-004, ADR-005 & ADR-007)`
 
 ## 1. Problem Statement & Technical Scope
-Establishes the working end-to-end "OpsPilot" Orchestrator Agent in Quarkus (`:8080`) connected to `mcp-server` (`:8081`) and `a2a-server` (`:8082`), paired with the SvelteKit + Skeleton UI + `@lucide/svelte` 3-pane workbench baseline (`:5173`).
+Establishes the end-to-end Nomad Concierge Orchestrator in Quarkus (`:8080`) connecting `@RegisterAiService` (`NomadConciergeAiService`) + `@McpToolBox("nomad")` (`:8081`) + A2A Specialist delegation (`:8082`), bundling the 3-Pane SvelteKit 5 Studio via Quarkus Quinoa (`2.9.3`) into a single origin (`:8080`).
 
-## 2. Acceptance Criteria (Gherkin / DoD)
-- **AC-01**: Dual-Mode LangChain4j driver in `backend` executes deterministic tool/A2A orchestration by default and supports live OpenAI/Ollama when configured.
-- **AC-02**: `frontend` is managed via `pnpm` with `@lucide/svelte` and `@skeletonlabs/skeleton-svelte` (zero deprecated packages).
-- **AC-03**: Dual-Gate verification passes with $\ge 85\%$ coverage and $\ge 80\%$ mutation kill score.
+## 2. Acceptance Criteria (DoD)
+- **AC-01**: Executes on Java 25 Virtual Threads (`@RunOnVirtualThread`) supporting local Ollama models (`llama3.2:latest`, `qwen3.5:4b`, `ministral-3:8b`) via `forwardedProps.llmMode`.
+- **AC-02**: `frontend` is managed via root `pnpm-workspace.yaml` and statically bundled into `backend` by Quarkus Quinoa.
+- **AC-03**: Dual-Gate verification passes (`>= 85%` coverage, `>= 80%` mutation score).

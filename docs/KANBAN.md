@@ -5,7 +5,7 @@
 > To refresh this board: `.agent/skills/sdlc-kanban/scripts/kanban-sync.sh`
 
 > **Repository**: `fmatar/quarkus-agui`  
-> **Last Synced**: `2026-11-10 02:56:13 UTC`
+> **Last Synced**: `2026-11-10 22:21:53 UTC`
 
 ---
 
@@ -13,13 +13,13 @@
 
 | 📥 Backlog | 📋 Ready | ⚡ In Progress | 🔍 In Review | ✅ Done |
 | :--- | :--- | :--- | :--- | :--- |
-|  |  |  | [#85 feat(showcase): migrate Nomad showcase to canonical AG-UI SDKs and delete ag-ui-core](https://github.com/fmatar/quarkus-agui/issues/85) |  |
-|  |  |  |  | [#83 feat(svelte): upgrade headless @agui/svelte onto @ag-ui/client + @ag-ui/core](https://github.com/fmatar/quarkus-agui/issues/83) |
-|  |  |  |  | [#81 feat(sdk): adopt upstream com.ag-ui.community Java 17 SDKs across orthogonal modules (ADR-007)](https://github.com/fmatar/quarkus-agui/issues/81) |
+|  |  |  |  | [#87 feat: chore(release): finalize ADR-007 Stage 8 hygiene, sync specs & release v0.1.0](https://github.com/fmatar/quarkus-agui/issues/87) |
+|  |  |  |  | [#85 feat(showcase,core): cut over Nomad showcase to canonical AG-UI, delete ag-ui-core & verify GraalVM 25 native](https://github.com/fmatar/quarkus-agui/issues/85) |
+|  |  |  |  | [#83 feat(svelte): upgrade headless @agui/svelte to wrap @ag-ui/client & @ag-ui/core](https://github.com/fmatar/quarkus-agui/issues/83) |
+|  |  |  |  | [#81 feat(sdk): adopt com.ag-ui.community core & decouple Java 17 Quarkus/LangChain4j/A2A modules (ADR-007)](https://github.com/fmatar/quarkus-agui/issues/81) |
 |  |  |  |  | [#78 fix(mcp,showcase): prevent saveTravelerPreferences false Service Error when LLM passes empty or placeholder args](https://github.com/fmatar/quarkus-agui/issues/78) |
 |  |  |  |  | [#76 fix(a2a,showcase): support non-ECB currencies (LBP, MAD, EGP, JOD) via open.er-api.com fallback & trailing currency symbols](https://github.com/fmatar/quarkus-agui/issues/76) |
 |  |  |  |  | [#74 feat(arch,showcase): factor out framework-agnostic ag-ui modules & enrich Nomad destination media/music](https://github.com/fmatar/quarkus-agui/issues/74) |
-|  |  |  |  | [#29 feat(client): extract standalone AG-UI Svelte 5 library (packages/agui-svelte)](https://github.com/fmatar/quarkus-agui/issues/29) |
 |  |  |  |  | [#72 fix(showcase): eliminate 10s restcountries healthcheck polling and harden tool elicitation prompts](https://github.com/fmatar/quarkus-agui/issues/72) |
 |  |  |  |  | [#70 chore(kanban): sync merged develop issues (#38-#68) to Done & prune stale branches](https://github.com/fmatar/quarkus-agui/issues/70) |
 |  |  |  |  | [#68 feat(langchain4j-mcp): Idiomatic quarkus-langchain4j-mcp, Multi<ChatEvent> AG-UI Bridge, SmallRye Health & REST Countries v5](https://github.com/fmatar/quarkus-agui/issues/68) |
@@ -43,6 +43,7 @@
 |  |  |  |  | [#34 feat(showcase): add Docker Compose stack, Dockerfiles, and single-command launcher for Nomad Concierge](https://github.com/fmatar/quarkus-agui/issues/34) |
 |  |  |  |  | [#32 feat(showcase): Nomad AI Travel & Culture Concierge with modular Svelte 5 AG-UI Component Kit and commercial minimalist UI](https://github.com/fmatar/quarkus-agui/issues/32) |
 |  |  |  |  | [#30 feat(arch): refactor extensions with BOM and concentric Clean Architecture (Core, SSE, WebSockets)](https://github.com/fmatar/quarkus-agui/issues/30) |
+|  |  |  |  | [#29 feat(client): extract standalone AG-UI Svelte 5 library (packages/agui-svelte)](https://github.com/fmatar/quarkus-agui/issues/29) |
 |  |  |  |  | [#27 fix(workbench): enforce deterministic service card order and contextualize A2A incident remediation](https://github.com/fmatar/quarkus-agui/issues/27) |
 |  |  |  |  | [#25 fix(hitl): bind live HITL interrupt to TOOL_CALL and fix pod replica control extraction](https://github.com/fmatar/quarkus-agui/issues/25) |
 |  |  |  |  | [#23 feat(ui): redesign SRE workbench with cyber-industrial aesthetic, markdown parser, and stable viewport](https://github.com/fmatar/quarkus-agui/issues/23) |
@@ -64,14 +65,15 @@
 
 | Issue | Status | Priority | Component | Quality Gate | Spec Link |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-|  |  |  | [#85 feat(showcase): migrate Nomad showcase to canonical AG-UI SDKs and delete ag-ui-core](https://github.com/fmatar/quarkus-agui/issues/85) |  |
-| [#83 feat(svelte): upgrade headless @agui/svelte onto @ag-ui/client + @ag-ui/core](https://github.com/fmatar/quarkus-agui/issues/83) | `status:done` | P0 - Critical | Frontend SDK | `Passed` | [ADR-007](docs/adr/ADR-007-adopt-upstream-ag-ui-sdks-com-ag-ui-community-ag.md) |
-| [#81 feat(sdk): adopt upstream com.ag-ui.community Java 17 SDKs across orthogonal modules (ADR-007)](https://github.com/fmatar/quarkus-agui/issues/81) | `status:done` | P0 - Critical | Architecture | `Passed` | [ADR-007](docs/adr/ADR-007-adopt-upstream-ag-ui-sdks-com-ag-ui-community-ag.md) |
-| [#78 fix(mcp,showcase): prevent saveTravelerPreferences false Service Error when LLM passes empty or placeholder args](https://github.com/fmatar/quarkus-agui/issues/78) | `status:done` | P1 - High | Backend | `Passed` | — |
-| [#76 fix(a2a,showcase): support non-ECB currencies (LBP, MAD, EGP, JOD) via open.er-api.com fallback & trailing currency symbols](https://github.com/fmatar/quarkus-agui/issues/76) | `status:done` | P1 - High | Backend | `Passed` | — |
-| [#74 feat(arch,showcase): factor out framework-agnostic ag-ui modules & enrich Nomad destination media/music](https://github.com/fmatar/quarkus-agui/issues/74) | `status:done` | P1 - High | Architecture | `Passed` | [ADR-006](docs/adr/ADR-006-framework-agnostic-module-topology-ag-ui-core-ag.md) |
+| [#87 feat: chore(release): finalize ADR-007 Stage 8 hygiene, sync specs & release v0.1.0](https://github.com/fmatar/quarkus-agui/issues/87) | `status:done` | P0 - Critical | DevOps | `Passed` | [ADR-007](docs/adr/ADR-007-adopt-upstream-ag-ui-sdks-com-ag-ui-community-ag.md) |
+| [#85 feat(showcase,core): cut over Nomad showcase to canonical AG-UI, delete ag-ui-core & verify GraalVM 25 native](https://github.com/fmatar/quarkus-agui/issues/85) | `status:done` | P0 - Critical | Architecture | `Passed` | [ADR-007](docs/adr/ADR-007-adopt-upstream-ag-ui-sdks-com-ag-ui-community-ag.md) |
+| [#83 feat(svelte): upgrade headless @agui/svelte to wrap @ag-ui/client & @ag-ui/core](https://github.com/fmatar/quarkus-agui/issues/83) | `status:done` | P0 - Critical | Frontend | `Passed` | [ADR-007](docs/adr/ADR-007-adopt-upstream-ag-ui-sdks-com-ag-ui-community-ag.md) |
+| [#81 feat(sdk): adopt com.ag-ui.community core & decouple Java 17 Quarkus/LangChain4j/A2A modules (ADR-007)](https://github.com/fmatar/quarkus-agui/issues/81) | `status:done` | P0 - Critical | Architecture | `Passed` | [ADR-007](docs/adr/ADR-007-adopt-upstream-ag-ui-sdks-com-ag-ui-community-ag.md) |
+| [#78 fix(mcp,showcase): prevent saveTravelerPreferences false Service Error when LLM passes empty or placeholder args](https://github.com/fmatar/quarkus-agui/issues/78) | `status:done` | P2 - Medium | Architecture | `Passed` | — |
+| [#76 fix(a2a,showcase): support non-ECB currencies (LBP, MAD, EGP, JOD) via open.er-api.com fallback & trailing currency symbols](https://github.com/fmatar/quarkus-agui/issues/76) | `status:done` | P2 - Medium | Architecture | `Passed` | — |
+| [#74 feat(arch,showcase): factor out framework-agnostic ag-ui modules & enrich Nomad destination media/music](https://github.com/fmatar/quarkus-agui/issues/74) | `status:done` | P2 - Medium | Architecture | `Passed` | [ADR-006](docs/adr/ADR-006-framework-agnostic-module-topology-ag-ui-core-ag.md) |
 | [#72 fix(showcase): eliminate 10s restcountries healthcheck polling and harden tool elicitation prompts](https://github.com/fmatar/quarkus-agui/issues/72) | `status:done` | P2 - Medium | Architecture | `Passed` | — |
-|  |  | [#70 chore(kanban): sync merged develop issues (#38-#68) to Done & prune stale branches](https://github.com/fmatar/quarkus-agui/issues/70) |  |  |
+| [#70 chore(kanban): sync merged develop issues (#38-#68) to Done & prune stale branches](https://github.com/fmatar/quarkus-agui/issues/70) | `status:done` | P2 - Medium | Architecture | `Passed` | — |
 | [#68 feat(langchain4j-mcp): Idiomatic quarkus-langchain4j-mcp, Multi<ChatEvent> AG-UI Bridge, SmallRye Health & REST Countries v5](https://github.com/fmatar/quarkus-agui/issues/68) | `status:done` | P2 - Medium | Architecture | `Pending` | — |
 | [#66 feat(showcase): honest upstream error surfacing, live healthchecks, native quarkus-mcp, intent-driven travel chatbot & domain naming cleanup](https://github.com/fmatar/quarkus-agui/issues/66) | `status:done` | P2 - Medium | Architecture | `Pending` | — |
 | [#64 fix(orchestrator): Handle destination-free greetings & profile updates without defaulting to Kyoto (#64)](https://github.com/fmatar/quarkus-agui/issues/64) | `status:done` | P2 - Medium | Architecture | `Pending` | — |
