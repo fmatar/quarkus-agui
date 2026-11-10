@@ -16,8 +16,8 @@
 
     <dependencies>
         <dependency>
-            <groupId>org.agui</groupId>
-            <artifactId>ag-ui-core</artifactId>
+            <groupId>com.ag-ui.community</groupId>
+            <artifactId>java-core</artifactId>
         </dependency>
         <dependency>
             <groupId>org.a2aproject.sdk</groupId>

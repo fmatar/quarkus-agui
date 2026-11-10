@@ -1,10 +1,10 @@
 # ⚡ Quarkus AG-UI (`quarkus-agui`)
 
-> **Java 25 Core Library (`ag-ui-core`) & Quarkus `3.40.1.1` Extension (`quarkus-ag-ui`) for the AG-UI (Agent–User Interaction) Protocol**  
-> Complete **Tri-Protocol (`AG-UI + MCP + A2A`)** Reference Stack powered by **Quarkus RESTEasy Reactive**, **LangChain4j**, **SmallRye Mutiny**, **GraalVM 25 Native**, and a **SvelteKit (Svelte 5 Runes) + Skeleton UI (`@skeletonlabs/skeleton-svelte`) + `@lucide/svelte`** Workbench via **`pnpm`**.
+> **Orthogonal Java 17 Quarkus & LangChain4j Adapters (`ag-ui-quarkus`, `ag-ui-langchain4j`, `ag-ui-quarkus-langchain4j`, `ag-ui-a2a`) built on the Official Upstream AG-UI SDK (`com.ag-ui.community`)**  
+> Complete **Tri-Protocol (`AG-UI + MCP + A2A`)** Reference Stack powered by **Quarkus `3.40.1.1` RESTEasy Reactive**, **LangChain4j**, **SmallRye Mutiny**, **Java 25 + GraalVM 25 Native** showcase, and a **SvelteKit (Svelte 5 Runes) + `@agui/svelte` + Skeleton UI (`@skeletonlabs/skeleton-svelte`)** Workbench via **`pnpm`**.
 
-[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![Java 25](https://img.shields.io/badge/Java-25-orange.svg)](pom.xml)
+[![License: Apache-2.0 OR MIT](https://img.shields.io/badge/License-Apache--2.0_OR_MIT-blue.svg)](LICENSE)
+[![Java 17+ / 25](https://img.shields.io/badge/Java-17%2B_(Libs)_%7C_25_(Showcase)-orange.svg)](pom.xml)
 [![Quarkus 3.40.1.1](https://img.shields.io/badge/Quarkus-3.40.1.1-4695EB.svg)](pom.xml)
 [![Architecture: Archlens Clean Architecture](https://img.shields.io/badge/Architecture-Clean_Concentric_Rings-success.svg)](.archlens/policy.json)
 
@@ -84,11 +84,10 @@ curl -N -X POST http://localhost:8080/api/agent/run \
 ```
 
 ### 5. Bring Your Own Agent (BYOA) Contract
-To expose any LangChain4j `TokenStream`, Quarkus LangChain4j `@RegisterAiService` (`Multi<ChatEvent>`), MCP tool client, or A2A sub-agent over the AG-UI protocol in **any Java framework** (Spring Boot, Quarkus, Helidon, Micronaut, Jakarta EE, or plain Java):
-1. Import `org.agui:ag-ui-bom` in `<dependencyManagement>` and add `org.agui:ag-ui-core`, `org.agui:ag-ui-a2a`, and `org.agui:ag-ui-langchain4j` (plus `org.agui:ag-ui-quarkus` when using Quarkus Mutiny / WebSockets Next / Quarkiverse `Multi<ChatEvent>`).
-2. Instantiate or `@Inject` `AgUiLangChain4jBridge` (or `AgUiQuarkusLangChain4jBridge` in Quarkus), `AgUiBridge` (`AgUiQuarkusBridge`), `AgUiMcpBridge`, `AgUiA2aBridge`, and `AgUiSessionRegistry`.
-3. Stream `Flow.Publisher<String>` (or Mutiny `Multi<String>` in Quarkus) emitting standard AG-UI SSE frames (`data: {...}\n\n`):
-   - `RUN_STARTED` $\rightarrow$ `STATUS` $\rightarrow$ `STATE_SNAPSHOT` $\rightarrow$ `TOOL_CALL` / `TOOL_RESULT` $\rightarrow$ `STEP_STARTED` / `STEP_FINISHED` $\rightarrow$ `STATE_DELTA` $\rightarrow$ `TEXT_DELTA` $\rightarrow$ `RUN_FINISHED`.
+To expose any `com.agui.community.core.agent.Agent`, LangChain4j `TokenStream`, Quarkiverse `@RegisterAiService` (`Multi<ChatEvent>`), MCP tool client, or A2A sub-agent over the canonical AG-UI protocol in **any Java 17+ framework** (Spring Boot, Quarkus, Helidon, Micronaut, Jakarta EE, or plain Java):
+1. Import `org.agui:ag-ui-bom` in `<dependencyManagement>` and add `org.agui:ag-ui-quarkus` (Quarkus SSE + WebSockets Next + Jackson MixIns + GraalVM reflection), `org.agui:ag-ui-langchain4j` (upstream `TokenStream` + RFC 6902 `AgUiStatePatch` + HITL `Interrupt`), `org.agui:ag-ui-quarkus-langchain4j` (Quarkiverse `Multi<ChatEvent>`), and/or `org.agui:ag-ui-a2a` (A2A `Task` delegation).
+2. Instantiate or `@Inject` `AgUiQuarkusBridge`, `AgUiWebSocketHandler`, `AgUiLangChain4jBridge`, `AgUiQuarkusLangChain4jBridge`, `AgUiMcpBridge`, `AgUiA2aBridge`, and `AgUiSessionRegistry`.
+3. Stream `Flow.Publisher<Event>` or Mutiny `Multi<String>` emitting canonical AG-UI SSE (`data: {...}\n\n`) and WebSocket frames (`RunAgentInput` $\rightarrow$ `RUN_STARTED` $\rightarrow$ `REASONING_*` $\rightarrow$ `STEP_*` $\rightarrow$ `TOOL_CALL_*` $\rightarrow$ `STATE_SNAPSHOT` / `STATE_DELTA` $\rightarrow$ `TEXT_MESSAGE_*` $\rightarrow$ `RUN_FINISHED` / `RUN_ERROR`).
 
 ---
 
@@ -96,14 +95,15 @@ To expose any LangChain4j `TokenStream`, Quarkus LangChain4j `@RegisterAiService
 
 | Module | Path | Stack / Runtime | Target Latency / Footprint |
 | :--- | :--- | :--- | :--- |
-| **`ag-ui-bom`** | [`ag-ui-bom/`](ag-ui-bom/pom.xml) | Maven Bill of Materials (BOM) | Unified dependency management |
-| **`ag-ui-core`** | [`ag-ui-core/`](ag-ui-core/pom.xml) | Framework-agnostic Java 25 (`AgUiEvent`, `AgUiSseFormatter`, `AgUiFlowAdapter`, `AgUiSessionRegistry`, `AgUiSseTransportSession`, `AgUiWebSocketTransportSession`, `AgUiMcpBridge`, `AgUiBridge`, GraalVM `reflect-config.json`) | $< 10\text{ms}$ serialization overhead |
-| **`ag-ui-a2a`** | [`ag-ui-a2a/`](ag-ui-a2a/pom.xml) | Framework-agnostic A2A Protocol Bridge (`AgUiA2aBridge` over `org.a2aproject.sdk`) | Zero framework lock-in |
-| **`ag-ui-langchain4j`** | [`ag-ui-langchain4j/`](ag-ui-langchain4j/pom.xml) | Framework-agnostic upstream `dev.langchain4j` `TokenStream` & lifecycle adapter (`AgUiLangChain4jBridge`, `AgUiRunOptions`, `AgUiToolClassifier`) | Works in Spring, Quarkus, Helidon, Micronaut & plain Java |
-| **`ag-ui-quarkus`** | [`ag-ui-quarkus/`](ag-ui-quarkus/pom.xml) | Plain Quarkus CDI, Mutiny `Multi`, WebSockets Next & Quarkiverse `Multi<ChatEvent>` adapter (`AgUiQuarkusBridge`, `AgUiQuarkusLangChain4jBridge`, `AgUiWebSocketEndpoint`) | Zero `-deployment` build-step overhead |
-| **`mcp-server` (`:8081`)** | [`examples/quarkus-svelte-skeleton/mcp-server/`](examples/quarkus-svelte-skeleton/mcp-server/pom.xml) | Quarkus 3.40.1.1 Nomad MCP Server + SmallRye Health (`/q/health/ready`) + Jib Container (`nomad-agui-showcase/mcp-server:latest`) | `fetchCityWeather`, `discoverLocalCultureAndMedia`, `updateTripItinerary`, `saveTravelerPreferences`, `sampleAcousticMood`, `resetNomadState` |
-| **`a2a-server` (`:8082`)** | [`examples/quarkus-svelte-skeleton/a2a-server/`](examples/quarkus-svelte-skeleton/a2a-server/pom.xml) | Quarkus 3.40.1.1 A2A Specialist Server + SmallRye Health (`/q/health/ready`) + Jib Container (`nomad-agui-showcase/a2a-server:latest`) | `convert-and-audit-budget` (Frankfurter FX), `verify-travel-advisory` (REST Countries v5 `api.restcountries.com`) |
-| **`backend` (`:8080`)** | [`examples/quarkus-svelte-skeleton/backend/`](examples/quarkus-svelte-skeleton/backend/pom.xml) | Quarkus 3.40.1.1 `@RegisterAiService` + `@McpToolBox("nomad")` + SmallRye Health + **Quarkus Quinoa** + Jib Container (`nomad-agui-showcase/backend:latest`) | Serves SvelteKit 5 SPA, AG-UI WebSocket (`/api/agent/ws`), SSE (`/api/agent/run`), and `/q/health/ready` on `:8080` |
+| **`ag-ui-bom`** | [`ag-ui-bom/`](ag-ui-bom/pom.xml) | Maven Bill of Materials (`org.agui` + `com.ag-ui.community:0.1.1`) | Unified dependency management |
+| **`ag-ui-quarkus`** | [`ag-ui-quarkus/`](ag-ui-quarkus/pom.xml) | Java 17 Quarkus CDI, Jackson MixIns (`@ag-ui/core` Zod-compatible), Mutiny `Multi` SSE, reusable `AgUiWebSocketHandler`, and 57-type GraalVM `reflect-config.json` | Zero LangChain4j/A2A lock-in, $< 10\text{ms}$ framing |
+| **`ag-ui-langchain4j`** | [`ag-ui-langchain4j/`](ag-ui-langchain4j/pom.xml) | Framework-agnostic Java 17 `dev.langchain4j` `TokenStream` & `Agent` adapter (`AgUiLangChain4jBridge`, `AgUiStatePatch`, `AgUiMcpBridge`, `AgUiRunOptions`) | Works in Quarkus, Spring, Helidon, Micronaut & plain Java |
+| **`ag-ui-quarkus-langchain4j`** | [`ag-ui-quarkus-langchain4j/`](ag-ui-quarkus-langchain4j/pom.xml) | Java 17 Quarkiverse `Multi<ChatEvent>` reactive adapter (`AgUiQuarkusLangChain4jBridge`) | Decouples `quarkus-langchain4j-core` from `ag-ui-quarkus` |
+| **`ag-ui-a2a`** | [`ag-ui-a2a/`](ag-ui-a2a/pom.xml) | Framework-agnostic Java 17 A2A Protocol Bridge (`AgUiA2aBridge` over `org.a2aproject.sdk`) | Emits canonical `StepStarted`/`ActivitySnapshot`/`StepFinished` |
+| **`packages/agui-svelte`** | [`packages/agui-svelte/`](packages/agui-svelte/package.json) | Headless Svelte 5 Runes SDK (`@agui/svelte`) | CSS-framework-free AG-UI client & protocol telemetry |
+| **`mcp-server` (`:8081`)** | [`examples/quarkus-svelte-skeleton/mcp-server/`](examples/quarkus-svelte-skeleton/mcp-server/pom.xml) | Java 25 Quarkus 3.40.1.1 Nomad MCP Server + SmallRye Health (`/q/health/ready`) + Jib Container (`nomad-agui-showcase/mcp-server:latest`) | `fetchCityWeather`, `discoverLocalCultureAndMedia`, `updateTripItinerary`, `saveTravelerPreferences`, `sampleAcousticMood`, `resetNomadState` |
+| **`a2a-server` (`:8082`)** | [`examples/quarkus-svelte-skeleton/a2a-server/`](examples/quarkus-svelte-skeleton/a2a-server/pom.xml) | Java 25 Quarkus 3.40.1.1 A2A Specialist Server + SmallRye Health (`/q/health/ready`) + Jib Container (`nomad-agui-showcase/a2a-server:latest`) | `convert-and-audit-budget` (Frankfurter FX), `verify-travel-advisory` (REST Countries v5 `api.restcountries.com`) |
+| **`backend` (`:8080`)** | [`examples/quarkus-svelte-skeleton/backend/`](examples/quarkus-svelte-skeleton/backend/pom.xml) | Java 25 Quarkus 3.40.1.1 `@RegisterAiService` + `@McpToolBox("nomad")` + SmallRye Health + **Quarkus Quinoa** + Jib Container (`nomad-agui-showcase/backend:latest`) | Serves SvelteKit 5 SPA, AG-UI WebSocket (`/api/agent/ws`), SSE (`/api/agent/run`), and `/q/health/ready` on `:8080` |
 | **`frontend` (Quinoa SPA)** | [`examples/quarkus-svelte-skeleton/frontend/`](examples/quarkus-svelte-skeleton/frontend/) | `pnpm` + SvelteKit 5 (`@sveltejs/adapter-static`) packaged into `backend` via `quarkus-quinoa` | 3-Pane Nomad Concierge Studio + Wire Telemetry Inspector served from `:8080` |
 
 ---
@@ -116,4 +116,4 @@ To expose any LangChain4j `TokenStream`, Quarkus LangChain4j `@RegisterAiService
 - **C4 Architecture**: [`docs/specs/C4_ARCHITECTURE.md`](docs/specs/C4_ARCHITECTURE.md)
 - **Living Kanban & Traceability Matrix**: [`docs/KANBAN.md`](docs/KANBAN.md)
 - **Causal Decision Lineage**: [`docs/DECISION_MAP.md`](docs/DECISION_MAP.md)
-- **Architectural Decision Records (ADRs)**: [`docs/adr/ADR-001`](docs/adr/ADR-001-multi-module-maven-sveltekit-clean-architecture-.md), [`docs/adr/ADR-002`](docs/adr/ADR-002-example-first-tri-protocol-ag-ui-mcp-a2a-evoluti.md), [`docs/adr/ADR-003`](docs/adr/ADR-003-multi-extension-bom-and-concentric-transport-arc.md), [`docs/adr/ADR-004`](docs/adr/ADR-004-nomad-concierge-and-svelte5-agui-component-kit.md), [`docs/adr/ADR-005`](docs/adr/ADR-005-quarkus-langchain4j-mcp-and-smallrye-health.md), [`docs/adr/ADR-006`](docs/adr/ADR-006-framework-agnostic-module-topology-ag-ui-core-ag.md)
+- **Architectural Decision Records (ADRs)**: [`docs/adr/ADR-001`](docs/adr/ADR-001-multi-module-maven-sveltekit-clean-architecture-.md), [`docs/adr/ADR-002`](docs/adr/ADR-002-example-first-tri-protocol-ag-ui-mcp-a2a-evoluti.md), [`docs/adr/ADR-003`](docs/adr/ADR-003-multi-extension-bom-and-concentric-transport-arc.md), [`docs/adr/ADR-004`](docs/adr/ADR-004-nomad-concierge-and-svelte5-agui-component-kit.md), [`docs/adr/ADR-005`](docs/adr/ADR-005-quarkus-langchain4j-mcp-and-smallrye-health.md), [`docs/adr/ADR-006`](docs/adr/ADR-006-framework-agnostic-module-topology-ag-ui-core-ag.md), [`docs/adr/ADR-007`](docs/adr/ADR-007-adopt-upstream-ag-ui-sdks-com-ag-ui-community-ag.md)

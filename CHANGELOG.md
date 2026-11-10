@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- feat(sdk,quarkus,langchain4j,a2a): adopt upstream `com.ag-ui.community:{java-core,java-server,java-client}:0.1.1` on Java 17 across 4 orthogonal library modules managed by `ag-ui-bom` (`ag-ui-quarkus` with Jackson `@JsonTypeInfo`/`ToolCallMixin` wire codecs, `AgUiQuarkusBridge`, reusable `AgUiWebSocketHandler`, and 57-type GraalVM `reflect-config.json`; `ag-ui-langchain4j` with stateful `AgUiLangChain4jRunSession`, RFC 6902 `AgUiStatePatch`, `AgUiMcpBridge`, and native HITL `InterruptOutcome`; new `ag-ui-quarkus-langchain4j` decoupling `quarkus-langchain4j-core` from `ag-ui-quarkus`; and `ag-ui-a2a` emitting canonical `StepStartedEvent`/`ActivitySnapshotEvent`/`StepFinishedEvent`), preserve Java 25 in `examples/quarkus-svelte-skeleton`, retarget Archlens to `ag-ui-quarkus`, and dual-license as `Apache-2.0 OR MIT` (`ADR-007`, [#81](https://github.com/fmatar/quarkus-agui/issues/81))
+
 ### Added
 - feat(client): extract standalone AG-UI Svelte 5 library (`packages/agui-svelte` / `@agui/svelte`) with SSE chunk parser (`parseSseChunk`), 10-type protocol call taxonomy (`PROTOCOL_CALL_TAXONOMY`, `resolveProtocolCallMeta`), inspector event filter (`filterInspectorEvents`), outbound WebSocket telemetry recorder (`recordClientOutboundEvent`), interactive turn choice helpers (`selectTurnOption`, `lockTurnInteraction`), TypeScript event declarations (`src/index.d.ts`), and reactive `useAgUiAgent` composable ([#29](https://github.com/fmatar/quarkus-agui/issues/29))
 

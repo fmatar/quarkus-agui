@@ -44,7 +44,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
-import org.agui.quarkus.adapters.AgUiQuarkusLangChain4jBridge;
+import org.agui.showcase.legacy.LegacyQuarkusChatBridge;
 import org.eclipse.microprofile.health.HealthCheckResponse;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -76,7 +76,7 @@ class NomadConciergeOrchestratorServiceTest {
     private NomadA2aAgentTools a2aTools;
     private NomadUiSurfaceTools uiTools;
     private NomadBackendReadinessChecks readinessChecks;
-    private AgUiQuarkusLangChain4jBridge langChain4jBridge;
+    private LegacyQuarkusChatBridge langChain4jBridge;
     private NomadConciergeOrchestratorService orchestrator;
 
     @BeforeAll
@@ -189,7 +189,7 @@ class NomadConciergeOrchestratorServiceTest {
         readinessChecks.ollamaBaseUrl = baseUrl;
         readinessChecks.defaultOllamaModel = "llama3.2:latest";
 
-        langChain4jBridge = new AgUiQuarkusLangChain4jBridge();
+        langChain4jBridge = new LegacyQuarkusChatBridge();
         NomadConciergeAiService stubAiService = this::scriptedChatStream;
 
         orchestrator = new NomadConciergeOrchestratorService(

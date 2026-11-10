@@ -14,6 +14,10 @@
     <name>AG-UI Core Java Library (ag-ui-core)</name>
     <description>Framework-agnostic Java 25 library for AG-UI Event records, SSE formatters, Flow.Publisher adapters, Transport Sessions, and MCP Bridge</description>
 
+    <properties>
+        <maven.compiler.release>25</maven.compiler.release>
+    </properties>
+
     <dependencies>
         <dependency>
             <groupId>jakarta.enterprise</groupId>

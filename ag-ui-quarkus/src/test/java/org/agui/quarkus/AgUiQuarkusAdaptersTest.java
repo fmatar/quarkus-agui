@@ -1,69 +1,181 @@
 package org.agui.quarkus;
 
-import dev.langchain4j.agent.tool.ToolExecutionRequest;
-import dev.langchain4j.data.message.AiMessage;
-import dev.langchain4j.guardrail.InputGuardrailException;
-import dev.langchain4j.invocation.InvocationContext;
-import dev.langchain4j.model.chat.response.ChatResponse;
-import dev.langchain4j.rag.content.Content;
-import dev.langchain4j.service.tool.ToolExecution;
-import dev.langchain4j.service.tool.ToolExecutionResult;
-import io.quarkiverse.langchain4j.runtime.aiservice.ChatEvent;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import com.agui.community.core.agent.Agent;
+import com.agui.community.core.agent.Context;
+import com.agui.community.core.agent.RunAgentInput;
+import com.agui.community.core.event.Event;
+import com.agui.community.core.event.EventType;
+import com.agui.community.core.event.JsonPatchOperation;
+import com.agui.community.core.event.RunFinishedEvent;
+import com.agui.community.core.event.RunStartedEvent;
+import com.agui.community.core.event.StateDeltaEvent;
+import com.agui.community.core.event.TextMessageContentEvent;
+import com.agui.community.core.event.TextMessageEndEvent;
+import com.agui.community.core.event.TextMessageStartEvent;
+import com.agui.community.core.interrupt.Interrupt;
+import com.agui.community.core.interrupt.InterruptOutcome;
+import com.agui.community.core.interrupt.OutcomeType;
+import com.agui.community.core.interrupt.Resume;
+import com.agui.community.core.interrupt.ResumeStatus;
+import com.agui.community.core.interrupt.SuccessOutcome;
+import com.agui.community.core.message.AssistantMessage;
+import com.agui.community.core.message.FunctionCall;
+import com.agui.community.core.message.Message;
+import com.agui.community.core.message.Role;
+import com.agui.community.core.message.SystemMessage;
+import com.agui.community.core.message.ToolCall;
+import com.agui.community.core.message.UserMessage;
+import com.agui.community.core.serialization.SerializationException;
+import com.agui.community.core.tool.Tool;
+import com.agui.community.core.tool.ToolParameters;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkus.websockets.next.WebSocketConnection;
 import io.smallrye.mutiny.Multi;
-import org.agui.core.adapters.AgUiSseTransportSession;
-import org.agui.core.application.AgUiSessionRegistry;
-import org.agui.core.domain.AgUiEvent;
-import org.agui.core.domain.AgUiEventType;
-import org.agui.core.domain.AgUiTransportType;
-import org.agui.core.domain.TextDeltaPayload;
-import org.agui.langchain4j.adapters.AgUiRunOptions;
-import org.agui.langchain4j.adapters.AgUiToolClassifier;
-import org.agui.quarkus.adapters.AgUiQuarkusBridge;
-import org.agui.quarkus.adapters.AgUiQuarkusLangChain4jBridge;
-import org.agui.quarkus.adapters.AgUiQuarkusWebSocketTransportSession;
-import org.agui.quarkus.adapters.AgUiWebSocketEndpoint;
-import org.junit.jupiter.api.Test;
-
 import java.lang.reflect.Proxy;
-import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
-
-import static org.junit.jupiter.api.Assertions.*;
+import org.agui.quarkus.adapters.AgUiJacksonSerializer;
+import org.agui.quarkus.adapters.AgUiObjectMapperCustomizer;
+import org.agui.quarkus.adapters.AgUiQuarkusBridge;
+import org.agui.quarkus.adapters.AgUiQuarkusWebSocketTransportSession;
+import org.agui.quarkus.adapters.AgUiWebSocketHandler;
+import org.agui.quarkus.application.AgUiSessionRegistry;
+import org.agui.quarkus.domain.AgUiTransportType;
+import org.junit.jupiter.api.Test;
 
 class AgUiQuarkusAdaptersTest {
 
     @Test
-    void quarkusBridgeConvertsCoreStreamsAndSseSessionsToMutinyMulti() {
-        AgUiQuarkusBridge bridge = new AgUiQuarkusBridge();
-        assertNotNull(bridge.formatter());
+    void jacksonSerializerAndCustomizerRoundTripEventsMessagesOutcomesAndRunAgentInput() {
+        ObjectMapper quarkusMapper = new ObjectMapper();
+        new AgUiObjectMapperCustomizer().customize(quarkusMapper);
+        AgUiJacksonSerializer serializer = new AgUiJacksonSerializer(quarkusMapper);
 
-        List<AgUiEvent<?>> events = bridge.streamTokens("thread-q-1", Arrays.asList("Hello ", "", null, "Mutiny!"))
-                .collect().asList().await().indefinitely();
-        assertEquals(4, events.size());
+        // Polymorphic Event round-trip: StateDeltaEvent & RunFinishedEvent with InterruptOutcome & SuccessOutcome
+        StateDeltaEvent deltaEvent = new StateDeltaEvent(
+                List.of(new JsonPatchOperation("add", "/city", "Kyoto")),
+                1700000000L,
+                Map.of("protocol", "AG-UI"));
+        String deltaJson = serializer.serialize(deltaEvent);
+        assertTrue(deltaJson.contains("\"type\":\"STATE_DELTA\""));
+        assertFalse(deltaJson.contains("\"from\":null"));
+        StateDeltaEvent parsedDelta = assertInstanceOf(StateDeltaEvent.class, serializer.deserialize(deltaJson, Event.class));
+        assertEquals(EventType.STATE_DELTA, parsedDelta.type());
+        assertEquals("/city", parsedDelta.delta().get(0).path());
 
-        List<String> frames = bridge.streamSseFrames(events).collect().asList().await().indefinitely();
-        assertEquals(4, frames.size());
-        assertTrue(frames.getFirst().startsWith("data: {"));
+        Interrupt interrupt = new Interrupt("int-1", "hitl:approval", "Approve?", "call-1", null, null, Map.of("costUsd", 1840));
+        RunFinishedEvent intFin = new RunFinishedEvent("t-1", "r-1", new InterruptOutcome(List.of(interrupt)), null, 1L, null);
+        String intFinJson = serializer.serialize(intFin);
+        assertTrue(intFinJson.contains("\"type\":\"interrupt\""));
+        RunFinishedEvent parsedIntFin = assertInstanceOf(RunFinishedEvent.class, serializer.deserialize(intFinJson, Event.class));
+        InterruptOutcome parsedOutcome = assertInstanceOf(InterruptOutcome.class, parsedIntFin.outcome());
+        assertEquals(OutcomeType.INTERRUPT, parsedOutcome.type());
+        assertEquals("int-1", parsedOutcome.interrupts().get(0).id());
 
-        AgUiSseTransportSession sseSession = new AgUiSseTransportSession("sse-q-1");
-        List<String> sseReceived = new ArrayList<>();
-        bridge.toMulti(sseSession).subscribe().with(sseReceived::add);
-        sseSession.emit(AgUiEvent.of(AgUiEventType.TEXT_DELTA, "thread-q-1", new TextDeltaPayload("live-sse")));
-        sseSession.close();
-        assertEquals(1, sseReceived.size());
-        assertTrue(sseReceived.getFirst().contains("live-sse"));
+        RunFinishedEvent okFin = new RunFinishedEvent("t-1", "r-2", new SuccessOutcome(), Map.of("ok", true), 2L, null);
+        String okFinJson = serializer.serialize(okFin);
+        assertTrue(okFinJson.contains("\"type\":\"success\""));
+        RunFinishedEvent parsedOkFin = assertInstanceOf(RunFinishedEvent.class, serializer.deserialize(okFinJson, Event.class));
+        assertInstanceOf(SuccessOutcome.class, parsedOkFin.outcome());
+
+        // Polymorphic Message + ToolCall ("type":"function") + RunAgentInput + Resume round-trip
+        AssistantMessage assistantWithTool = new AssistantMessage(
+                "m-2",
+                null,
+                null,
+                List.of(new ToolCall("tc-1", new FunctionCall("fetchWeather", "{\"city\":\"Kyoto\"}"))));
+        RunAgentInput input = new RunAgentInput(
+                "thread-1",
+                "run-1",
+                Map.of("nights", 5),
+                List.of(
+                        new SystemMessage("m-0", "You are Nomad"),
+                        new UserMessage("m-1", "Plan Kyoto"),
+                        assistantWithTool),
+                List.of(new Tool("fetchWeather", "Weather", new ToolParameters(Map.of(), List.of()))),
+                List.of(new Context("locale", "en-US")),
+                Map.of("llmMode", "ollama:llama3.2:latest"),
+                List.of(new Resume("int-1", ResumeStatus.RESOLVED, Map.of("approved", true))));
+
+        String inputJson = serializer.serialize(input);
+        assertTrue(inputJson.contains("\"role\":\"user\""));
+        assertTrue(inputJson.contains("\"type\":\"function\""));
+        assertTrue(inputJson.contains("\"status\":\"resolved\""));
+
+        RunAgentInput parsedInput = serializer.deserialize(inputJson, RunAgentInput.class);
+        assertEquals("thread-1", parsedInput.threadId());
+        assertEquals(3, parsedInput.messages().size());
+        assertEquals(Role.USER, parsedInput.messages().get(1).role());
+        AssistantMessage parsedAssistant = assertInstanceOf(AssistantMessage.class, parsedInput.messages().get(2));
+        assertEquals("function", parsedAssistant.toolCalls().get(0).type());
+        assertEquals(ResumeStatus.RESOLVED, parsedInput.resume().get(0).status());
+
+        List<Message> msgList = serializer.deserializeList(
+                "[{\"id\":\"u1\",\"role\":\"user\",\"content\":\"hi\"}]", Message.class);
+        assertEquals(1, msgList.size());
+        assertEquals(Role.USER, msgList.get(0).role());
+
+        // Error handling
+        assertThrows(SerializationException.class, () -> serializer.deserialize("{broken", Event.class));
+        assertThrows(SerializationException.class, () -> serializer.deserializeList("[{broken", Event.class));
+        Object unserializable = new Object() {
+            @SuppressWarnings("unused")
+            public String getBoom() {
+                throw new IllegalStateException("boom");
+            }
+        };
+        assertThrows(SerializationException.class, () -> serializer.serialize(unserializable));
     }
 
     @Test
-    void quarkusWebSocketEndpointAndSessionHandleFullLifecycle() {
+    void quarkusBridgeRunsAgentsAndEncodesSseAndJsonPayloads() {
+        AgUiQuarkusBridge bridge = new AgUiQuarkusBridge();
+        assertNotNull(bridge.serializer());
+        assertNotNull(bridge.sseEncoder());
+
+        Agent echoAgent = input -> Multi.createFrom().items(
+                new RunStartedEvent(input.threadId(), input.runId()),
+                new TextMessageStartEvent("m-1", Role.ASSISTANT),
+                new TextMessageContentEvent("m-1", "Hello Quarkus!"),
+                new TextMessageEndEvent("m-1"),
+                new RunFinishedEvent(input.threadId(), input.runId(), new SuccessOutcome(), null, null, null));
+
+        RunAgentInput input = new RunAgentInput("t-q-1", "r-q-1", List.of(), List.of());
+
+        List<Event> events = bridge.run(echoAgent, input).collect().asList().await().indefinitely();
+        assertEquals(5, events.size());
+
+        List<String> sseFrames = bridge.runAsSse(echoAgent, input).collect().asList().await().indefinitely();
+        assertEquals(5, sseFrames.size());
+        assertTrue(sseFrames.get(0).startsWith("data: {"));
+        String unwrapped = AgUiQuarkusBridge.unwrapSseData(sseFrames.get(2));
+        assertTrue(unwrapped.contains("Hello Quarkus!"));
+
+        List<String> jsonPayloads = bridge.runAsJsonPayloads(echoAgent, input).collect().asList().await().indefinitely();
+        assertEquals(5, jsonPayloads.size());
+        assertTrue(jsonPayloads.get(0).startsWith("{"));
+
+        assertNull(AgUiQuarkusBridge.unwrapSseData(null));
+        assertEquals("", AgUiQuarkusBridge.unwrapSseData(": keepalive\n\n"));
+        assertEquals("{\"a\":1}", AgUiQuarkusBridge.unwrapSseData("{\"a\":1}"));
+        assertEquals("line1\nline2", AgUiQuarkusBridge.unwrapSseData("event: msg\ndata: line1\ndata: line2\n\n"));
+    }
+
+    @Test
+    void webSocketHandlerAndSessionRegistryManageFullDuplexLifecycle() {
+        assertNotNull(new AgUiWebSocketHandler());
         AtomicBoolean closed = new AtomicBoolean(false);
-        List<String> sentMessages = new ArrayList<>();
+        List<String> sentFrames = new ArrayList<>();
 
         WebSocketConnection connection = (WebSocketConnection) Proxy.newProxyInstance(
                 WebSocketConnection.class.getClassLoader(),
@@ -71,8 +183,9 @@ class AgUiQuarkusAdaptersTest {
                 (proxy, method, args) -> switch (method.getName()) {
                     case "id" -> "ws-conn-1";
                     case "isClosed" -> closed.get();
+                    case "isOpen" -> !closed.get();
                     case "sendTextAndAwait" -> {
-                        sentMessages.add(String.valueOf(args[0]));
+                        sentFrames.add(String.valueOf(args[0]));
                         yield null;
                     }
                     case "closeAndAwait" -> {
@@ -83,118 +196,68 @@ class AgUiQuarkusAdaptersTest {
                 });
 
         AgUiSessionRegistry registry = new AgUiSessionRegistry();
-        AgUiWebSocketEndpoint endpoint = new AgUiWebSocketEndpoint(registry);
-        assertEquals(AgUiTransportType.WEBSOCKET, endpoint.transportType());
-        assertTrue(endpoint.isEnabled());
+        AgUiJacksonSerializer serializer = new AgUiJacksonSerializer();
+        AgUiQuarkusBridge bridge = new AgUiQuarkusBridge(serializer);
+        AgUiWebSocketHandler handler = new AgUiWebSocketHandler(registry, bridge, serializer);
 
-        endpoint.onOpen(connection);
-        assertEquals(1, registry.activeCount());
-        assertEquals(1, sentMessages.size());
-        assertTrue(sentMessages.getFirst().contains("RUN_STARTED"));
-
-        endpoint.onMessage("ping", connection);
-        assertEquals(2, sentMessages.size());
-        assertEquals("{\"type\":\"pong\"}", sentMessages.get(1));
-
-        endpoint.onMessage("noop", connection);
-        assertEquals(2, sentMessages.size());
-
-        AgUiQuarkusWebSocketTransportSession session = new AgUiQuarkusWebSocketTransportSession("ws-conn-1", connection);
+        AgUiQuarkusWebSocketTransportSession session = handler.onOpen(connection);
         assertEquals("ws-conn-1", session.sessionId());
         assertEquals(AgUiTransportType.WEBSOCKET, session.transportType());
-        assertTrue(session.isOpen());
+        assertEquals(1, registry.activeCount());
+        assertTrue(registry.find("ws-conn-1").isPresent());
 
-        session.emit(null);
-        session.emit(AgUiEvent.of(AgUiEventType.TEXT_DELTA, "ws-conn-1", new TextDeltaPayload("ws-delta")));
-        assertEquals(3, sentMessages.size());
-        assertTrue(sentMessages.get(2).contains("ws-delta"));
+        assertTrue(handler.handleControlFrame("ping", connection));
+        assertTrue(handler.handleControlFrame("{\"type\":\"ping\"}", connection));
+        assertTrue(handler.handleControlFrame("   ", connection));
+        assertFalse(handler.handleControlFrame("{\"threadId\":\"t1\",\"runId\":\"r1\",\"messages\":[],\"tools\":[]}", connection));
+        assertEquals(2, sentFrames.size());
+        assertEquals("{\"type\":\"pong\"}", sentFrames.get(0));
+
+        Agent wsAgent = input -> Multi.createFrom().items(
+                new RunStartedEvent(input.threadId(), input.runId()),
+                new RunFinishedEvent(input.threadId(), input.runId(), new SuccessOutcome(), null, null, null));
+
+        handler.runAndSend(wsAgent, "{\"threadId\":\"t1\",\"runId\":\"r1\",\"messages\":[],\"tools\":[]}", connection);
+        assertEquals(4, sentFrames.size());
+        assertTrue(sentFrames.get(2).contains("RUN_STARTED"));
+        assertTrue(sentFrames.get(3).contains("RUN_FINISHED"));
+
+        // Malformed JSON emits RUN_ERROR frame cleanly
+        handler.runAndSend(wsAgent, "{invalid-json", connection);
+        assertEquals(5, sentFrames.size());
+        assertTrue(sentFrames.get(4).contains("RUN_ERROR"));
+
+        // Broadcast across active sessions
+        registry.broadcastJson("{\"type\":\"CUSTOM\",\"name\":\"pingback\",\"value\":{}}");
+        assertEquals(6, sentFrames.size());
 
         session.close();
         assertFalse(session.isOpen());
-        session.emit(AgUiEvent.of(AgUiEventType.TEXT_DELTA, "ws-conn-1", new TextDeltaPayload("ignored")));
-        assertEquals(3, sentMessages.size());
+        session.sendJson("{\"ignored\":true}");
+        assertEquals(6, sentFrames.size());
 
-        endpoint.onClose(connection);
+        handler.onClose(connection);
         assertEquals(0, registry.activeCount());
 
-        endpoint.onOpen(connection);
-        endpoint.onError(connection, new RuntimeException("simulated error"));
+        handler.onOpen(connection);
+        handler.onError(connection, new RuntimeException("ws error"));
         assertEquals(0, registry.activeCount());
+        handler.onClose(null);
+        handler.sendEvent(connection, null);
+        handler.sendEvent(null, new RunStartedEvent("t", "r"));
+        assertTrue(handler.handleControlFrame(null, connection));
+        assertTrue(handler.handleControlFrame("{\"type\": \"ping\"}", connection));
+        registry.unregister(null);
+        assertTrue(registry.find(null).isEmpty());
 
-        AgUiQuarkusWebSocketTransportSession nullConnSession = new AgUiQuarkusWebSocketTransportSession("ws-null", null);
-        assertFalse(nullConnSession.isOpen());
-        nullConnSession.close();
-    }
+        AgUiQuarkusWebSocketTransportSession nullSession = new AgUiQuarkusWebSocketTransportSession("null-id", null);
+        assertFalse(nullSession.isOpen());
+        nullSession.sendJson(null);
+        nullSession.sendJson("x");
+        nullSession.close();
 
-    @Test
-    void quarkusLangChain4jBridgeAdaptsChatEventMultiStreamsAndFailures() {
-        AgUiQuarkusLangChain4jBridge bridge = new AgUiQuarkusLangChain4jBridge();
-        assertNotNull(bridge.formatter());
-
-        Multi<ChatEvent> empty = Multi.createFrom().empty();
-        assertThrows(NullPointerException.class, () -> bridge.adapt(null, empty));
-        assertThrows(IllegalArgumentException.class, () -> bridge.adapt("   ", empty));
-        assertThrows(NullPointerException.class, () -> bridge.adapt("thread-1", null));
-
-        ToolExecutionRequest req = ToolExecutionRequest.builder()
-                .id("call-1")
-                .name("fetchCityWeather")
-                .arguments("{\"city\":\"Kyoto\"}")
-                .build();
-        ToolExecution exec = ToolExecution.builder()
-                .invocationContext(InvocationContext.builder().invocationId(UUID.randomUUID()).timestamp(Instant.now()).build())
-                .request(req)
-                .result(ToolExecutionResult.builder().isError(false).resultText("{\"status\":\"OK\"}").build())
-                .build();
-        ChatResponse finalResp = ChatResponse.builder().aiMessage(AiMessage.from("18C")).build();
-
-        Multi<ChatEvent> stream = Multi.createFrom().items(
-                new ChatEvent.PartialThinkingEvent("Checking"),
-                new ChatEvent.ContentFetchedEvent(List.of(Content.from("Note"))),
-                new ChatEvent.BeforeToolExecutionEvent(req),
-                new ChatEvent.ToolExecutedEvent(exec),
-                new ChatEvent.IntermediateResponseEvent(finalResp),
-                new ChatEvent.PartialResponseEvent("18C"),
-                new ChatEvent.AccumulatedResponseEvent("Accumulated", null),
-                new ChatEvent.ChatCompletedEvent(finalResp));
-
-        AgUiRunOptions options = new AgUiRunOptions(
-                "ollama:llama3.2:latest",
-                Map.of("city", "Kyoto"),
-                AgUiToolClassifier.defaultMcpClassifier("nomad"),
-                null,
-                null,
-                null);
-
-        List<AgUiEvent<?>> adaptedEvents = bridge.adapt("thread-q-lc", stream, options)
-                .collect().asList().await().indefinitely();
-        assertEquals(List.of(
-                        AgUiEventType.RUN_STARTED.name(),
-                        AgUiEventType.STATE_SNAPSHOT.name(),
-                        AgUiEventType.STATUS.name(),
-                        AgUiEventType.STEP_STARTED.name(),
-                        AgUiEventType.STEP_FINISHED.name(),
-                        AgUiEventType.TOOL_CALL.name(),
-                        AgUiEventType.TOOL_RESULT.name(),
-                        AgUiEventType.TEXT_DELTA.name(),
-                        AgUiEventType.TEXT_DELTA.name(),
-                        AgUiEventType.RUN_FINISHED.name(),
-                        AgUiEventType.RUN_FINISHED.name()),
-                adaptedEvents.stream().map(AgUiEvent::type).toList());
-
-        List<String> frames = bridge.adaptToSse("thread-q-lc", stream, options)
-                .collect().asList().await().indefinitely();
-        assertEquals(11, frames.size());
-        assertTrue(frames.getFirst().contains("RUN_STARTED"));
-        assertTrue(frames.getLast().contains("RUN_FINISHED"));
-
-        Multi<ChatEvent> failStream = Multi.createFrom().failure(new InputGuardrailException("Blocked"));
-        List<AgUiEvent<?>> failEvents = bridge.adapt("thread-q-fail", failStream)
-                .collect().asList().await().indefinitely();
-        assertEquals(AgUiEventType.RUN_FINISHED.name(), failEvents.getLast().type());
-        List<AgUiEvent<?>> nullOptEvents = bridge.adapt("thread-q-null", Multi.createFrom().empty(), null)
-                .collect().asList().await().indefinitely();
-        assertEquals(1, nullOptEvents.size());
-        assertNotNull(bridge.getClass().getClassLoader().getResourceAsStream("META-INF/beans.xml"));
+        assertNotNull(handler.getClass().getClassLoader().getResourceAsStream("META-INF/beans.xml"));
+        assertNotNull(handler.getClass().getClassLoader()
+                .getResourceAsStream("META-INF/native-image/org.agui/ag-ui-quarkus/reflect-config.json"));
     }
 }

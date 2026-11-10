@@ -1,6 +1,12 @@
 package org.agui.a2a.adapters;
 
+import com.agui.community.core.event.ActivitySnapshotEvent;
+import com.agui.community.core.event.Event;
+import com.agui.community.core.event.StepFinishedEvent;
+import com.agui.community.core.event.StepStartedEvent;
 import jakarta.enterprise.context.ApplicationScoped;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -13,94 +19,76 @@ import org.a2aproject.sdk.spec.Artifact;
 import org.a2aproject.sdk.spec.Message;
 import org.a2aproject.sdk.spec.Part;
 import org.a2aproject.sdk.spec.Task;
+import org.a2aproject.sdk.spec.TaskState;
 import org.a2aproject.sdk.spec.TextPart;
-import org.agui.core.domain.A2aHandoffPayload;
-import org.agui.core.domain.AgUiEvent;
-import org.agui.core.domain.AgUiEventType;
-import org.agui.core.domain.StepPayload;
+import org.agui.a2a.domain.A2aHandoff;
 
 /**
- * Framework-agnostic Bridge wrapping official A2A Java SDK specialist delegations,
- * tasks, messages, and client events into AG-UI events.
+ * Framework-agnostic Java 17 bridge wrapping official A2A Java SDK specialist delegations,
+ * tasks, artifacts, messages, and client events into canonical AG-UI {@link Event} records.
  */
 @ApplicationScoped
 public class AgUiA2aBridge {
 
-    public List<AgUiEvent<?>> recordDelegation(String threadId, A2aHandoffPayload handoff) {
-        Objects.requireNonNull(threadId, "threadId must not be null");
+    public List<Event> recordDelegation(A2aHandoff handoff) {
         Objects.requireNonNull(handoff, "handoff must not be null");
-
-        AgUiEvent<StepPayload> started = AgUiEvent.of(
-                AgUiEventType.STEP_STARTED,
-                threadId,
-                new StepPayload(handoff.taskId(), "A2A", handoff.agentName(), handoff.skillId(), "Delegated"));
-
-        AgUiEvent<StepPayload> finished = AgUiEvent.of(
-                AgUiEventType.STEP_FINISHED,
-                threadId,
-                new StepPayload(handoff.taskId(), "A2A", handoff.agentName(), handoff.skillId(), handoff.summary()));
-
-        return List.of(started, finished);
+        return buildDelegationEvents(handoff, false, List.of());
     }
 
-    public List<AgUiEvent<?>> fromA2aTask(String threadId, String agentName, String skillId, Task task) {
-        Objects.requireNonNull(threadId, "threadId must not be null");
+    public List<Event> fromA2aTask(String agentName, String skillId, Task task) {
         Objects.requireNonNull(agentName, "agentName must not be null");
         Objects.requireNonNull(skillId, "skillId must not be null");
         Objects.requireNonNull(task, "task must not be null");
 
         String summary = extractTaskSummary(task);
-        return recordDelegation(
-                threadId,
-                new A2aHandoffPayload(
-                        task.id(),
-                        agentName,
-                        skillId,
-                        summary,
-                        task.metadata() != null ? task.metadata() : Map.of()));
+        boolean isError = isTerminalFailure(task.status().state());
+        A2aHandoff handoff = new A2aHandoff(
+                task.id(),
+                agentName,
+                skillId,
+                summary,
+                task.metadata() != null ? task.metadata() : Map.of());
+        List<Artifact> artifacts = task.artifacts() == null ? List.of() : task.artifacts();
+        return buildDelegationEvents(handoff, isError, artifacts);
     }
 
-    public AgUiEvent<StepPayload> fromA2aClientEvent(String threadId, String skillId, ClientEvent event, AgentCard agentCard) {
-        Objects.requireNonNull(threadId, "threadId must not be null");
+    public Event fromA2aClientEvent(String skillId, ClientEvent event, AgentCard agentCard) {
         Objects.requireNonNull(skillId, "skillId must not be null");
         Objects.requireNonNull(event, "event must not be null");
 
         String agentName = agentCard != null ? agentCard.name() : "A2A-Agent";
+        String stepName = formatStepName(agentName, skillId);
+        long now = System.currentTimeMillis();
+
         if (event instanceof MessageEvent messageEvent) {
             Message msg = messageEvent.getMessage();
             String stepId = msg.taskId() != null ? msg.taskId() : msg.messageId();
-            return AgUiEvent.of(
-                    AgUiEventType.STEP_FINISHED,
-                    threadId,
-                    new StepPayload(stepId, "A2A", agentName, skillId, extractMessageText(msg)));
+            return new StepFinishedEvent(
+                    stepName,
+                    now,
+                    buildProvenance(stepId, agentName, skillId, extractMessageText(msg), false, Map.of()));
         }
         if (event instanceof TaskEvent taskEvent) {
             Task task = taskEvent.getTask();
-            return AgUiEvent.of(
-                    AgUiEventType.STEP_FINISHED,
-                    threadId,
-                    new StepPayload(task.id(), "A2A", agentName, skillId, extractTaskSummary(task)));
+            boolean isError = isTerminalFailure(task.status().state());
+            Map<String, Object> meta = task.metadata() != null ? task.metadata() : Map.of();
+            return new StepFinishedEvent(
+                    stepName,
+                    now,
+                    buildProvenance(task.id(), agentName, skillId, extractTaskSummary(task), isError, meta));
         }
         TaskUpdateEvent updateEvent = (TaskUpdateEvent) event;
         Task task = updateEvent.getTask();
-        return AgUiEvent.of(
-                AgUiEventType.STEP_STARTED,
-                threadId,
-                new StepPayload(task.id(), "A2A", agentName, skillId, extractTaskSummary(task)));
+        return new StepStartedEvent(
+                stepName,
+                now,
+                buildProvenance(task.id(), agentName, skillId, extractTaskSummary(task), false, Map.of()));
     }
 
     public String extractTaskSummary(Task task) {
         Objects.requireNonNull(task, "task must not be null");
         if (task.artifacts() != null && !task.artifacts().isEmpty()) {
-            StringBuilder sb = new StringBuilder();
-            for (Artifact artifact : task.artifacts()) {
-                for (Part<?> part : artifact.parts()) {
-                    if (part instanceof TextPart textPart) {
-                        sb.append(textPart.text());
-                    }
-                }
-            }
-            return sb.toString();
+            return extractArtifactsText(task.artifacts());
         }
         if (task.status().message() != null) {
             return extractMessageText(task.status().message());
@@ -112,8 +100,83 @@ public class AgUiA2aBridge {
         if (message == null) {
             return "";
         }
+        return extractPartsText(message.parts());
+    }
+
+    private static List<Event> buildDelegationEvents(
+            A2aHandoff handoff,
+            boolean isError,
+            List<Artifact> artifacts) {
+        String stepName = formatStepName(handoff.agentName(), handoff.skillId());
+        long now = System.currentTimeMillis();
+        List<Event> events = new ArrayList<>(3);
+        events.add(new StepStartedEvent(
+                stepName,
+                now,
+                buildProvenance(handoff.taskId(), handoff.agentName(), handoff.skillId(), "Delegated", false, handoff.metadata())));
+
+        if (!artifacts.isEmpty()) {
+            Map<String, Object> content = Map.of(
+                    "taskId", handoff.taskId(),
+                    "agentName", handoff.agentName(),
+                    "skillId", handoff.skillId(),
+                    "summary", handoff.summary(),
+                    "artifactCount", artifacts.size());
+            events.add(new ActivitySnapshotEvent(
+                    handoff.taskId(),
+                    "a2a:artifact",
+                    content,
+                    Boolean.TRUE,
+                    now,
+                    buildProvenance(handoff.taskId(), handoff.agentName(), handoff.skillId(), handoff.summary(), isError, handoff.metadata())));
+        }
+
+        events.add(new StepFinishedEvent(
+                stepName,
+                now,
+                buildProvenance(handoff.taskId(), handoff.agentName(), handoff.skillId(), handoff.summary(), isError, handoff.metadata())));
+        return List.copyOf(events);
+    }
+
+    private static Map<String, Object> buildProvenance(
+            String stepId,
+            String agentName,
+            String skillId,
+            String summary,
+            boolean isError,
+            Map<String, Object> metadata) {
+        Map<String, Object> raw = new LinkedHashMap<>();
+        raw.put("stepId", stepId);
+        raw.put("protocol", "A2A");
+        raw.put("callType", "a2a:task");
+        raw.put("agentName", agentName);
+        raw.put("skillId", skillId);
+        raw.put("status", isError ? "ERROR" : "OK");
+        raw.put("isError", isError);
+        raw.put("summary", summary);
+        raw.put("metadata", metadata);
+        return Map.copyOf(raw);
+    }
+
+    private static String formatStepName(String agentName, String skillId) {
+        return "a2a:" + agentName + ":" + skillId;
+    }
+
+    private static boolean isTerminalFailure(TaskState state) {
+        return state == TaskState.TASK_STATE_FAILED || state == TaskState.TASK_STATE_REJECTED;
+    }
+
+    private static String extractArtifactsText(List<Artifact> artifacts) {
         StringBuilder sb = new StringBuilder();
-        for (Part<?> part : message.parts()) {
+        for (Artifact artifact : artifacts) {
+            sb.append(extractPartsText(artifact.parts()));
+        }
+        return sb.toString();
+    }
+
+    private static String extractPartsText(List<Part<?>> parts) {
+        StringBuilder sb = new StringBuilder();
+        for (Part<?> part : parts) {
             if (part instanceof TextPart textPart) {
                 sb.append(textPart.text());
             }

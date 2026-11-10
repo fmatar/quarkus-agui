@@ -1,35 +1,35 @@
 {
-  "activeSessionId": null,
+  "activeSessionId": 81,
   "sessions": {
-    "29": {
-      "active": false,
-      "issueId": 29,
+    "81": {
+      "active": true,
+      "issueId": 81,
       "type": "feat",
-      "branch": "feature/issue-#29-extract-agui-svelte-package",
+      "branch": "feature/issue-#81-adopt-upstream-ag-ui-java-sdks",
       "worktree": null,
-      "stage": 8,
-      "stageName": "Done & Released",
+      "stage": 6,
+      "stageName": "Pull Request Opening",
       "remediationCount": 0,
       "maxRemediations": 3,
       "manifest": {
         "specPath": null,
-        "prNumber": 80,
-        "coverageReport": "packages/agui-svelte/tests/agui-svelte.test.mjs",
-        "mutationScore": 100,
+        "prNumber": null,
+        "coverageReport": null,
+        "mutationScore": null,
         "uiScreenshotPath": null,
         "checkpoints": {
-          "stage1": "2026-11-10T07:46:00.000Z",
-          "stage2": "2026-11-10T07:46:30.000Z",
-          "stage3": "2026-11-10T07:47:00.000Z",
-          "stage4": "2026-11-10T07:53:38.000Z",
-          "stage5": "2026-11-10T07:53:40.000Z",
-          "stage6": "2026-11-10T07:54:00.000Z",
-          "stage7": "2026-11-10T07:54:10.000Z",
-          "stage8": "2026-11-10T07:54:20.000Z"
+          "stage1": "2026-11-10T17:41:52.716Z",
+          "stage2": null,
+          "stage3": "2026-11-10T17:42:20.692Z",
+          "stage4": "2026-11-10T18:10:25.921Z",
+          "stage5": "2026-11-10T18:13:59.363Z",
+          "stage6": "2026-11-10T18:17:23.580Z",
+          "stage7": null,
+          "stage8": null
         }
       },
-      "startedAt": "2026-11-10T07:46:00.000Z",
-      "updatedAt": "2026-11-10T07:54:20.000Z",
+      "startedAt": "2026-11-10T17:41:52.715Z",
+      "updatedAt": "2026-11-10T18:17:23.745Z",
       "activeSubagents": []
     }
   }

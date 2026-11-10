@@ -12,24 +12,24 @@
 
     <artifactId>ag-ui-quarkus</artifactId>
     <name>AG-UI Quarkus Adapter (ag-ui-quarkus)</name>
-    <description>Plain Quarkus CDI &amp; Reactive Adapter for Mutiny Multi, Quarkus WebSockets Next, and Quarkiverse LangChain4j ChatEvent streams</description>
+    <description>Plain Quarkus CDI, Jackson MixIns, Mutiny Multi, WebSockets Next, and GraalVM Reflection Adapter for canonical AG-UI</description>
 
     <dependencies>
         <dependency>
-            <groupId>org.agui</groupId>
-            <artifactId>ag-ui-core</artifactId>
+            <groupId>com.ag-ui.community</groupId>
+            <artifactId>java-core</artifactId>
         </dependency>
         <dependency>
-            <groupId>org.agui</groupId>
-            <artifactId>ag-ui-a2a</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.agui</groupId>
-            <artifactId>ag-ui-langchain4j</artifactId>
+            <groupId>com.ag-ui.community</groupId>
+            <artifactId>java-server</artifactId>
         </dependency>
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-arc</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-rest-jackson</artifactId>
         </dependency>
         <dependency>
             <groupId>io.smallrye.reactive</groupId>
@@ -38,10 +38,6 @@
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-websockets-next</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>io.quarkiverse.langchain4j</groupId>
-            <artifactId>quarkus-langchain4j-core</artifactId>
         </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>

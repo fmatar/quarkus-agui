@@ -25,16 +25,15 @@ import org.agui.core.adapters.AgUiSseFormatter;
 import org.agui.core.domain.AgUiEvent;
 import org.agui.core.domain.AgUiEventType;
 import org.agui.core.domain.TextDeltaPayload;
-import org.agui.langchain4j.adapters.AgUiRunOptions;
 import org.agui.langchain4j.adapters.AgUiToolClassifier;
-import org.agui.quarkus.adapters.AgUiQuarkusLangChain4jBridge;
+import org.agui.showcase.legacy.LegacyQuarkusChatBridge;
+import org.agui.showcase.legacy.LegacyRunOptions;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 /**
  * Idiomatic Quarkus LangChain4j + MCP + A2A + AG-UI Orchestrator ({@code :8080}).
  * Delegates conversational reasoning and MCP tool execution to {@link NomadConciergeAiService}
- * (`@RegisterAiService` + `@McpToolBox("nomad")`) and adapts {@code Multi<ChatEvent>} streams
- * via {@link AgUiQuarkusLangChain4jBridge}.
+ * (`@RegisterAiService` + `@McpToolBox("nomad")`) and adapts {@code Multi<ChatEvent>} streams.
  */
 @ApplicationScoped
 public class NomadConciergeOrchestratorService {
@@ -42,7 +41,7 @@ public class NomadConciergeOrchestratorService {
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
 
     private final NomadConciergeAiService aiService;
-    private final AgUiQuarkusLangChain4jBridge langChain4jBridge;
+    private final LegacyQuarkusChatBridge langChain4jBridge;
     private final McpClient nomadMcpClient;
     private final A2aGatewayClient a2aClient;
     private final TripDossierStore dossierStore;
@@ -57,7 +56,7 @@ public class NomadConciergeOrchestratorService {
     @Inject
     public NomadConciergeOrchestratorService(
             NomadConciergeAiService aiService,
-            AgUiQuarkusLangChain4jBridge langChain4jBridge,
+            LegacyQuarkusChatBridge langChain4jBridge,
             @McpClientName("nomad") McpClient nomadMcpClient,
             A2aGatewayClient a2aClient,
             TripDossierStore dossierStore,
@@ -108,7 +107,7 @@ public class NomadConciergeOrchestratorService {
                 : memoryTurnCounts.computeIfAbsent(threadId, k -> new AtomicInteger()).addAndGet(2);
 
         Map<String, Object> initialDossier = dossierStore.readTripDossierState();
-        AgUiRunOptions options = new AgUiRunOptions(
+        LegacyRunOptions options = new LegacyRunOptions(
                 llmMode,
                 Map.of(
                         "tripDossierState", initialDossier,

@@ -15,11 +15,28 @@
     <packaging>pom</packaging>
 
     <name>AG-UI Java - BOM (ag-ui-bom)</name>
-    <description>Bill of Materials for AG-UI Core, A2A, LangChain4j, and Quarkus Adapter Modules</description>
+    <description>Bill of Materials for upstream AG-UI Java SDKs and Quarkus, LangChain4j, and A2A Adapter Modules</description>
 
     <dependencyManagement>
         <dependencies>
-            <!-- Framework-Agnostic Core, Sessions, SSE/WebSocket Transports & MCP Bridge -->
+            <!-- Upstream AG-UI Protocol Java SDKs -->
+            <dependency>
+                <groupId>com.ag-ui.community</groupId>
+                <artifactId>java-core</artifactId>
+                <version>${agui.community.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.ag-ui.community</groupId>
+                <artifactId>java-server</artifactId>
+                <version>${agui.community.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.ag-ui.community</groupId>
+                <artifactId>java-client</artifactId>
+                <version>${agui.community.version}</version>
+            </dependency>
+
+            <!-- Legacy Core (Deprecated; scheduled for removal in Wave 3) -->
             <dependency>
                 <groupId>org.agui</groupId>
                 <artifactId>ag-ui-core</artifactId>
@@ -40,10 +57,17 @@
                 <version>${project.version}</version>
             </dependency>
 
-            <!-- Plain Quarkus CDI, Mutiny, WebSockets Next & Quarkiverse LangChain4j Adapter -->
+            <!-- Plain Quarkus CDI, Jackson MixIns, Mutiny Multi & WebSockets Next Adapter -->
             <dependency>
                 <groupId>org.agui</groupId>
                 <artifactId>ag-ui-quarkus</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <!-- Quarkiverse LangChain4j Multi<ChatEvent> Adapter -->
+            <dependency>
+                <groupId>org.agui</groupId>
+                <artifactId>ag-ui-quarkus-langchain4j</artifactId>
                 <version>${project.version}</version>
             </dependency>
         </dependencies>
