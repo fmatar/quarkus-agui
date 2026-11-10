@@ -531,4 +531,66 @@ class NomadTravelAdvisorServiceTest {
         assertTrue(emitterCalls.contains("addArtifact:art-cadence-1"));
         assertTrue(emitterCalls.contains("complete"));
     }
+
+    @Test
+    void checkHealthRunsUpstreamsInParallelWarmsOnStartupAndUsesShortDegradedCacheTtl() throws Exception {
+        java.util.concurrent.atomic.AtomicInteger calls = new java.util.concurrent.atomic.AtomicInteger();
+        service.restCountriesApiKey = Optional.of("test-v5-key");
+        service.healthCacheTtlMs = 300_000L;
+        service.setHttpProbe(url -> {
+            calls.incrementAndGet();
+            try {
+                Thread.sleep(150);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            if (url.contains("/v1/latest")) {
+                return new NomadTravelAdvisorService.UpstreamHttpResult(
+                        200, "{\"amount\":1.0,\"base\":\"USD\",\"rates\":{\"EUR\":0.92}}", null, 150L);
+            }
+            return new NomadTravelAdvisorService.UpstreamHttpResult(
+                    200, REST_COUNTRIES_V5_JAPAN_JSON, null, 150L);
+        });
+
+        long t0 = System.nanoTime();
+        Map<String, Object> report = service.checkHealth();
+        long elapsedMs = (System.nanoTime() - t0) / 1_000_000L;
+        assertEquals("UP", report.get("status"));
+        assertEquals(2, calls.get());
+        assertTrue(elapsedMs < 280, "Expected parallel A2A health probes (<280ms), took " + elapsedMs + "ms");
+
+        // Startup warm-up disabled vs enabled
+        calls.set(0);
+        service.setHttpProbe(url -> {
+            calls.incrementAndGet();
+            return new NomadTravelAdvisorService.UpstreamHttpResult(
+                    200, "{\"amount\":1.0,\"base\":\"USD\",\"rates\":{\"EUR\":0.92}}", null, 5L);
+        });
+        service.warmupOnStart = false;
+        service.onStartup(new io.quarkus.runtime.StartupEvent());
+        Thread.sleep(60);
+        assertEquals(0, calls.get());
+
+        service.warmupOnStart = true;
+        service.onStartup(new io.quarkus.runtime.StartupEvent());
+        long deadline = System.currentTimeMillis() + 1500L;
+        while (calls.get() < 2 && System.currentTimeMillis() < deadline) {
+            Thread.sleep(20);
+        }
+        assertEquals(2, calls.get());
+
+        // Degraded health uses short retry TTL rather than caching DOWN for 5 minutes
+        service.healthCacheTtlMs = 300_000L;
+        service.degradedHealthCacheTtlMs = 40L;
+        service.setHttpProbe(url -> {
+            calls.incrementAndGet();
+            return new NomadTravelAdvisorService.UpstreamHttpResult(503, null, "Temporary blip", 5L);
+        });
+        calls.set(0);
+        assertEquals("DOWN", service.checkHealth().get("status"));
+        assertEquals(2, calls.get());
+        Thread.sleep(60);
+        service.checkHealth();
+        assertEquals(4, calls.get(), "Degraded health report must expire quickly so transient startup blips self-heal");
+    }
 }

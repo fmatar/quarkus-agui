@@ -11,10 +11,10 @@ services:
       - QUARKUS_HTTP_PORT=8081
     healthcheck:
       test: ["CMD", "/usr/bin/bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8081 && printf 'GET /q/health/live HTTP/1.0\\r\\nHost: 127.0.0.1\\r\\n\\r\\n' >&3 && head -n 1 <&3 | grep -q 200"]
-      interval: 15s
+      interval: 5s
       timeout: 5s
       retries: 5
-      start_period: 10s
+      start_period: 3s
     restart: unless-stopped
 
   a2a-server:
@@ -32,10 +32,10 @@ services:
       - RESTCOUNTRIES_API_KEY=${RESTCOUNTRIES_API_KEY:-}
     healthcheck:
       test: ["CMD", "/usr/bin/bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8082 && printf 'GET /q/health/live HTTP/1.0\\r\\nHost: 127.0.0.1\\r\\n\\r\\n' >&3 && head -n 1 <&3 | grep -q 200"]
-      interval: 15s
+      interval: 5s
       timeout: 5s
       retries: 5
-      start_period: 10s
+      start_period: 3s
     restart: unless-stopped
 
   backend:
@@ -54,8 +54,10 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
-      - mcp-server
-      - a2a-server
+      mcp-server:
+        condition: service_healthy
+      a2a-server:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "/usr/bin/bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /q/health/live HTTP/1.0\\r\\nHost: 127.0.0.1\\r\\n\\r\\n' >&3 && head -n 1 <&3 | grep -q 200"]
       interval: 15s

@@ -500,4 +500,57 @@ class NomadMcpConciergeServiceTest {
         assertEquals(org.eclipse.microprofile.health.HealthCheckResponse.Status.DOWN, downCheck.getStatus());
         assertEquals("Upstream offline", downCheck.getData().orElseThrow().get("open-meteo.error"));
     }
+
+    @Test
+    void checkHealthRunsThreeUpstreamsInParallelWarmsOnStartupAndCapsDegradedCacheTtl() throws Exception {
+        java.util.concurrent.atomic.AtomicInteger calls = new java.util.concurrent.atomic.AtomicInteger();
+        service.healthCacheTtlMs = 300_000L;
+        service.setHttpProbe(url -> {
+            calls.incrementAndGet();
+            try {
+                Thread.sleep(150);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            return new NomadMcpConciergeService.UpstreamHttpResult(200, "{\"ok\":true}", null, 150L);
+        });
+
+        long t0 = System.nanoTime();
+        Map<String, Object> report = service.checkHealth();
+        long elapsedMs = (System.nanoTime() - t0) / 1_000_000L;
+        assertEquals("UP", report.get("status"));
+        assertEquals(3, calls.get());
+        assertTrue(elapsedMs < 360, "Expected parallel MCP health probes (<360ms), took " + elapsedMs + "ms");
+
+        calls.set(0);
+        service.setHttpProbe(url -> {
+            calls.incrementAndGet();
+            return new NomadMcpConciergeService.UpstreamHttpResult(200, "{\"ok\":true}", null, 5L);
+        });
+        service.warmupOnStart = false;
+        service.onStartup(new io.quarkus.runtime.StartupEvent());
+        Thread.sleep(60);
+        assertEquals(0, calls.get());
+
+        service.warmupOnStart = true;
+        service.onStartup(new io.quarkus.runtime.StartupEvent());
+        long deadline = System.currentTimeMillis() + 1500L;
+        while (calls.get() < 3 && System.currentTimeMillis() < deadline) {
+            Thread.sleep(20);
+        }
+        assertEquals(3, calls.get());
+
+        service.healthCacheTtlMs = 300_000L;
+        service.degradedHealthCacheTtlMs = 40L;
+        service.setHttpProbe(url -> {
+            calls.incrementAndGet();
+            return new NomadMcpConciergeService.UpstreamHttpResult(503, null, "Temporary blip", 5L);
+        });
+        calls.set(0);
+        assertEquals("DOWN", service.checkHealth().get("status"));
+        assertEquals(3, calls.get());
+        Thread.sleep(60);
+        service.checkHealth();
+        assertEquals(6, calls.get(), "Degraded MCP health report must expire quickly");
+    }
 }
