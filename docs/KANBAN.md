@@ -13,8 +13,10 @@
 
 | 📥 Backlog | 📋 Ready | ⚡ In Progress | 🔍 In Review | ✅ Done |
 | :--- | :--- | :--- | :--- | :--- |
-|  |  | [#78 fix(mcp,showcase): prevent saveTravelerPreferences false Service Error when LLM passes empty or placeholder args](https://github.com/fmatar/quarkus-agui/issues/78) |  | [#76 fix(a2a,showcase): support non-ECB currencies (LBP, MAD, EGP, JOD) via open.er-api.com fallback & trailing currency symbols](https://github.com/fmatar/quarkus-agui/issues/76) |
+|  |  |  |  | [#78 fix(mcp,showcase): prevent saveTravelerPreferences false Service Error when LLM passes empty or placeholder args](https://github.com/fmatar/quarkus-agui/issues/78) |
+|  |  |  |  | [#76 fix(a2a,showcase): support non-ECB currencies (LBP, MAD, EGP, JOD) via open.er-api.com fallback & trailing currency symbols](https://github.com/fmatar/quarkus-agui/issues/76) |
 |  |  |  |  | [#74 feat(arch,showcase): factor out framework-agnostic ag-ui modules & enrich Nomad destination media/music](https://github.com/fmatar/quarkus-agui/issues/74) |
+|  |  |  |  | [#29 feat(client): extract standalone AG-UI Svelte 5 library (packages/agui-svelte)](https://github.com/fmatar/quarkus-agui/issues/29) |
 |  |  |  |  | [#72 fix(showcase): eliminate 10s restcountries healthcheck polling and harden tool elicitation prompts](https://github.com/fmatar/quarkus-agui/issues/72) |
 |  |  |  |  | [#70 chore(kanban): sync merged develop issues (#38-#68) to Done & prune stale branches](https://github.com/fmatar/quarkus-agui/issues/70) |
 |  |  |  |  | [#68 feat(langchain4j-mcp): Idiomatic quarkus-langchain4j-mcp, Multi<ChatEvent> AG-UI Bridge, SmallRye Health & REST Countries v5](https://github.com/fmatar/quarkus-agui/issues/68) |
@@ -59,7 +61,7 @@
 
 | Issue | Status | Priority | Component | Quality Gate | Spec Link |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| [#78 fix(mcp,showcase): prevent saveTravelerPreferences false Service Error when LLM passes empty or placeholder args](https://github.com/fmatar/quarkus-agui/issues/78) | `status:in-progress` | P1 - High | Backend | `Passed` | — |
+| [#78 fix(mcp,showcase): prevent saveTravelerPreferences false Service Error when LLM passes empty or placeholder args](https://github.com/fmatar/quarkus-agui/issues/78) | `status:done` | P1 - High | Backend | `Passed` | — |
 | [#76 fix(a2a,showcase): support non-ECB currencies (LBP, MAD, EGP, JOD) via open.er-api.com fallback & trailing currency symbols](https://github.com/fmatar/quarkus-agui/issues/76) | `status:done` | P1 - High | Backend | `Passed` | — |
 | [#74 feat(arch,showcase): factor out framework-agnostic ag-ui modules & enrich Nomad destination media/music](https://github.com/fmatar/quarkus-agui/issues/74) | `status:done` | P1 - High | Architecture | `Passed` | [ADR-006](docs/adr/ADR-006-framework-agnostic-module-topology-ag-ui-core-ag.md) |
 | [#72 fix(showcase): eliminate 10s restcountries healthcheck polling and harden tool elicitation prompts](https://github.com/fmatar/quarkus-agui/issues/72) | `status:done` | P2 - Medium | Architecture | `Passed` | — |
@@ -85,7 +87,7 @@
 | [#34 feat(showcase): add Docker Compose stack, Dockerfiles, and single-command launcher for Nomad Concierge](https://github.com/fmatar/quarkus-agui/issues/34) | `status:done` | P2 - Medium | Architecture | `Pending` | — |
 | [#32 feat(showcase): Nomad AI Travel & Culture Concierge with modular Svelte 5 AG-UI Component Kit and commercial minimalist UI](https://github.com/fmatar/quarkus-agui/issues/32) | `status:done` | P2 - Medium | Architecture | `Pending` | — |
 | [#30 feat(arch): refactor extensions with BOM and concentric Clean Architecture (Core, SSE, WebSockets)](https://github.com/fmatar/quarkus-agui/issues/30) | `status:done` | P2 - Medium | Architecture | `Pending` | — |
-| [#29 feat(client): extract standalone AG-UI Svelte 5 library (packages/agui-svelte)](https://github.com/fmatar/quarkus-agui/issues/29) | `status:ready` | P2 - Medium | Architecture | `Pending` | — |
+| [#29 feat(client): extract standalone AG-UI Svelte 5 library (packages/agui-svelte)](https://github.com/fmatar/quarkus-agui/issues/29) | `status:done` | P2 - Medium | Architecture | `Passed` | — |
 | [#27 fix(workbench): enforce deterministic service card order and contextualize A2A incident remediation](https://github.com/fmatar/quarkus-agui/issues/27) | `status:done` | P2 - Medium | Architecture | `Pending` | — |
 | [#25 fix(hitl): bind live HITL interrupt to TOOL_CALL and fix pod replica control extraction](https://github.com/fmatar/quarkus-agui/issues/25) | `status:done` | P2 - Medium | Architecture | `Pending` | — |
 | [#23 feat(ui): redesign SRE workbench with cyber-industrial aesthetic, markdown parser, and stable viewport](https://github.com/fmatar/quarkus-agui/issues/23) | `status:done` | P2 - Medium | Architecture | `Pending` | — |
