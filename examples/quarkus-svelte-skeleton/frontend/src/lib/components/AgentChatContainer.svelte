@@ -52,8 +52,9 @@
 	let isCheckingHealth = $state(false);
 	let healthSummary = $derived(summarizeHealthReport(systemHealth));
 	let wsAgent = null;
+	let healthRetryTimer = null;
 
-	async function refreshSystemHealth() {
+	async function refreshSystemHealth(retriesLeft = 0) {
 		if (typeof window === 'undefined' || isCheckingHealth) return;
 		isCheckingHealth = true;
 		try {
@@ -76,6 +77,13 @@
 			};
 		} finally {
 			isCheckingHealth = false;
+			if (typeof retriesLeft === 'number' && retriesLeft > 0 && systemHealth?.status !== 'UP') {
+				if (healthRetryTimer) clearTimeout(healthRetryTimer);
+				healthRetryTimer = setTimeout(() => {
+					healthRetryTimer = null;
+					refreshSystemHealth(retriesLeft - 1);
+				}, 2500);
+			}
 		}
 	}
 
@@ -118,8 +126,12 @@
 
 	onMount(() => {
 		connectWebSocket();
-		refreshSystemHealth();
+		refreshSystemHealth(2);
 		return () => {
+			if (healthRetryTimer) {
+				clearTimeout(healthRetryTimer);
+				healthRetryTimer = null;
+			}
 			wsAgent?.disconnectSocket();
 			wsAgent = null;
 		};

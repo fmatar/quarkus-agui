@@ -17,8 +17,10 @@ import io.quarkiverse.mcp.server.TextResourceContents;
 import io.quarkiverse.mcp.server.Tool;
 import io.quarkiverse.mcp.server.ToolArg;
 import io.quarkiverse.mcp.server.ToolResponse;
+import io.quarkus.runtime.StartupEvent;
 import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.event.Observes;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.net.URI;
@@ -34,6 +36,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executors;
 import java.util.function.Function;
 
 /**
@@ -66,9 +70,20 @@ public class NomadMcpConciergeService {
     String itunesBaseUrl = "https://itunes.apple.com";
     @ConfigProperty(name = "agui.health.cache-ttl-ms", defaultValue = "300000")
     long healthCacheTtlMs = 300_000L;
+    @ConfigProperty(name = "agui.health.degraded-cache-ttl-ms", defaultValue = "5000")
+    long degradedHealthCacheTtlMs = 5_000L;
+    @ConfigProperty(name = "agui.health.warmup-on-start", defaultValue = "true")
+    boolean warmupOnStart = true;
+    private final Object healthRefreshLock = new Object();
     private volatile Map<String, Object> cachedHealthReport;
     private volatile long cachedHealthExpiresAtMs;
     Function<String, UpstreamHttpResult> httpProbe = this::probeUrlViaHttp;
+
+    void onStartup(@Observes StartupEvent event) {
+        if (warmupOnStart) {
+            Thread.ofVirtual().name("nomad-mcp-health-warmup").start(this::checkHealth);
+        }
+    }
 
     void setHttpProbe(Function<String, UpstreamHttpResult> probe) {
         this.httpProbe = probe == null ? this::probeUrlViaHttp : probe;
@@ -534,33 +549,52 @@ public class NomadMcpConciergeService {
         if (cached != null && now < cachedHealthExpiresAtMs) {
             return cached;
         }
-        List<Map<String, Object>> upstreams = new ArrayList<>();
-        upstreams.add(probeUpstreamHealth(
-                "open-meteo",
-                "Open-Meteo Weather API",
-                openMeteoBaseUrl + "/v1/forecast?latitude=48.8566&longitude=2.3522&current=temperature_2m"));
-        upstreams.add(probeUpstreamHealth(
-                "wikipedia",
-                "Wikipedia REST API v1",
-                wikipediaBaseUrl + "/api/rest_v1/page/summary/Paris"));
-        upstreams.add(probeUpstreamHealth(
-                "itunes",
-                "Apple iTunes Search API",
-                itunesBaseUrl + "/search?term=jazz&media=music&entity=song&limit=1"));
+        synchronized (healthRefreshLock) {
+            long refreshedNow = System.currentTimeMillis();
+            Map<String, Object> rechecked = cachedHealthReport;
+            if (rechecked != null && refreshedNow < cachedHealthExpiresAtMs) {
+                return rechecked;
+            }
+            List<Map<String, Object>> upstreams;
+            try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+                CompletableFuture<Map<String, Object>> meteoFuture = CompletableFuture.supplyAsync(
+                        () -> probeUpstreamHealth(
+                                "open-meteo",
+                                "Open-Meteo Weather API",
+                                openMeteoBaseUrl + "/v1/forecast?latitude=48.8566&longitude=2.3522&current=temperature_2m"),
+                        executor);
+                CompletableFuture<Map<String, Object>> wikiFuture = CompletableFuture.supplyAsync(
+                        () -> probeUpstreamHealth(
+                                "wikipedia",
+                                "Wikipedia REST API v1",
+                                wikipediaBaseUrl + "/api/rest_v1/page/summary/Paris"),
+                        executor);
+                CompletableFuture<Map<String, Object>> itunesFuture = CompletableFuture.supplyAsync(
+                        () -> probeUpstreamHealth(
+                                "itunes",
+                                "Apple iTunes Search API",
+                                itunesBaseUrl + "/search?term=jazz&media=music&entity=song&limit=1"),
+                        executor);
+                upstreams = List.of(meteoFuture.join(), wikiFuture.join(), itunesFuture.join());
+            }
 
-        long upCount = upstreams.stream().filter(u -> "UP".equals(u.get("status"))).count();
-        String overall = upCount == upstreams.size() ? "UP" : (upCount == 0 ? "DOWN" : "DEGRADED");
+            long upCount = upstreams.stream().filter(u -> "UP".equals(u.get("status"))).count();
+            String overall = upCount == upstreams.size() ? "UP" : (upCount == 0 ? "DOWN" : "DEGRADED");
 
-        Map<String, Object> report = new LinkedHashMap<>();
-        report.put("server", SERVER_NAME);
-        report.put("status", overall);
-        report.put("healthyCount", upCount);
-        report.put("totalCount", upstreams.size());
-        report.put("upstreams", List.copyOf(upstreams));
-        Map<String, Object> snapshot = Collections.unmodifiableMap(report);
-        cachedHealthReport = snapshot;
-        cachedHealthExpiresAtMs = now + Math.max(0L, healthCacheTtlMs);
-        return snapshot;
+            Map<String, Object> report = new LinkedHashMap<>();
+            report.put("server", SERVER_NAME);
+            report.put("status", overall);
+            report.put("healthyCount", upCount);
+            report.put("totalCount", upstreams.size());
+            report.put("upstreams", upstreams);
+            Map<String, Object> snapshot = Collections.unmodifiableMap(report);
+            long ttlMs = "UP".equals(overall)
+                    ? Math.max(0L, healthCacheTtlMs)
+                    : Math.min(Math.max(0L, healthCacheTtlMs), Math.max(0L, degradedHealthCacheTtlMs));
+            cachedHealthReport = snapshot;
+            cachedHealthExpiresAtMs = System.currentTimeMillis() + ttlMs;
+            return snapshot;
+        }
     }
 
     private Map<String, Object> probeUpstreamHealth(String id, String name, String url) {
