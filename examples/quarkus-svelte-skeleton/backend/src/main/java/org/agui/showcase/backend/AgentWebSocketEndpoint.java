@@ -3,6 +3,8 @@ package org.agui.showcase.backend;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.quarkus.arc.Arc;
+import io.quarkus.arc.ManagedContext;
 import io.quarkus.websockets.next.OnOpen;
 import io.quarkus.websockets.next.OnTextMessage;
 import io.quarkus.websockets.next.WebSocket;
@@ -37,7 +39,7 @@ public class AgentWebSocketEndpoint {
                 "transport", "websocket-full-duplex",
                 "tripDossierState", dossier,
                 "clusterState", dossier,
-                "memoryTurns", orchestrator.getConversationMemory("thread-nomad-1").size()));
+                "memoryTurns", orchestrator.getMemoryTurnCount("thread-nomad-1")));
     }
 
     @OnTextMessage
@@ -87,8 +89,8 @@ public class AgentWebSocketEndpoint {
                     AgentApprovalRequest approval = new AgentApprovalRequest(threadId, approved, reason, modifiedArgs);
                     dispatchWork("agui-ws-hitl-" + threadId, () ->
                             orchestrator.approvePendingAction(approval)
-                                    .collect().asList().await().indefinitely()
-                                    .forEach(frame -> sendRawSseFrameAsJson(connection, frame)));
+                                    .onItem().invoke(frame -> sendRawSseFrameAsJson(connection, frame))
+                                    .collect().last().await().indefinitely());
                 }
 
                 default -> {
@@ -100,8 +102,8 @@ public class AgentWebSocketEndpoint {
                     AgentRunRequest runRequest = new AgentRunRequest(threadId, prompt, state, mode);
                     dispatchWork("agui-ws-run-" + threadId, () ->
                             orchestrator.streamRun(runRequest)
-                                    .collect().asList().await().indefinitely()
-                                    .forEach(frame -> sendRawSseFrameAsJson(connection, frame)));
+                                    .onItem().invoke(frame -> sendRawSseFrameAsJson(connection, frame))
+                                    .collect().last().await().indefinitely());
                 }
             }
         } catch (Exception e) {
@@ -112,10 +114,30 @@ public class AgentWebSocketEndpoint {
     }
 
     private void dispatchWork(String threadName, Runnable task) {
+        Runnable wrapped = () -> runWithRequestContext(task);
         if (asyncDispatch) {
-            Thread.ofVirtual().name(threadName).start(task);
+            Thread.ofVirtual().name(threadName).start(wrapped);
         } else {
+            wrapped.run();
+        }
+    }
+
+    static void runWithRequestContext(Runnable task) {
+        var container = Arc.container();
+        if (container == null) {
             task.run();
+            return;
+        }
+        ManagedContext requestContext = container.requestContext();
+        if (requestContext == null || requestContext.isActive()) {
+            task.run();
+            return;
+        }
+        requestContext.activate();
+        try {
+            task.run();
+        } finally {
+            requestContext.terminate();
         }
     }
 
@@ -138,7 +160,7 @@ public class AgentWebSocketEndpoint {
             return;
         }
         AgUiEvent<Map<String, Object>> event = AgUiEvent.ofType(type, threadId, payload);
-        String json = AgUiSseFormatter.unwrapSseData(orchestrator.agUiBridge().formatter().formatSse(event));
+        String json = AgUiSseFormatter.unwrapSseData(orchestrator.formatter().formatSse(event));
         synchronized (connection) {
             if (connection.isOpen()) {
                 connection.sendTextAndAwait(json.trim());

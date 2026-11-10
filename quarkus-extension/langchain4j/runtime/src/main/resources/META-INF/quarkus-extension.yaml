@@ -1,0 +1,17 @@
+name: "Quarkus AG-UI - LangChain4j Adapter"
+description: "Reactive Multi<ChatEvent> to AG-UI Protocol Adapter for Quarkus LangChain4j"
+artifact: "org.agui:quarkus-ag-ui-langchain4j::jar:0.1.0-SNAPSHOT"
+group-id: "org.agui"
+artifact-id: "quarkus-ag-ui-langchain4j"
+version: "0.1.0-SNAPSHOT"
+metadata:
+  keywords:
+    - "ag-ui"
+    - "langchain4j"
+    - "mcp"
+    - "ai"
+    - "agent"
+  categories:
+    - "ai"
+    - "web"
+  status: "preview"

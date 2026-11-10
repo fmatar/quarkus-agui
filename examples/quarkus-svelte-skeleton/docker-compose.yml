@@ -9,6 +9,12 @@ services:
     environment:
       - QUARKUS_HTTP_HOST=0.0.0.0
       - QUARKUS_HTTP_PORT=8081
+    healthcheck:
+      test: ["CMD", "/usr/bin/bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8081 && printf 'GET /q/health/ready HTTP/1.0\\r\\nHost: 127.0.0.1\\r\\n\\r\\n' >&3 && head -n 1 <&3 | grep -q 200"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     restart: unless-stopped
 
   a2a-server:
@@ -16,10 +22,20 @@ services:
     image: nomad-agui-showcase/a2a-server:latest
     ports:
       - "8082:8082"
+    env_file:
+      - path: ../../.env
+        required: false
     environment:
       - QUARKUS_HTTP_HOST=0.0.0.0
       - QUARKUS_HTTP_PORT=8082
       - AGUI_A2A_PUBLIC_URL=http://a2a-server:8082
+      - RESTCOUNTRIES_API_KEY=${RESTCOUNTRIES_API_KEY:-}
+    healthcheck:
+      test: ["CMD", "/usr/bin/bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8082 && printf 'GET /q/health/ready HTTP/1.0\\r\\nHost: 127.0.0.1\\r\\n\\r\\n' >&3 && head -n 1 <&3 | grep -q 200"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     restart: unless-stopped
 
   backend:
@@ -30,7 +46,8 @@ services:
     environment:
       - QUARKUS_HTTP_HOST=0.0.0.0
       - QUARKUS_HTTP_PORT=8080
-      - AGUI_MCP_BASE_URL=http://mcp-server:8081
+      - AGUI_MCP_URL=http://mcp-server:8081/mcp
+      - AGUI_MCP_HEALTH_URL=http://mcp-server:8081/q/health/ready
       - AGUI_A2A_BASE_URL=http://a2a-server:8082
       - AGUI_OLLAMA_BASE_URL=http://host.docker.internal:11434
       - QUARKUS_LANGCHAIN4J_OLLAMA_BASE_URL=http://host.docker.internal:11434
@@ -39,4 +56,10 @@ services:
     depends_on:
       - mcp-server
       - a2a-server
+    healthcheck:
+      test: ["CMD", "/usr/bin/bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /q/health/ready HTTP/1.0\\r\\nHost: 127.0.0.1\\r\\n\\r\\n' >&3 && head -n 1 <&3 | grep -q 200"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
     restart: unless-stopped

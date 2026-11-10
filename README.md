@@ -53,18 +53,20 @@ node .agent/scripts/sdlc-engine.mjs product status
 
 Verify the MCP Server (`:8081`) and A2A Specialist Server (`:8082`) directly from your terminal:
 ```bash
-# Check Aggregated Live Multi-Service Health (:8080, :8081, :8082)
-curl -s http://localhost:8080/api/agent/health | jq .
+# Check MicroProfile SmallRye Readiness (:8080, :8081, :8082)
+curl -s http://localhost:8080/q/health/ready | jq .
+curl -s http://localhost:8081/q/health/ready | jq .
+curl -s http://localhost:8082/q/health/ready | jq .
 
 # Discover MCP Tools & City Dossier Resource (:8081/mcp + Companion REST Bridge)
 curl -s http://localhost:8081/api/mcp/tools | jq .
 curl -s http://localhost:8081/api/mcp/resources/city/Kyoto | jq .
 
-# Discover Official A2A AgentCard & Delegate Travel Specialist Audit (:8082)
+# Discover Official A2A AgentCard & Delegate Travel Specialist Audit (:8082 — Frankfurter FX & REST Countries v5)
 curl -s http://localhost:8082/.well-known/agent-card.json | jq .
 curl -s -X POST http://localhost:8082/api/a2a/audit \
   -H "Content-Type: application/json" \
-  -d '{"skillId":"convert-and-audit-budget","prompt":"Convert $1,840 USD for Kyoto","context":{"city":"Kyoto","budgetUsd":1840}}' | jq .
+  -d '{"skillId":"verify-travel-advisory","prompt":"Verify Paris advisory","context":{"city":"Paris","country":"France"}}' | jq .
 
 # Stream AG-UI SSE events from the Nomad Concierge Orchestrator (:8080)
 curl -N -X POST http://localhost:8080/api/agent/run \
@@ -82,9 +84,9 @@ curl -N -X POST http://localhost:8080/api/agent/run \
 ```
 
 ### 5. Bring Your Own Agent (BYOA) Contract
-To expose any LangChain4j `TokenStream`, MCP tool client, or A2A sub-agent over the AG-UI protocol in your own Quarkus project:
-1. Add `org.agui:quarkus-ag-ui` to your `pom.xml`.
-2. Inject `AgUiBridge`, `AgUiMcpBridge`, and `AgUiA2aBridge` (or use `AgUiSseFormatter` from `ag-ui-core` in non-Quarkus apps).
+To expose any Quarkus LangChain4j `@RegisterAiService` (`Multi<ChatEvent>`), LangChain4j `TokenStream`, MCP tool client (`@McpToolBox`), or A2A sub-agent over the AG-UI protocol in your own Quarkus project:
+1. Import `org.agui:quarkus-ag-ui-bom` and add `org.agui:quarkus-ag-ui` (plus `org.agui:quarkus-ag-ui-langchain4j` when streaming Quarkus LangChain4j `Multi<ChatEvent>`) to your `pom.xml`.
+2. Inject `AgUiLangChain4jBridge`, `AgUiBridge`, `AgUiMcpBridge`, and `AgUiA2aBridge` (or use `AgUiSseFormatter` from `ag-ui-core` in non-Quarkus apps).
 3. Return `Multi<String>` (SSE frames) or `Multi<ServerSentEvent<AgUiEvent<?>>>` with `@Produces(MediaType.SERVER_SENT_EVENTS)` emitting standard AG-UI events:
    - `RUN_STARTED` $\rightarrow$ `STATUS` $\rightarrow$ `STATE_SNAPSHOT` $\rightarrow$ `TOOL_CALL` / `TOOL_RESULT` $\rightarrow$ `STEP_STARTED` / `STEP_FINISHED` $\rightarrow$ `STATE_DELTA` $\rightarrow$ `TEXT_DELTA` $\rightarrow$ `RUN_FINISHED`.
 
@@ -99,12 +101,13 @@ To expose any LangChain4j `TokenStream`, MCP tool client, or A2A sub-agent over 
 | **`quarkus-ag-ui-core`** | [`quarkus-extension/core/`](quarkus-extension/core/pom.xml) | Core CDI Bridges (`AgUiBridge`, `AgUiMcpBridge`, `AgUiA2aBridge`) & Session Registry Ports | Concentric Clean Architecture |
 | **`quarkus-ag-ui-sse`** | [`quarkus-extension/sse/`](quarkus-extension/sse/pom.xml) | SSE Transport Adapter (`AgUiSseBridge`, `AgUiSseTransportSession`) | Reactive non-blocking SSE |
 | **`quarkus-ag-ui-websockets`** | [`quarkus-extension/websockets/`](quarkus-extension/websockets/pom.xml) | WebSockets Next Transport Adapter (`AgUiWebSocketEndpoint`) | Bidirectional WebSocket streaming |
+| **`quarkus-ag-ui-langchain4j`** | [`quarkus-extension/langchain4j/`](quarkus-extension/langchain4j/pom.xml) | Quarkus LangChain4j `Multi<ChatEvent>` $\rightarrow$ `Multi<AgUiEvent<?>>` Adapter (`AgUiLangChain4jBridge`) | Zero-boilerplate `@RegisterAiService` + `@McpToolBox` streaming |
 | **`quarkus-ag-ui-runtime`** | [`quarkus-extension/runtime/`](quarkus-extension/runtime/pom.xml) | Quarkus 3.40.1.1 Starter aggregating Core + SSE + WebSockets | Zero-config starter |
 | **`quarkus-ag-ui-deployment`** | [`quarkus-extension/deployment/`](quarkus-extension/deployment/pom.xml) | Quarkus Build-Time Processor + Dev UI + GraalVM 25 | $< 50\text{MB}$ Native Image RSS |
 | **`quarkus-ag-ui-integration-tests`** | [`quarkus-extension/integration-tests/`](quarkus-extension/integration-tests/pom.xml) | `@QuarkusTest` & `@QuarkusIntegrationTest` | Ephemeral port `0` isolation |
-| **`mcp-server` (`:8081`)** | [`examples/quarkus-svelte-skeleton/mcp-server/`](examples/quarkus-svelte-skeleton/mcp-server/pom.xml) | Quarkus 3.40.1.1 Nomad MCP Server + Jib Container (`nomad-agui-showcase/mcp-server:latest`) | `fetchCityWeather`, `discoverLocalCultureAndMedia`, `updateTripItinerary`, MCP Resources & Prompts |
-| **`a2a-server` (`:8082`)** | [`examples/quarkus-svelte-skeleton/a2a-server/`](examples/quarkus-svelte-skeleton/a2a-server/pom.xml) | Quarkus 3.40.1.1 A2A Specialist Server + Jib Container (`nomad-agui-showcase/a2a-server:latest`) | `convert-and-audit-budget` (Frankfurter FX), `verify-travel-advisory` (REST Countries) |
-| **`backend` (`:8080`)** | [`examples/quarkus-svelte-skeleton/backend/`](examples/quarkus-svelte-skeleton/backend/pom.xml) | Quarkus 3.40.1.1 Orchestrator + **Quarkus Quinoa** + Jib Container (`nomad-agui-showcase/backend:latest`) | Serves both SvelteKit 5 SPA (`@sveltejs/adapter-static`) and AG-UI WebSocket (`/api/agent/ws`) + SSE (`/api/agent/run`) on `:8080` |
+| **`mcp-server` (`:8081`)** | [`examples/quarkus-svelte-skeleton/mcp-server/`](examples/quarkus-svelte-skeleton/mcp-server/pom.xml) | Quarkus 3.40.1.1 Nomad MCP Server + SmallRye Health (`/q/health/ready`) + Jib Container (`nomad-agui-showcase/mcp-server:latest`) | `fetchCityWeather`, `discoverLocalCultureAndMedia`, `updateTripItinerary`, `saveTravelerPreferences`, `sampleAcousticMood`, `resetNomadState` |
+| **`a2a-server` (`:8082`)** | [`examples/quarkus-svelte-skeleton/a2a-server/`](examples/quarkus-svelte-skeleton/a2a-server/pom.xml) | Quarkus 3.40.1.1 A2A Specialist Server + SmallRye Health (`/q/health/ready`) + Jib Container (`nomad-agui-showcase/a2a-server:latest`) | `convert-and-audit-budget` (Frankfurter FX), `verify-travel-advisory` (REST Countries v5 `api.restcountries.com`) |
+| **`backend` (`:8080`)** | [`examples/quarkus-svelte-skeleton/backend/`](examples/quarkus-svelte-skeleton/backend/pom.xml) | Quarkus 3.40.1.1 `@RegisterAiService` + `@McpToolBox("nomad")` + SmallRye Health + **Quarkus Quinoa** + Jib Container (`nomad-agui-showcase/backend:latest`) | Serves SvelteKit 5 SPA, AG-UI WebSocket (`/api/agent/ws`), SSE (`/api/agent/run`), and `/q/health/ready` on `:8080` |
 | **`frontend` (Quinoa SPA)** | [`examples/quarkus-svelte-skeleton/frontend/`](examples/quarkus-svelte-skeleton/frontend/) | `pnpm` + SvelteKit 5 (`@sveltejs/adapter-static`) packaged into `backend` via `quarkus-quinoa` | 3-Pane Nomad Concierge Studio + Wire Telemetry Inspector served from `:8080` |
 
 ---
@@ -117,4 +120,4 @@ To expose any LangChain4j `TokenStream`, MCP tool client, or A2A sub-agent over 
 - **C4 Architecture**: [`docs/specs/C4_ARCHITECTURE.md`](docs/specs/C4_ARCHITECTURE.md)
 - **Living Kanban & Traceability Matrix**: [`docs/KANBAN.md`](docs/KANBAN.md)
 - **Causal Decision Lineage**: [`docs/DECISION_MAP.md`](docs/DECISION_MAP.md)
-- **Architectural Decision Records (ADRs)**: [`docs/adr/ADR-001`](docs/adr/ADR-001-multi-module-maven-sveltekit-clean-architecture-fo.md), [`docs/adr/ADR-002`](docs/adr/ADR-002-example-first-tri-protocol-ag-ui-mcp-a2a-evoluti.md), [`docs/adr/ADR-003`](docs/adr/ADR-003-multi-extension-bom-and-concentric-transport-arc.md), [`docs/adr/ADR-004`](docs/adr/ADR-004-nomad-concierge-and-svelte5-agui-component-kit.md)
+- **Architectural Decision Records (ADRs)**: [`docs/adr/ADR-001`](docs/adr/ADR-001-multi-module-maven-sveltekit-clean-architecture-.md), [`docs/adr/ADR-002`](docs/adr/ADR-002-example-first-tri-protocol-ag-ui-mcp-a2a-evoluti.md), [`docs/adr/ADR-003`](docs/adr/ADR-003-multi-extension-bom-and-concentric-transport-arc.md), [`docs/adr/ADR-004`](docs/adr/ADR-004-nomad-concierge-and-svelte5-agui-component-kit.md), [`docs/adr/ADR-005`](docs/adr/ADR-005-quarkus-langchain4j-mcp-and-smallrye-health.md)

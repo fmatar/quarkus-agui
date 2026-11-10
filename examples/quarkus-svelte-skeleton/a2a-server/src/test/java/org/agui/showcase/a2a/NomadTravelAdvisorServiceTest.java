@@ -46,13 +46,48 @@ class NomadTravelAdvisorServiceTest {
             }
             """;
 
+    private static final String REST_COUNTRIES_V5_JAPAN_JSON = """
+            {
+                "data": {
+                    "objects": [
+                        {
+                            "names": { "common": "Japan" },
+                            "capitals": [ { "name": "Tokyo" } ],
+                            "region": "Asia",
+                            "currencies": [ { "code": "JPY", "name": "Japanese yen" } ],
+                            "timezones": [ "UTC+09:00" ]
+                        }
+                    ]
+                }
+            }
+            """;
+
+    private static final String REST_COUNTRIES_V5_FRANCE_JSON = """
+            {
+                "data": {
+                    "objects": [
+                        {
+                            "names": { "common": "France" },
+                            "capitals": [ { "name": "Paris" } ],
+                            "region": "Europe",
+                            "currencies": [ { "code": "EUR", "name": "Euro" } ],
+                            "timezones": [ "UTC+01:00" ]
+                        }
+                    ]
+                }
+            }
+            """;
+
     private NomadTravelAdvisorService service;
     private NomadA2aHealthResource healthResource;
+    private NomadA2aReadinessCheck readinessCheck;
 
     @BeforeEach
     void setUp() {
         service = new NomadTravelAdvisorService();
+        service.restCountriesApiKey = Optional.of("test-v5-bearer-token");
         healthResource = new NomadA2aHealthResource(service);
+        readinessCheck = new NomadA2aReadinessCheck(service);
     }
 
     @Test
@@ -79,6 +114,22 @@ class NomadTravelAdvisorServiceTest {
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/ok", exchange -> {
             byte[] bytes = "{\"rates\":{\"EUR\":0.92}}".getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, bytes.length);
+            try (OutputStream os = exchange.getResponseBody()) {
+                os.write(bytes);
+            }
+        });
+        server.createContext("/countries/v5/names.common/France", exchange -> {
+            String auth = exchange.getRequestHeaders().getFirst("Authorization");
+            if (!"Bearer test-v5-bearer-token".equals(auth)) {
+                byte[] denied = "{\"error\":\"Missing Bearer token\"}".getBytes(StandardCharsets.UTF_8);
+                exchange.sendResponseHeaders(401, denied.length);
+                try (OutputStream os = exchange.getResponseBody()) {
+                    os.write(denied);
+                }
+                return;
+            }
+            byte[] bytes = REST_COUNTRIES_V5_FRANCE_JSON.getBytes(StandardCharsets.UTF_8);
             exchange.sendResponseHeaders(200, bytes.length);
             try (OutputStream os = exchange.getResponseBody()) {
                 os.write(bytes);
@@ -120,6 +171,22 @@ class NomadTravelAdvisorServiceTest {
             assertEquals(400, redirectedDeprecation.statusCode());
             assertTrue(service.inspectUpstreamError(redirectedDeprecation, "restcountries.com")
                     .contains("This API version has been deprecated"));
+
+            service.restCountriesBaseUrl = "http://127.0.0.1:" + port;
+            NomadTravelAdvisorService.AuditResult liveV5 =
+                    service.performAudit("verify-travel-advisory", "Verify advisory for Paris", Map.of("city", "Paris"));
+            assertEquals("OK", liveV5.data().get("status"));
+            assertEquals("France", liveV5.data().get("country"));
+            assertEquals("Paris", liveV5.data().get("capital"));
+            assertEquals("EUR", liveV5.data().get("currencyCode"));
+            assertEquals("api.restcountries.com", liveV5.data().get("source"));
+
+            service.restCountriesApiKey = Optional.of("   ");
+            NomadTravelAdvisorService.AuditResult missingKey =
+                    service.performAudit("verify-travel-advisory", "Verify advisory for Paris", Map.of("city", "Paris"));
+            assertEquals("ERROR", missingKey.data().get("status"));
+            assertTrue(String.valueOf(missingKey.data().get("error")).contains("RESTCOUNTRIES_API_KEY"));
+            service.restCountriesApiKey = Optional.of("test-v5-bearer-token");
 
             NomadTravelAdvisorService.UpstreamHttpResult err =
                     service.probeUrlViaHttp("http://127.0.0.1:" + port + "/err");
@@ -177,7 +244,7 @@ class NomadTravelAdvisorServiceTest {
     @Test
     void performTravelAdvisorySurfacesRestCountriesDeprecationAndPayloadErrorsWithoutFakeFallback() {
         service.setHttpProbe(url -> new NomadTravelAdvisorService.UpstreamHttpResult(
-                400, REST_COUNTRIES_DEPRECATION_JSON, "HTTP 400 from restcountries.com", 42L));
+                400, REST_COUNTRIES_DEPRECATION_JSON, "HTTP 400 from api.restcountries.com", 42L));
 
         NomadTravelAdvisorService.AuditResult advError = service.performAudit(
                 "verify-travel-advisory", "Verify travel advisory for Paris", Map.of("city", "Paris"));
@@ -185,12 +252,13 @@ class NomadTravelAdvisorServiceTest {
         assertEquals(Boolean.TRUE, advError.data().get("isError"));
         assertEquals(Boolean.FALSE, advError.data().get("serviceAvailable"));
         assertEquals("UNAVAILABLE", advError.data().get("advisoryStatus"));
-        assertEquals("restcountries.com", advError.data().get("upstream"));
+        assertEquals("api.restcountries.com", advError.data().get("upstream"));
         assertTrue(String.valueOf(advError.data().get("error")).contains("This API version has been deprecated"));
         assertFalse(advError.summary().contains("CLEAR"));
 
-        // Empty array and broken JSON also surface ERROR
-        service.setHttpProbe(url -> new NomadTravelAdvisorService.UpstreamHttpResult(200, "[]", null, 10L));
+        // Empty objects array and broken JSON also surface ERROR
+        service.setHttpProbe(url -> new NomadTravelAdvisorService.UpstreamHttpResult(
+                200, "{\"data\":{\"objects\":[]}}", null, 10L));
         assertEquals("ERROR", service.performAudit("verify-travel-advisory", "Advisory in Lisbon", Map.of()).data().get("status"));
 
         service.setHttpProbe(url -> new NomadTravelAdvisorService.UpstreamHttpResult(200, "{broken-json", null, 10L));
@@ -231,7 +299,7 @@ class NomadTravelAdvisorServiceTest {
             }
             return new NomadTravelAdvisorService.UpstreamHttpResult(
                     200,
-                    "[{\"name\":{\"common\":\"Japan\"},\"capital\":[\"Tokyo\"],\"region\":\"Asia\",\"timezones\":[\"UTC+09:00\"]}]",
+                    REST_COUNTRIES_V5_JAPAN_JSON,
                     null,
                     31L);
         });
@@ -295,16 +363,19 @@ class NomadTravelAdvisorServiceTest {
         Map<String, Object> degraded = healthResource.health();
         assertEquals("DEGRADED", degraded.get("status"));
         assertEquals(1L, ((Number) degraded.get("healthyCount")).longValue());
+        assertEquals(org.eclipse.microprofile.health.HealthCheckResponse.Status.DOWN, readinessCheck.call().getStatus());
 
         // 2. UP health
         service.setHttpProbe(url -> url.contains("frankfurter")
                 ? new NomadTravelAdvisorService.UpstreamHttpResult(200, "{\"rates\":{\"EUR\":0.92}}", null, 15L)
-                : new NomadTravelAdvisorService.UpstreamHttpResult(200, "[{\"name\":{\"common\":\"France\"}}]", null, 18L));
+                : new NomadTravelAdvisorService.UpstreamHttpResult(200, REST_COUNTRIES_V5_FRANCE_JSON, null, 18L));
         assertEquals("UP", healthResource.health().get("status"));
+        assertEquals(org.eclipse.microprofile.health.HealthCheckResponse.Status.UP, readinessCheck.call().getStatus());
 
         // 3. DOWN health
         service.setHttpProbe(url -> new NomadTravelAdvisorService.UpstreamHttpResult(503, null, "down", 5L));
         assertEquals("DOWN", healthResource.health().get("status"));
+        assertEquals(org.eclipse.microprofile.health.HealthCheckResponse.Status.DOWN, readinessCheck.call().getStatus());
 
         // 4. NomadA2aHealthResource.audit
         assertEquals("MISSING_REQUIRED_ARGUMENTS", healthResource.audit(null).data().get("code"));

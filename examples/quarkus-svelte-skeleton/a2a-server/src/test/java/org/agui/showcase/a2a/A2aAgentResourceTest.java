@@ -41,6 +41,14 @@ class A2aAgentResourceTest {
             .body("skills.size()", equalTo(3));
 
         given()
+            .when().get("/q/health/ready")
+            .then()
+            .statusCode(503)
+            .body("status", equalTo("DOWN"))
+            .body("checks[0].name", equalTo("nomad-a2a-upstreams"))
+            .body("checks[0].data.'restcountries.status'", equalTo("DOWN"));
+
+        given()
             .when().get("/api/a2a/health")
             .then()
             .statusCode(200)

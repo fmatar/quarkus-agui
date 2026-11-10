@@ -25,7 +25,9 @@ test('Docker Compose topology uses Jib-built images for mcp-server, a2a-server, 
 	assert.match(content, /8080:8080/);
 	assert.match(content, /AGUI_A2A_BASE_URL=http:\/\/a2a-server:8082/);
 	assert.match(content, /AGUI_A2A_PUBLIC_URL=http:\/\/a2a-server:8082/);
-	assert.match(content, /AGUI_MCP_BASE_URL=http:\/\/mcp-server:8081/);
+	assert.match(content, /AGUI_MCP_URL=http:\/\/mcp-server:8081\/mcp/);
+	assert.match(content, /RESTCOUNTRIES_API_KEY=/);
+	assert.match(content, /\/q\/health\/ready/);
 });
 
 test('Quinoa SPA static adapter, Jib container extensions, -Pnative profile, and run-showcase.sh are configured while legacy Dockerfiles are removed', () => {
@@ -73,10 +75,13 @@ test('Quinoa SPA static adapter, Jib container extensions, -Pnative profile, and
 
 	const launcherContent = fs.readFileSync(launcherScript, 'utf8');
 	assert.match(launcherContent, /quarkus\.container-image\.build=true/);
-	assert.match(launcherContent, /-pl :quarkus-ag-ui-deployment,:quarkus-ag-ui-bom -am/);
+	assert.match(launcherContent, /-pl :quarkus-ag-ui-deployment,:quarkus-ag-ui-langchain4j-deployment,:quarkus-ag-ui-bom -am/);
 	assert.doesNotMatch(launcherContent, /quarkus-extension\/common/);
 	assert.match(launcherContent, /--docker-native/);
 	assert.match(launcherContent, /http:\/\/localhost:8080/);
+
+	const deletedGateway = path.join(showcaseDir, 'backend', 'src', 'main', 'java', 'org', 'agui', 'showcase', 'backend', 'McpGatewayClient.java');
+	assert.equal(fs.existsSync(deletedGateway), false, 'Custom McpGatewayClient.java must remain deleted in favor of quarkus-langchain4j-mcp');
 
 	const showcaseReadmePath = path.join(showcaseDir, 'README.md');
 	assert.equal(fs.existsSync(showcaseReadmePath), true, 'examples/quarkus-svelte-skeleton/README.md should exist');

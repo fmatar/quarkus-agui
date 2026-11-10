@@ -166,6 +166,16 @@
             </dependency>
             <dependency>
                 <groupId>org.agui</groupId>
+                <artifactId>quarkus-ag-ui-langchain4j</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.agui</groupId>
+                <artifactId>quarkus-ag-ui-langchain4j-deployment</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.agui</groupId>
                 <artifactId>quarkus-ag-ui</artifactId>
                 <version>${project.version}</version>
             </dependency>

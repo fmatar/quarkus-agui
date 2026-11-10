@@ -33,45 +33,43 @@ flowchart TB
     subgraph Backend["backend (:8080) — Quarkus 3.40.1.1 + Quinoa + Jib"]
         Quinoa["Quarkus Quinoa Static SPA Router<br/>(META-INF/webui/ -> index.html)"]
         WS["AgentWebSocketEndpoint<br/>(@WebSocket path = '/api/agent/ws')"]
-        REST["AgentResource REST + SSE<br/>('/api/agent/run', '/health', '/approve', '/params')"]
-        Orch["NomadConciergeOrchestratorService<br/>(Ollama-First TravelIntent + Zero-Default TripSlotState)"]
-        McpClient["McpGatewayClient<br/>(quarkus-langchain4j-mcp StreamableHttpMcpTransport)"]
-        Guard["OWASP-LLM01 Input Guardrail<br/>& 16-Turn Sliding-Window Memory"]
-        AgUiExt["quarkus-ag-ui Extension<br/>(AgUiBridge, AgUiMcpBridge, AgUiA2aBridge)"]
+        REST["AgentResource + SmallRye Health<br/>('/api/agent/run', '/q/health/ready')"]
+        Orch["NomadConciergeOrchestratorService + AgUiLangChain4jBridge<br/>(Multi&lt;ChatEvent&gt; -> Multi&lt;AgUiEvent&gt;)"]
+        AiSvc["@RegisterAiService NomadConciergeAiService<br/>(@McpToolBox('nomad') + QuarkusStreamableHttpMcpTransport)"]
+        Guard["TravelSafetyInputGuardrail & TravelHonestyOutputGuardrail<br/>+ NomadChatMemoryStore (16-Turn Window)"]
     end
 
     subgraph McpServer["mcp-server (:8081) — Quarkus MCP Server HTTP + Jib"]
-        McpTools["NomadMcpConciergeService (@Tool -> ToolResponse):<br/>fetchCityWeather, discoverLocalCultureAndMedia,<br/>updateTripItinerary"]
+        McpTools["NomadMcpConciergeService (@Tool -> ToolResponse):<br/>fetchCityWeather, discoverLocalCultureAndMedia,<br/>updateTripItinerary, saveTravelerPreferences, sampleAcousticMood"]
         McpRes["@Resource & @ResourceTemplate:<br/>itinerary://active-trip, traveler://preferences,<br/>itinerary://city/{city}/dossier"]
-        McpHealth["GET /api/mcp/health<br/>(Live Open-Meteo, Wikipedia, iTunes Probes)"]
+        McpHealth["GET /q/health/ready (NomadMcpReadinessCheck)<br/>(Live Open-Meteo, Wikipedia, iTunes Probes)"]
     end
 
     subgraph A2aServer["a2a-server (:8082) — Official A2A SDK + Jib"]
         AgentCard["NomadA2aAgentConfiguration<br/>(GET /.well-known/agent-card.json)"]
         A2aRpc["NomadTravelAdvisorService (JSON-RPC 2.0):<br/>convert-and-audit-budget, verify-travel-advisory,<br/>curate-neighborhood-cadence"]
-        A2aHealth["GET /api/a2a/health<br/>(Live Frankfurter FX & REST Countries Probes)"]
+        A2aHealth["GET /q/health/ready (NomadA2aReadinessCheck)<br/>(Live Frankfurter FX & REST Countries v5 Probes)"]
     end
 
-    subgraph External["Zero-Key Public APIs & Local LLM"]
+    subgraph External["Upstream APIs & Local LLM"]
         Ollama["Local Ollama (:11434)<br/>(llama3.2 / ministral / gemma3 / qwen2.5)"]
         OpenMeteo["Open-Meteo Weather & Geocoding API"]
         Wiki["Wikipedia REST API v1"]
         iTunes["Apple iTunes Search API (30s AAC Audio)"]
         ECB["Frankfurter ECB FX API"]
-        RestCountries["REST Countries API v3.1 (Honest Error Surfacing)"]
+        RestCountries["REST Countries v5 API (api.restcountries.com)"]
     end
 
     Browser <-->|"Full-Duplex WebSocket (/api/agent/ws)<br/>or SSE (/api/agent/run)"| WS
     Browser -->|"Static SPA Assets (/)"| Quinoa
-    Browser -->|"REST + Health (/api/agent/*)"| REST
+    Browser -->|"SmallRye Health (/q/health/ready) + REST"| REST
     WS --> Orch
     REST --> Orch
-    Orch --> Guard
-    Orch --> AgUiExt
-    Orch --> McpClient
-    Orch <-->|"Ollama Chat / Streaming"| Ollama
-    McpClient <-->|"Native MCP Streamable HTTP (:8081/mcp)"| McpServer
-    Orch -->|"A2A JSON-RPC 2.0"| A2aServer
+    Orch --> AiSvc
+    AiSvc --> Guard
+    AiSvc <-->|"Ollama Streaming Chat"| Ollama
+    AiSvc <-->|"Vert.x MCP Streamable HTTP (:8081/mcp)"| McpServer
+    AiSvc -->|"A2A JSON-RPC 2.0"| A2aServer
     McpTools --> OpenMeteo
     McpTools --> Wiki
     McpTools --> iTunes
@@ -81,35 +79,33 @@ flowchart TB
 
 ### 2.2 End-to-End Tri-Protocol Execution Sequence
 
-Every concierge turn classifies user intent (`TravelIntent`), enforces **Zero Assumed Defaults** (`TripSlotState` interactive slot-filling when destination, duration, budget/currency, or travel focus is missing), and streams typed `callType` metadata with **strict upstream error surfacing** (zero silent fake fallbacks):
+Every concierge turn streams through `@ApplicationScoped @RegisterAiService NomadConciergeAiService` + `@McpToolBox("nomad")` and `AgUiLangChain4jBridge`, enforces **Zero Assumed Defaults** (conversational slot elicitation when destination, duration, budget/currency, or travel focus is missing), and emits typed `callType` metadata with **strict upstream error surfacing** (zero silent fake fallbacks):
 
 ```mermaid
 sequenceDiagram
     autonumber
     actor Traveler as Traveler (:8080 UI)
-    participant Orch as backend (:8080)<br/>NomadConciergeOrchestratorService
+    participant Orch as backend (:8080)<br/>NomadConciergeAiService + AgUiLangChain4jBridge
     participant MCP as mcp-server (:8081/mcp)<br/>NomadMcpConciergeService
     participant A2A as a2a-server (:8082)<br/>NomadTravelAdvisorService
     participant LLM as Local Ollama (:11434)<br/>(Default: llama3.2:latest)
 
-    Traveler->>Orch: WS SEND_PROMPT {"threadId", "prompt", "mode"}
+    Traveler->>Orch: WS RUN_AGENT {"threadId", "prompt", "mode"}
     Orch-->>Traveler: RUN_STARTED -> STATE_SNAPSHOT
-    Orch-->>Traveler: STEP_STARTED / FINISHED [guardrail:input]<br/>(TravelSafetyAndInjectionGuardrail + Memory Context)
-    alt Missing Required Trip Slots (Destination / Duration / Budget / Focus)
-        Orch->>LLM: Conversational Slot-Filling Reply
-        Orch-->>Traveler: TEXT_DELTA + StructuredResponseBlock [trip-slot-elicitation] -> RUN_FINISHED
-    else All Trip Planning Slots Supplied
-        Orch->>MCP: MCP prompts/get + resources/read + tools/call (fetchCityWeather)
-        MCP-->>Orch: ToolResponse (Live Open-Meteo Telemetry or isError=true)
-        Orch-->>Traveler: STEP / TOOL_CALL / TOOL_RESULT [mcp:prompt, mcp:resource, mcp:tool] + STATE_DELTA
-        Orch->>MCP: MCP tools/call (discoverLocalCultureAndMedia & updateTripItinerary)
-        MCP-->>Orch: ToolResponse (Wikipedia Landmark + iTunes 30s Audio + Sanctuary Hold)
-        Orch-->>Traveler: TOOL_CALL / TOOL_RESULT [mcp:tool] + [tool:function sampleAcousticMoodProfile]
-        Orch->>A2A: GET /.well-known/agent-card.json + JSON-RPC SendMessage<br/>(convert-and-audit-budget, verify-travel-advisory, curate-neighborhood-cadence)
-        A2A-->>Orch: Live Frankfurter FX + Honest Upstream Status (status: OK | ERROR)
-        Orch-->>Traveler: STEP_STARTED / FINISHED [a2a:discovery, a2a:task, a2a:artifact] + STATE_DELTA
-        Orch->>LLM: Synthesize Grounded Markdown Itinerary (Honoring Upstream Errors)
-        LLM-->>Orch: Streaming Tokens
+    Orch-->>Orch: TravelSafetyInputGuardrail (@InputGuardrails) + NomadChatMemoryStore
+    alt Missing Required Trip Details (Destination / Duration / Budget / Focus)
+        Orch->>LLM: Conversational Slot-Elicitation Turn
+        Orch-->>Traveler: TEXT_DELTA (Ask Missing Parameters) -> RUN_FINISHED
+    else All Trip Planning Details Supplied
+        Orch->>LLM: @McpToolBox("nomad") + A2A & UI @Tool Schemas
+        Orch->>MCP: MCP tools/call (fetchCityWeather, discoverLocalCultureAndMedia, sampleAcousticMood)
+        MCP-->>Orch: ToolResponse (Live Open-Meteo, Wikipedia, iTunes 30s Audio or isError=true)
+        Orch-->>Traveler: TOOL_CALL / TOOL_RESULT [mcp:tool, mcp:sampling] + STATE_DELTA
+        Orch->>A2A: JSON-RPC SendMessage (convert-and-audit-budget, verify-travel-advisory, curate-neighborhood-cadence)
+        A2A-->>Orch: Live Frankfurter FX + REST Countries v5 (api.restcountries.com, status: OK | ERROR)
+        Orch-->>Traveler: STEP_STARTED / FINISHED [a2a:task] + STATE_DELTA
+        Orch->>LLM: Synthesize Grounded Markdown Itinerary + TravelHonestyOutputGuardrail
+        LLM-->>Orch: PartialResponseEvent Token Stream
         Orch-->>Traveler: TEXT_DELTA -> RUN_FINISHED {status: "completed"}
     end
 ```
@@ -123,23 +119,29 @@ examples/quarkus-svelte-skeleton/
 ├── pom.xml                          # Showcase parent POM (manages quarkus-quinoa, quarkus-container-image-jib, -Pnative profile)
 ├── docker-compose.yml               # 3-service Jib container stack (mcp-server :8081, a2a-server :8082, backend :8080)
 ├── run-showcase.sh                  # Unified launcher (--docker, --docker-native, --local)
-├── mcp-server/                      # Port :8081 — Quarkus MCP Server (quarkus-mcp-server-http on /mcp)
+├── mcp-server/                      # Port :8081 — Quarkus MCP Server (quarkus-mcp-server-http on /mcp + SmallRye Health)
 │   └── src/main/java/org/agui/showcase/mcp/
-│       ├── NomadMcpConciergeService.java      # @Tool (ToolResponse), @Resource, @ResourceTemplate, @Prompt, @CompletePrompt, Health
+│       ├── NomadMcpConciergeService.java      # @Tool (ToolResponse), @Resource, @ResourceTemplate, @Prompt, @CompletePrompt
+│       ├── NomadMcpReadinessCheck.java        # @Readiness HealthCheck probing Open-Meteo, Wikipedia, and Apple iTunes (/q/health/ready)
 │       ├── McpServerResource.java             # Companion REST bridge (/api/mcp/health, /tools, /resources/city/{city}, /prompts/complete)
 │       ├── McpToolInvocationRequest.java      # Typed MCP tool call request record
 │       └── McpToolInvocationResponse.java     # Typed MCP tool call response envelope
-├── a2a-server/                      # Port :8082 — Official A2A Specialist Server
+├── a2a-server/                      # Port :8082 — Official A2A Specialist Server + SmallRye Health
 │   └── src/main/java/org/agui/showcase/a2a/
 │       ├── NomadA2aAgentConfiguration.java    # @Produces AgentCard (/.well-known/agent-card.json) & AgentExecutor
-│       ├── NomadTravelAdvisorService.java     # Live Frankfurter FX, neighborhood cadence & REST Countries verification (zero fake fallbacks)
-│       └── NomadA2aHealthResource.java        # Live upstream health probe (/api/a2a/health) & companion audit (/api/a2a/audit)
-├── backend/                         # Port :8080 — Quarkus Orchestrator + Quinoa SPA Host
+│       ├── NomadTravelAdvisorService.java     # Live Frankfurter FX, cadence & authenticated REST Countries v5 (api.restcountries.com)
+│       ├── NomadA2aReadinessCheck.java        # @Readiness HealthCheck probing Frankfurter FX & REST Countries v5 (/q/health/ready)
+│       └── NomadA2aHealthResource.java        # Companion health (/api/a2a/health) & audit (/api/a2a/audit) endpoints
+├── backend/                         # Port :8080 — Quarkus LangChain4j Orchestrator + Quinoa SPA Host + SmallRye Health
 │   └── src/main/java/org/agui/showcase/backend/
+│       ├── NomadConciergeAiService.java          # @ApplicationScoped @RegisterAiService + @McpToolBox("nomad") + @InputGuardrails
+│       ├── NomadA2aAgentTools.java               # @Tool bridge delegating to Nomad-A2A-Specialist (:8082) with required-arg guards
+│       ├── NomadUiSurfaceTools.java              # @Tool beans for AG-UI ChoiceCards & HITL (>= $1,500 USD) sanctuary holds
+│       ├── NomadBackendReadinessChecks.java      # @Readiness HealthCheck beans alongside built-in McpClientHealthCheck (/q/health/ready)
+│       ├── NomadConciergeOrchestratorService.java # Adapts Multi<ChatEvent> via AgUiLangChain4jBridge + @McpClientName("nomad")
+│       ├── TripDossierStore.java                 # Synchronizes MCP resources & tool executions into AG-UI STATE_DELTA snapshots
 │       ├── AgentWebSocketEndpoint.java           # @WebSocket(path = "/api/agent/ws") full-duplex AG-UI endpoint
 │       ├── AgentResource.java                    # REST + SSE endpoints (/api/agent/run, /health, /approve, /params)
-│       ├── NomadConciergeOrchestratorService.java # Ollama-first TravelIntent router, 16-turn memory, TripSlotState slot-filling, HITL
-│       ├── McpGatewayClient.java                 # Native quarkus-langchain4j-mcp StreamableHttpMcpTransport client (:8081/mcp)
 │       └── A2aGatewayClient.java                 # Official A2A JSON-RPC client to a2a-server (:8082)
 └── frontend/                        # SvelteKit 5 (Runes) SPA packaged via Quarkus Quinoa
     ├── svelte.config.js             # @sveltejs/adapter-static (fallback: 'index.html' for Quinoa SPA routing)
@@ -175,26 +177,27 @@ examples/quarkus-svelte-skeleton/
 
 ### 4.1 Full-Duplex WebSockets (`/api/agent/ws`) & Sub-50ms State Sync
 - [`AgentWebSocketEndpoint`](file:///Users/fady/workspace/labs/quarkus-agui/examples/quarkus-svelte-skeleton/backend/src/main/java/org/agui/showcase/backend/AgentWebSocketEndpoint.java) uses Quarkus WebSockets Next (`@WebSocket(path = "/api/agent/ws")`) to multiplex bidirectional JSON frames over a single persistent connection:
-  - **Outbound Client Actions (`OUT` $\uparrow$)**: `RUN_AGENT` (`SEND_PROMPT`), `UPDATE_TRIP_PARAMS` (clicking `- 5N +` or switching `USD`/`EUR`/`GBP` in the Trip Dossier updates budget math in `<50ms` without an LLM round-trip), `HITL_APPROVE`, `CANCEL_RUN`, `RESET_MEMORY`, and `PING`.
+  - **Outbound Client Actions (`OUT` $\uparrow$)**: `RUN_AGENT`, `UPDATE_TRIP_PARAMS` (clicking `- 5N +` or switching `USD`/`EUR`/`GBP` in the Trip Dossier updates budget math in `<50ms` without an LLM round-trip), `APPROVE_HITL`, `CANCEL_RUN`, `RESET_MEMORY`, and `PING`.
   - **Inbound Server Events (`IN` $\downarrow$)**: Standard AG-UI events (`RUN_STARTED`, `STATE_SNAPSHOT`, `TOOL_CALL`, `TOOL_RESULT`, `STEP_STARTED`, `STEP_FINISHED`, `STATE_DELTA`, `TEXT_DELTA`, `RUN_FINISHED`).
 - If WebSockets are unavailable, [`AgentChatContainer.svelte`](file:///Users/fady/workspace/labs/quarkus-agui/examples/quarkus-svelte-skeleton/frontend/src/lib/components/AgentChatContainer.svelte) automatically falls back to `POST /api/agent/run` (`text/event-stream`).
 
-### 4.2 Multi-Turn Conversational Memory, Zero Assumed Defaults & Slot-Filling
-- [`NomadConciergeOrchestratorService`](file:///Users/fady/workspace/labs/quarkus-agui/examples/quarkus-svelte-skeleton/backend/src/main/java/org/agui/showcase/backend/NomadConciergeOrchestratorService.java) defaults to local Ollama (`ollama:llama3.2:latest`), classifies each prompt into a focused `TravelIntent`, maintains a thread-safe 16-turn sliding window per `threadId`, and automatically extracts persistent traveler preferences into `traveler://preferences`.
-- **Zero Assumed Defaults**: Neither MCP, A2A, backend, nor UI assumes `Kyoto`, `3`/`4` nights, `$3,200 USD`, or pre-filled traveler traits. When a traveler asks *"I want a trip in Paris"*, Nomad merges partial `TripSlotState` slots across turns and asks conversationally for any missing required parameters (**Destination**, **Duration**, **Budget & Currency**, **Travel Focus**) before invoking itinerary planning tools.
+### 4.2 Declarative `@RegisterAiService` + `@McpToolBox("nomad")`, Conversational Memory & Zero Assumed Defaults
+- [`NomadConciergeAiService`](file:///Users/fady/workspace/labs/quarkus-agui/examples/quarkus-svelte-skeleton/backend/src/main/java/org/agui/showcase/backend/NomadConciergeAiService.java) binds local Ollama (`ollama:llama3.2:latest`) declaratively via Quarkus LangChain4j (`@McpToolBox("nomad")` over Vert.x `QuarkusStreamableHttpMcpTransport`), maintains a 16-message sliding window per `@MemoryId` backed by `NomadChatMemoryStore`, and streams `Multi<ChatEvent>` through `AgUiLangChain4jBridge` (`quarkus-ag-ui-langchain4j`).
+- **Zero Assumed Defaults**: Neither MCP, A2A, backend, nor UI assumes `Kyoto`, `3`/`4` nights, `$3,200 USD`, or pre-filled traveler traits. When a traveler asks *"I want a trip in Paris"*, Nomad refuses to assume defaults and asks conversationally for any missing required parameters (**Destination**, **Duration**, **Budget & Currency**, **Travel Focus**) before invoking itinerary planning tools.
 
-### 4.3 Live Multi-Service Healthchecks & Honest Upstream Error Surfacing
-- Zero silent fake fallbacks: every external API failure or deprecation (such as `restcountries.com/v3.1` returning `{"success":false,"errors":[{"message":"This API version has been deprecated..."}]}`) surfaces `isError: true` / `status: "ERROR"` across `TOOL_RESULT`, `STEP_FINISHED`, `ExecutionTimeline.svelte` (`Service Error`), `TurnFooter.svelte` (`UNAVAILABLE`), `ProtocolInspector.svelte` (`ERROR`), and the assistant reply.
-- Aggregated live health probes run across `GET /api/mcp/health` (`:8081`), `GET /api/a2a/health` (`:8082`), and `GET /api/agent/health` (`:8080`), powering the **Top-Bar Health Pill + Popover** (`All Systems Operational` / `Degraded • N API Down` / `Offline`).
+### 4.3 MicroProfile SmallRye Health (`/q/health/ready`), REST Countries v5 & Honest Error Surfacing
+- **Authenticated REST Countries v5 (`api.restcountries.com`)**: `NomadTravelAdvisorService` (`:8082`) queries `https://api.restcountries.com/countries/v5/names.common/{country}` with `Authorization: Bearer <RESTCOUNTRIES_API_KEY>` loaded from `.env`.
+- **Zero Silent Fake Fallbacks**: Any missing key or upstream HTTP error surfaces `isError: true` / `status: "ERROR"` across `TOOL_RESULT`, `STEP_FINISHED`, `ExecutionTimeline.svelte` (`Service Error`), `TurnFooter.svelte` (`UNAVAILABLE`), `ProtocolInspector.svelte` (`ERROR`), and the assistant reply.
+- **Standard SmallRye Health (`/q/health/ready`)**: Live readiness probes run across `GET /q/health/ready` on `:8081`, `:8082`, and `:8080` (including `quarkus-langchain4j-mcp`'s built-in `McpClientHealthCheck`), powering the **Top-Bar Health Pill + Popover** (`All Systems Operational` / `Degraded • N API Down` / `Offline`).
 
 ### 4.4 Prompt-Injection Guardrails, Acoustic Mood Sampling & A2A Neighborhood Cadence
-- **OWASP-LLM01 Input Guardrail (`guardrail:input`)**: Validates prompt safety and blocks prompt-injection patterns (`ignore previous instructions`, `reveal your system prompt`, `jailbreak`, `bypass safety`) before invoking downstream tools or LLMs.
-- **Native MCP Prompt, Resource & Acoustic Sampling (`mcp:prompt`, `mcp:resource`, `tool:function`)**: Expands `weekend-cultural-escape`, reads `traveler://preferences` and `itinerary://city/{city}/dossier` over `:8081/mcp`, and samples regional acoustic mood profiles tailored to live destination weather.
-- **A2A Specialist Skills & Artifacts (`a2a:discovery`, `a2a:task`, `a2a:artifact`)**: Discovers `GET /.well-known/agent-card.json` and delegates `convert-and-audit-budget` (Frankfurter FX), `verify-travel-advisory` (REST Countries), and `curate-neighborhood-cadence` (`neighborhood-cadence-{city}` artifact).
+- **OWASP-LLM01 & LLM07 Guardrails (`TravelSafetyInputGuardrail`, `TravelHonestyOutputGuardrail`)**: Validates prompt safety on `@RegisterAiService` input and verifies grounded assistant completions before finalizing turns.
+- **Native MCP Tools, Resources & Acoustic Sampling (`mcp:tool`, `mcp:resource`, `mcp:sampling`)**: Discovers `@Tool` schemas via `@McpToolBox("nomad")`, reads `itinerary://active-trip` and `traveler://preferences` via `@McpClientName("nomad")`, and samples regional acoustic mood profiles (`sampleAcousticMood`) tailored to live destination weather.
+- **A2A Specialist Skills & Artifacts (`a2a:task`)**: Discovers `GET /.well-known/agent-card.json` and delegates `convert-and-audit-budget` (Frankfurter FX), `verify-travel-advisory` (REST Countries v5 `api.restcountries.com`), and `curate-neighborhood-cadence`.
 
 ### 4.5 Wide-Resolution (`2560x1440`) Editorial Layout & Deep-Linked Sources
 - On wide viewports (`@container turn-card (inline-size > 820px)`), [`AssistantTurn.svelte`](file:///Users/fady/workspace/labs/quarkus-agui/examples/quarkus-svelte-skeleton/frontend/src/lib/components/agui/AssistantTurn.svelte) switches into a 2-column **Editorial Split**: narrative prose and budget breakdown table on the left (`1.38fr`), paired with a sticky right-hand companion rail (`0.92fr`) housing the `16:10` architectural photograph, native `<dialog>` top-layer lightbox, 30-second Apple iTunes audio preview player, and interactive choice cards.
-- Every turn includes parameterized, zero-auth **Verified Sources** deep links (`api.open-meteo.com/v1/forecast?...`, `en.wikipedia.org/wiki/...`, `itunes.apple.com/search?...`, `api.frankfurter.dev/v1/latest?...`, `restcountries.com/v3.1/name/...`).
+- **Every turn includes parameterized Verified Sources** deep links (`api.open-meteo.com/v1/forecast`, `en.wikipedia.org/wiki/...`, `itunes.apple.com/search`, `api.frankfurter.dev/v1/latest`, `api.restcountries.com/countries/v5/names.common/...`).
 
 ---
 
@@ -203,8 +206,9 @@ examples/quarkus-svelte-skeleton/
 ### Prerequisites
 - **Java 25** (`java -version`)
 - **pnpm** (`pnpm -v`)
+- **Ollama** (`ollama pull llama3.2:latest`) for live `@RegisterAiService` conversational reasoning & tool calling
+- **`RESTCOUNTRIES_API_KEY`** configured in root `.env` (`cp .env.example .env`) for authenticated REST Countries v5 travel advisories
 - **Docker** (optional, required only for Jib container modes)
-- **Ollama** (optional, required only when selecting a live local Ollama model instead of the built-in `Deterministic Concierge Engine`)
 
 ---
 
@@ -266,7 +270,7 @@ For scale-to-zero serverless deployments (`~25–45ms` cold startup, `~50MB` RSS
 - **`WS Connected` / `SSE Mode` Toggle**: Switch live between full-duplex WebSockets (`/api/agent/ws`) and HTTP Server-Sent Events (`/api/agent/run`).
 - **Live Top-Bar Health Pill + Popover**: Displays live upstream service health (`All Systems Operational` / `Degraded • N API Down` / `Offline`) across `MCP (:8081/mcp)`, `A2A (:8082)`, `Ollama (:11434)`, `Open-Meteo`, `Wikipedia`, `Apple iTunes`, `Frankfurter FX`, and `REST Countries` with a 1-click **Refresh** probe.
 - **`Memory: N` Badge & Reset (`↺`)**: Inspect how many conversational turns are stored for the active thread, or click `↺` to clear thread memory, extracted traveler preferences, and partial trip slots.
-- **LLM Engine Selector**: Defaults to live local Ollama (`Llama 3.2 • Live Local Ollama`), with additional Ollama models (`Ministral 8B`, `Gemma 3`, `Qwen 2.5 3B`) and an explicit **`Deterministic Concierge Engine (Instant)`** option.
+- **LLM Engine Selector**: Selects between live local Ollama models (`Llama 3.2 • Live Local Ollama`, `Ministral 8B`, `Gemma 3`, `Qwen 2.5 3B`).
 - **Scenario Presets**: Click **`Paris (Slot Fill)`**, **`Kyoto Full Run`**, **`Lisbon Full Run`**, or **`Check Advisory`** in the header, or type any city in the world (e.g., *"Plan a 5-night museums and jazz trip in Paris with €2,500 EUR"*).
 
 ### 6.2 Left Pane: Trip Dossier & Traveler Profile
@@ -274,7 +278,7 @@ For scale-to-zero serverless deployments (`~25–45ms` cold startup, `~50MB` RSS
 - **Home Currency Switcher (`USD` / `EUR` / `GBP`)**: Re-anchors the budget bar and live Frankfurter ECB exchange rate badge immediately.
 - **Concierge Verifications**: Trigger targeted 1-click actions once a destination is active:
   - **`Audit FX & Trip Budget`** (`A2A` Frankfurter FX)
-  - **`Verify Entry & Travel Advisory`** (`A2A` REST Countries — surfaces deprecation errors honestly)
+  - **`Verify Entry & Travel Advisory`** (`A2A` REST Countries v5 `api.restcountries.com`)
   - **`Hold Sanctuary Suite ($1,840)`** (`HITL` approval gate `>$1,500`)
 - **`Export .md`**: Downloads the current destination's curated itinerary, weather telemetry, FX rates, and traveler profile as a Markdown file (`nomad-paris-dossier.md`).
 
@@ -290,7 +294,7 @@ Press `/` in the prompt bar (or `⌘K` / `Ctrl+K` anywhere) to open the keyboard
 | `/media` | **MCP Media** — fetches Wikipedia landmark photography & 30s Apple iTunes audio | `Play local Fado music from Lisbon` |
 | `/choices` | **AG-UI ChoiceGroup** — renders interactive multi-select neighborhood cards | `Give me 4 multi_select evening options in Beirut to pick from` |
 | `/mcp` | **MCP** — queries live Open-Meteo geocoding & forecast over `:8081/mcp` | `What is the weather in Oaxaca right now?` |
-| `/a2a` | **A2A** — runs live REST Countries advisory check (surfaces upstream deprecations) | `Check the travel advisory for Beirut` |
+| `/a2a` | **A2A** — runs live REST Countries v5 (`api.restcountries.com`) advisory check | `Check the travel advisory for Beirut` |
 | `/hitl` | **HITL Gate** — triggers the `>$1,500` Human-in-the-Loop sanctuary hold gate | `Reserve Hoshinoya Arashiyama Pavilion in Kyoto for 4 nights ($1840)` |
 
 ---
@@ -300,10 +304,10 @@ Press `/` in the prompt bar (or `⌘K` / `Ctrl+K` anywhere) to open the keyboard
 You can inspect all three protocol servers directly from your terminal while the stack is running:
 
 ```bash
-# 0. Aggregated Multi-Service Upstream Healthcheck (:8080, :8081, :8082)
-curl -s http://localhost:8080/api/agent/health | jq .
-curl -s http://localhost:8081/api/mcp/health | jq .
-curl -s http://localhost:8082/api/a2a/health | jq .
+# 0. Standard MicroProfile SmallRye Readiness (:8080, :8081, :8082)
+curl -s http://localhost:8080/q/health/ready | jq .
+curl -s http://localhost:8081/q/health/ready | jq .
+curl -s http://localhost:8082/q/health/ready | jq .
 
 # 1. MCP Server (:8081/mcp Streamable HTTP + Companion REST Bridge)
 curl -s http://localhost:8081/api/mcp/tools | jq .

@@ -276,9 +276,9 @@ public class NomadMcpConciergeService {
                         + " with playable audio preview and local budget breakdown."));
     }
 
-    @Tool(description = "Fetch live Open-Meteo weather forecast and temperature for an explicit travel destination city")
+    @Tool(description = "Fetch live Open-Meteo weather forecast and temperature for an explicit destination city. Never guess or assume a default city; ask the traveler first if no city was specified.")
     public ToolResponse fetchCityWeather(
-            @ToolArg(description = "Destination city name (required, no default assumed)") String city) {
+            @ToolArg(description = "Explicit destination city name stated by the traveler (never invent a default city)", required = true) String city) {
         if (city == null || city.isBlank()) {
             return errorToolResponse(
                     "MISSING_REQUIRED_ARGUMENTS",
@@ -345,10 +345,10 @@ public class NomadMcpConciergeService {
         }
     }
 
-    @Tool(description = "Discover local cultural landmarks via Wikipedia REST API and a 30s local music preview via Apple iTunes Search API")
+    @Tool(description = "Discover local cultural landmarks via Wikipedia REST v1 and a 30s local music preview via Apple iTunes Search API for an explicit destination. Never invent a default destination.")
     public ToolResponse discoverLocalCultureAndMedia(
-            @ToolArg(description = "Destination city or country name (required)") String destination,
-            @ToolArg(description = "Optional music or cultural search query") String genre) {
+            @ToolArg(description = "Explicit destination city or country stated by the traveler (never invent a default)", required = true) String destination,
+            @ToolArg(description = "Optional music or cultural genre stated by the traveler; pass empty string if not specified", required = false) String genre) {
         if (destination == null || destination.isBlank()) {
             return errorToolResponse(
                     "MISSING_REQUIRED_ARGUMENTS",
@@ -406,12 +406,12 @@ public class NomadMcpConciergeService {
         return successToolResponse(payload);
     }
 
-    @Tool(description = "Update or reserve a cultural stop in the active trip itinerary (requires explicit city, stopTitle, nights, and costUsd)")
+    @Tool(description = "Update or reserve a cultural stop in the active trip itinerary ONLY when the traveler has explicitly provided city, stopTitle, nights, and costUsd (never assume 3 nights or default costs; for holds >= 1500 USD call requestSanctuaryReservation instead).")
     public ToolResponse updateTripItinerary(
-            @ToolArg(description = "Destination city (required)") String city,
-            @ToolArg(description = "Stop or boutique stay title (required)") String stopTitle,
-            @ToolArg(description = "Number of nights (required, 1..30)") Integer nights,
-            @ToolArg(description = "Estimated cost in USD (required, >= 0)") Double costUsd) {
+            @ToolArg(description = "Explicit destination city stated by the traveler", required = true) String city,
+            @ToolArg(description = "Explicit stop or boutique stay title", required = true) String stopTitle,
+            @ToolArg(description = "Explicit number of nights stated by the traveler (1..30, never guess 3)", required = true) Integer nights,
+            @ToolArg(description = "Explicit estimated cost in USD (>= 0, never guess)", required = true) Double costUsd) {
         if (city == null || city.isBlank()
                 || stopTitle == null || stopTitle.isBlank()
                 || nights == null || nights <= 0
@@ -429,6 +429,62 @@ public class NomadMcpConciergeService {
         activeTrip.put("nights", clampedNights);
         activeTrip.put("allocatedUsd", costUsd);
         return successToolResponse(getActiveTripSnapshot());
+    }
+
+    @Tool(description = "Sample a twilight acoustic listening mood profile for an explicit destination city, optional weather condition, and optional music genre. Never guess a default city.")
+    public ToolResponse sampleAcousticMood(
+            @ToolArg(description = "Explicit destination city name stated by the traveler", required = true) String city,
+            @ToolArg(description = "Observed weather condition if known, otherwise empty string", required = false) String weatherCondition,
+            @ToolArg(description = "Preferred regional or musical genre if stated by the traveler, otherwise empty string", required = false) String genre) {
+        Map<String, Object> result = sampleAcousticMoodProfile(city, weatherCondition, genre);
+        if ("ERROR".equals(result.get("status"))) {
+            return errorToolResponse(
+                    String.valueOf(result.getOrDefault("code", "MISSING_REQUIRED_ARGUMENTS")),
+                    String.valueOf(result.getOrDefault("error", "Required argument 'city' was not supplied.")),
+                    SERVER_NAME);
+        }
+        return successToolResponse(result);
+    }
+
+    @Tool(description = "Persist explicit traveler preferences (name, architectural/travel style, dietary needs, music taste, pace, home currency) into the MCP traveler://preferences resource. Only pass fields the traveler actually stated.")
+    public ToolResponse saveTravelerPreferences(
+            @ToolArg(description = "Traveler name if explicitly stated", required = false) String travelerName,
+            @ToolArg(description = "Travel or architectural style if explicitly stated", required = false) String style,
+            @ToolArg(description = "Dietary preference if explicitly stated", required = false) String dietary,
+            @ToolArg(description = "Music taste if explicitly stated", required = false) String musicTaste,
+            @ToolArg(description = "Trip pace if explicitly stated", required = false) String pace,
+            @ToolArg(description = "3-letter ISO home currency code if explicitly stated", required = false) String homeCurrency) {
+        Map<String, Object> updates = new LinkedHashMap<>();
+        putIfNonBlank(updates, "travelerName", travelerName);
+        putIfNonBlank(updates, "style", style);
+        putIfNonBlank(updates, "dietary", dietary);
+        putIfNonBlank(updates, "musicTaste", musicTaste);
+        putIfNonBlank(updates, "pace", pace);
+        putIfNonBlank(updates, "homeCurrency", homeCurrency);
+        if (updates.isEmpty()) {
+            return errorToolResponse(
+                    "MISSING_REQUIRED_ARGUMENTS",
+                    "saveTravelerPreferences requires at least one non-blank preference stated by the traveler.",
+                    SERVER_NAME);
+        }
+        return successToolResponse(updateTravelerPreferences(updates));
+    }
+
+    @Tool(description = "Reset the active MCP trip itinerary and traveler preferences when starting a brand-new conversation or clearing memory.")
+    public ToolResponse resetNomadState() {
+        resetState();
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("status", "OK");
+        payload.put("reset", true);
+        payload.put("activeTrip", getActiveTripSnapshot());
+        payload.put("preferences", getTravelerPreferences());
+        return successToolResponse(payload);
+    }
+
+    private static void putIfNonBlank(Map<String, Object> target, String key, String value) {
+        if (value != null && !value.isBlank()) {
+            target.put(key, value.trim());
+        }
     }
 
     public Map<String, Object> checkHealth() {
@@ -564,7 +620,21 @@ public class NomadMcpConciergeService {
                 Map.of(
                         "name", "updateTripItinerary",
                         "description", "Update or reserve a cultural stop in the active trip itinerary",
-                        "requiredParameters", List.of("city", "stopTitle", "nights", "costUsd")));
+                        "requiredParameters", List.of("city", "stopTitle", "nights", "costUsd")),
+                Map.of(
+                        "name", "sampleAcousticMood",
+                        "description", "Sample a twilight acoustic listening mood profile for an explicit destination city",
+                        "requiredParameters", List.of("city"),
+                        "optionalParameters", List.of("weatherCondition", "genre")),
+                Map.of(
+                        "name", "saveTravelerPreferences",
+                        "description", "Persist explicit traveler preferences into traveler://preferences",
+                        "requiredParameters", List.of(),
+                        "optionalParameters", List.of("travelerName", "style", "dietary", "musicTaste", "pace", "homeCurrency")),
+                Map.of(
+                        "name", "resetNomadState",
+                        "description", "Reset active MCP trip itinerary and traveler preferences",
+                        "requiredParameters", List.of()));
     }
 
     public McpToolInvocationResponse dispatchTool(McpToolInvocationRequest request) {
@@ -582,6 +652,18 @@ public class NomadMcpConciergeService {
                     stringArg(args, "stopTitle"),
                     intArg(args, "nights"),
                     doubleArg(args, "costUsd"));
+            case "sampleAcousticMood" -> sampleAcousticMood(
+                    stringArg(args, "city"),
+                    stringArg(args, "weatherCondition"),
+                    stringArg(args, "genre"));
+            case "saveTravelerPreferences" -> saveTravelerPreferences(
+                    stringArg(args, "travelerName"),
+                    stringArg(args, "style"),
+                    stringArg(args, "dietary"),
+                    stringArg(args, "musicTaste"),
+                    stringArg(args, "pace"),
+                    stringArg(args, "homeCurrency"));
+            case "resetNomadState" -> resetNomadState();
             default -> errorToolResponse("UNSUPPORTED_TOOL", "Unsupported MCP tool: " + toolName, SERVER_NAME);
         };
         long elapsedMs = Math.max(1L, (System.nanoTime() - startNs) / 1_000_000L);

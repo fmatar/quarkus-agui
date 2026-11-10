@@ -33,8 +33,7 @@
 		{ value: 'ollama:llama3.2:latest', label: 'Llama 3.2 • Live Local Ollama' },
 		{ value: 'ollama:ministral-3:8b', label: 'Ministral 8B • Live Local Ollama' },
 		{ value: 'ollama:gemma3:latest', label: 'Gemma 3 • Live Local Ollama' },
-		{ value: 'ollama:qwen2.5:3b', label: 'Qwen 2.5 3B • Live Local Ollama' },
-		{ value: 'deterministic', label: 'Deterministic Concierge Engine (Instant)' }
+		{ value: 'ollama:qwen2.5:3b', label: 'Qwen 2.5 3B • Live Local Ollama' }
 	];
 
 	const HEADER_PRESETS = SCENARIO_PRESETS.slice(0, 4);
@@ -54,19 +53,20 @@
 		if (typeof window === 'undefined' || isCheckingHealth) return;
 		isCheckingHealth = true;
 		try {
-			const res = await fetch('/api/agent/health');
-			if (res.ok) {
+			const res = await fetch('/q/health/ready');
+			if (res.ok || res.status === 503) {
 				systemHealth = await res.json();
 			}
 		} catch (err) {
 			systemHealth = {
 				status: 'DOWN',
-				services: [
+				checks: [
 					{
-						id: 'backend',
-						name: 'Nomad Orchestrator (:8080)',
+						name: 'nomad-backend-orchestrator',
 						status: 'DOWN',
-						error: err?.message ?? 'Orchestrator unreachable'
+						data: {
+							error: err?.message ?? 'Orchestrator unreachable'
+						}
 					}
 				]
 			};
@@ -523,7 +523,7 @@
 						: healthSummary.status === 'UNKNOWN'
 							? 'border-[#E4E0D8] bg-[#F6F5F2] text-[#575551]'
 							: 'border-[#C84B31]/40 bg-[#FBEEE9] text-[#C84B31]'}"
-					title="Live Multi-Service & Upstream API Healthcheck (/api/agent/health)"
+					title="Live MicroProfile SmallRye Readiness Check (/q/health/ready)"
 				>
 					{#if healthSummary.status === 'UP'}
 						<Activity class="size-3.5 shrink-0" />
@@ -577,7 +577,7 @@
 							Live Protocol & Upstream API Healthcheck
 						</h2>
 						<p class="font-mono text-[10px] text-[#575551]">
-							GET /api/agent/health • {healthSummary.healthyCount}/{healthSummary.totalCount} operational
+							GET /q/health/ready • {healthSummary.healthyCount}/{healthSummary.totalCount} operational
 						</p>
 					</div>
 					<div class="flex items-center gap-1">

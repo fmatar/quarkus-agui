@@ -677,4 +677,55 @@ test('Zero assumed defaults, honest upstream error surfacing, summarizeHealthRep
 	});
 	assert.equal(healthySummary.status, 'UP');
 	assert.equal(healthySummary.label, 'All Systems Operational');
+
+	// 5. MicroProfile SmallRye Health (/q/health/ready) checks[] support (HTTP 200 UP & HTTP 503 DOWN) + no deterministic UI mode (#68)
+	const smallRyeUp = summarizeHealthReport({
+		status: 'UP',
+		checks: [
+			{ name: 'MCP clients health check', status: 'UP', data: { nomad: 'OK' } },
+			{
+				name: 'nomad-mcp-upstreams',
+				status: 'UP',
+				data: { 'open-meteo.status': 'UP', 'wikipedia-rest.status': 'UP', 'itunes-audio.status': 'UP' }
+			},
+			{
+				name: 'nomad-a2a-specialist',
+				status: 'UP',
+				data: { 'frankfurter-fx.status': 'UP', 'restcountries-advisory.status': 'UP' }
+			},
+			{ name: 'ollama-chat-model', status: 'UP', data: { model: 'llama3.2:latest' } }
+		]
+	});
+	assert.equal(smallRyeUp.status, 'UP');
+	assert.equal(smallRyeUp.label, 'All Systems Operational');
+	assert.equal(smallRyeUp.downCount, 0);
+	assert.ok(smallRyeUp.services.some((s) => s.id === 'restcountries-advisory' && s.status === 'UP'));
+
+	const smallRye503 = summarizeHealthReport({
+		status: 'DOWN',
+		checks: [
+			{ name: 'MCP clients health check', status: 'UP', data: { nomad: 'OK' } },
+			{
+				name: 'nomad-a2a-specialist',
+				status: 'DOWN',
+				data: {
+					'frankfurter-fx.status': 'UP',
+					'restcountries-advisory.status': 'DOWN',
+					'restcountries-advisory.error': 'Missing RESTCOUNTRIES_API_KEY configuration for api.restcountries.com v5'
+				}
+			}
+		]
+	});
+	assert.equal(smallRye503.status, 'DEGRADED');
+	assert.equal(smallRye503.downCount, 2);
+	assert.ok(
+		smallRye503.downServices.some(
+			(s) => s.id === 'restcountries-advisory' && s.error?.includes('RESTCOUNTRIES_API_KEY')
+		)
+	);
+
+	const containerSource = fs.readFileSync(path.join(componentsDir, 'AgentChatContainer.svelte'), 'utf8');
+	assert.ok(containerSource.includes("fetch('/q/health/ready')"));
+	assert.ok(containerSource.includes('res.status === 503'));
+	assert.ok(!containerSource.includes("value: 'deterministic'"));
 });

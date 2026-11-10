@@ -3,6 +3,7 @@ package org.agui.showcase.a2a;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.enterprise.context.ApplicationScoped;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.net.URI;
 import java.net.URLEncoder;
@@ -16,6 +17,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -54,8 +56,15 @@ public class NomadTravelAdvisorService {
             .followRedirects(HttpClient.Redirect.NORMAL)
             .build();
 
+    @ConfigProperty(name = "frankfurter.base-url", defaultValue = "https://api.frankfurter.dev")
     String frankfurterBaseUrl = "https://api.frankfurter.dev";
-    String restCountriesBaseUrl = "https://restcountries.com";
+
+    @ConfigProperty(name = "restcountries.base-url", defaultValue = "https://api.restcountries.com")
+    String restCountriesBaseUrl = "https://api.restcountries.com";
+
+    @ConfigProperty(name = "restcountries.api-key")
+    Optional<String> restCountriesApiKey = Optional.empty();
+
     Function<String, UpstreamHttpResult> httpProbe = this::probeUrlViaHttp;
 
     void setHttpProbe(Function<String, UpstreamHttpResult> probe) {
@@ -73,12 +82,15 @@ public class NomadTravelAdvisorService {
     UpstreamHttpResult probeUrlViaHttp(String url) {
         long startNs = System.nanoTime();
         try {
-            HttpRequest req = HttpRequest.newBuilder(URI.create(url))
-                    .timeout(Duration.ofMillis(2000))
+            HttpRequest.Builder reqBuilder = HttpRequest.newBuilder(URI.create(url))
+                    .timeout(Duration.ofMillis(2500))
                     .header("User-Agent", "Nomad-Quarkus-AGUI/1.0")
-                    .GET()
-                    .build();
-            HttpResponse<String> res = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
+                    .GET();
+            String trimmedKey = resolvedRestCountriesApiKey();
+            if (!trimmedKey.isEmpty() && url.startsWith(restCountriesBaseUrl)) {
+                reqBuilder.header("Authorization", "Bearer " + trimmedKey);
+            }
+            HttpResponse<String> res = httpClient.send(reqBuilder.build(), HttpResponse.BodyHandlers.ofString());
             long elapsedMs = Math.max(1L, (System.nanoTime() - startNs) / 1_000_000L);
             if (res.statusCode() >= 200 && res.statusCode() < 300) {
                 return new UpstreamHttpResult(res.statusCode(), res.body(), null, elapsedMs);
@@ -92,6 +104,21 @@ public class NomadTravelAdvisorService {
             long elapsedMs = Math.max(1L, (System.nanoTime() - startNs) / 1_000_000L);
             return new UpstreamHttpResult(0, null, ex.getClass().getSimpleName() + ": " + ex.getMessage(), elapsedMs);
         }
+    }
+
+    UpstreamHttpResult probeRestCountriesV5(String url) {
+        if (resolvedRestCountriesApiKey().isEmpty()) {
+            return new UpstreamHttpResult(
+                    401,
+                    null,
+                    "Missing RESTCOUNTRIES_API_KEY configuration for api.restcountries.com v5",
+                    1L);
+        }
+        return httpProbe.apply(url);
+    }
+
+    private String resolvedRestCountriesApiKey() {
+        return restCountriesApiKey == null ? "" : restCountriesApiKey.map(String::trim).orElse("");
     }
 
     public AuditResult performAudit(String skillId, String prompt, Map<String, Object> context) {
@@ -213,40 +240,45 @@ public class NomadTravelAdvisorService {
                     "Missing required argument 'city' for verify-travel-advisory.");
         }
         String country = stringFromCtx(ctx, "country", resolveCountryForCity(city));
-        String url = restCountriesBaseUrl + "/v3.1/name/"
-                + URLEncoder.encode(country, StandardCharsets.UTF_8)
-                + "?fields=name,capital,currencies,region,timezones";
+        String encodedCountry = URLEncoder.encode(country, StandardCharsets.UTF_8).replace("+", "%20");
+        String url = restCountriesBaseUrl + "/countries/v5/names.common/"
+                + encodedCountry
+                + "?response_fields=names.common,capitals,currencies,region,timezones";
 
-        UpstreamHttpResult res = httpProbe.apply(url);
-        String apiError = inspectUpstreamError(res, "restcountries.com");
+        UpstreamHttpResult res = probeRestCountriesV5(url);
+        String apiError = inspectUpstreamError(res, "api.restcountries.com");
         if (apiError != null) {
             return buildServiceUnavailableResult(
                     "art-adv-1",
                     "Destination Entry & Cultural Advisory Dossier",
-                    "restcountries.com",
-                    "Travel Advisory Service Unavailable (restcountries.com)",
+                    "api.restcountries.com",
+                    "Travel Advisory Service Unavailable (api.restcountries.com)",
                     apiError,
                     Map.of("city", city, "country", country, "advisoryStatus", "UNAVAILABLE"));
         }
 
         try {
-            JsonNode arr = objectMapper.readTree(res.body());
-            if (!arr.isArray() || arr.isEmpty()) {
+            JsonNode root = objectMapper.readTree(res.body());
+            JsonNode objects = root.path("data").path("objects");
+            if (!objects.isArray() || objects.isEmpty()) {
                 return buildServiceUnavailableResult(
                         "art-adv-1",
                         "Destination Entry & Cultural Advisory Dossier",
-                        "restcountries.com",
-                        "Travel Advisory Service Unavailable (restcountries.com)",
-                        "Unexpected response payload from restcountries.com for " + country,
+                        "api.restcountries.com",
+                        "Travel Advisory Service Unavailable (api.restcountries.com)",
+                        "Unexpected response payload from api.restcountries.com for " + country,
                         Map.of("city", city, "country", country, "advisoryStatus", "UNAVAILABLE"));
             }
 
-            JsonNode first = arr.get(0);
-            String resolvedCountry = first.path("name").path("common").asText(country);
-            String capital = (first.path("capital").isArray() && !first.path("capital").isEmpty())
-                    ? first.path("capital").get(0).asText(city)
+            JsonNode first = objects.get(0);
+            String resolvedCountry = first.path("names").path("common").asText(country);
+            String capital = (first.path("capitals").isArray() && !first.path("capitals").isEmpty())
+                    ? first.path("capitals").get(0).path("name").asText(city)
                     : city;
             String region = first.path("region").asText("Unknown");
+            String currencyCode = (first.path("currencies").isArray() && !first.path("currencies").isEmpty())
+                    ? first.path("currencies").get(0).path("code").asText(resolveStaticCurrencyForCountry(resolvedCountry))
+                    : resolveStaticCurrencyForCountry(resolvedCountry);
             String timezone = (first.path("timezones").isArray() && !first.path("timezones").isEmpty())
                     ? first.path("timezones").get(0).asText("UTC")
                     : "UTC";
@@ -259,22 +291,23 @@ public class NomadTravelAdvisorService {
             data.put("country", resolvedCountry);
             data.put("capital", capital);
             data.put("region", region);
+            data.put("currencyCode", currencyCode);
             data.put("timezone", timezone);
             data.put("advisoryStatus", "VERIFIED — Country Metadata & Timezone Confirmed");
-            data.put("source", "restcountries.com");
+            data.put("source", "api.restcountries.com");
 
             String summary = String.format(
                     Locale.ROOT,
-                    "Destination advisory verified for %s (%s, %s): capital %s, local timezone %s.",
-                    city, resolvedCountry, region, capital, timezone);
+                    "Destination advisory verified for %s (%s, %s): capital %s, currency %s, local timezone %s.",
+                    city, resolvedCountry, region, capital, currencyCode, timezone);
             return new AuditResult(summary, "art-adv-1", "Destination Entry & Cultural Advisory Dossier", data);
         } catch (Exception ex) {
             return buildServiceUnavailableResult(
                     "art-adv-1",
                     "Destination Entry & Cultural Advisory Dossier",
-                    "restcountries.com",
-                    "Travel Advisory Service Unavailable (restcountries.com)",
-                    "Invalid JSON payload from restcountries.com: " + ex.getMessage(),
+                    "api.restcountries.com",
+                    "Travel Advisory Service Unavailable (api.restcountries.com)",
+                    "Invalid JSON payload from api.restcountries.com: " + ex.getMessage(),
                     Map.of("city", city, "country", country, "advisoryStatus", "UNAVAILABLE"));
         }
     }
@@ -326,12 +359,14 @@ public class NomadTravelAdvisorService {
                 "frankfurter",
                 "Frankfurter ECB FX API",
                 "api.frankfurter.dev",
-                frankfurterBaseUrl + "/v1/latest?base=USD&symbols=EUR"));
+                frankfurterBaseUrl + "/v1/latest?base=USD&symbols=EUR",
+                httpProbe));
         upstreams.add(probeUpstreamHealth(
                 "restcountries",
-                "REST Countries Travel Advisory API",
-                "restcountries.com",
-                restCountriesBaseUrl + "/v3.1/name/France?fields=name"));
+                "REST Countries v5 Travel Advisory API",
+                "api.restcountries.com",
+                restCountriesBaseUrl + "/countries/v5/names.common/France?response_fields=names.common,region",
+                this::probeRestCountriesV5));
 
         long upCount = upstreams.stream().filter(u -> "UP".equals(u.get("status"))).count();
         String overall = upCount == upstreams.size() ? "UP" : (upCount == 0 ? "DOWN" : "DEGRADED");
@@ -345,8 +380,13 @@ public class NomadTravelAdvisorService {
         return report;
     }
 
-    private Map<String, Object> probeUpstreamHealth(String id, String name, String host, String url) {
-        UpstreamHttpResult res = httpProbe.apply(url);
+    private Map<String, Object> probeUpstreamHealth(
+            String id,
+            String name,
+            String host,
+            String url,
+            Function<String, UpstreamHttpResult> probeFn) {
+        UpstreamHttpResult res = probeFn.apply(url);
         String error = inspectUpstreamError(res, host);
         Map<String, Object> entry = new LinkedHashMap<>();
         entry.put("id", id);

@@ -23,12 +23,14 @@ class NomadMcpConciergeServiceTest {
 
     private NomadMcpConciergeService service;
     private McpServerResource resource;
+    private NomadMcpReadinessCheck readinessCheck;
 
     @BeforeEach
     void setUp() {
         service = new NomadMcpConciergeService();
         service.init();
         resource = new McpServerResource(service);
+        readinessCheck = new NomadMcpReadinessCheck(service);
     }
 
     @Test
@@ -339,8 +341,12 @@ class NomadMcpConciergeServiceTest {
         assertEquals(((List<?>) completeRes.get("values")).size(), completeRes.get("total"));
 
         assertEquals(2, ((List<?>) resource.listPrompts().get("prompts")).size());
-        assertEquals(3, ((List<?>) resource.listTools().get("tools")).size());
+        assertEquals(6, ((List<?>) resource.listTools().get("tools")).size());
         assertEquals("UP", resource.health().get("status"));
+        assertEquals(
+                org.eclipse.microprofile.health.HealthCheckResponse.Status.UP,
+                readinessCheck.call().getStatus());
+        assertEquals("nomad-mcp-upstreams", readinessCheck.call().getName());
 
         Map<String, Object> updates = new HashMap<>();
         updates.put("travelerName", "Fady");
@@ -350,6 +356,32 @@ class NomadMcpConciergeServiceTest {
         resource.updatePreferences(null);
         assertEquals("Fady", resource.getPreferences().get("travelerName"));
         assertFalse(resource.getPreferences().containsKey("blankKey"));
+
+        // Native MCP @Tool methods for acoustic sampling, preferences, and state reset
+        assertTrue(service.sampleAcousticMood(null, null, null).isError());
+        assertTrue(service.sampleAcousticMood("  ", "Clear", "jazz").isError());
+        ToolResponse sampledTool = service.sampleAcousticMood("Beirut", "Clear", "oud");
+        assertFalse(sampledTool.isError());
+        assertEquals("Beirut", ((Map<String, Object>) sampledTool.structuredContent()).get("city"));
+        assertFalse(service.dispatchTool(new McpToolInvocationRequest(
+                "sampleAcousticMood", Map.of("city", "Lisbon", "weatherCondition", "Sunny", "genre", "fado"))).isError());
+
+        assertTrue(service.saveTravelerPreferences(null, " ", null, "", null, "   ").isError());
+        ToolResponse savedPrefsTool = service.saveTravelerPreferences(
+                "Fady", "Architecture", "Mediterranean", "Oud & Jazz", "Unhurried", "EUR");
+        assertFalse(savedPrefsTool.isError());
+        Map<String, Object> savedPrefsMap = (Map<String, Object>) savedPrefsTool.structuredContent();
+        assertEquals("Fady", savedPrefsMap.get("travelerName"));
+        assertEquals("Architecture", savedPrefsMap.get("style"));
+        assertEquals("EUR", savedPrefsMap.get("homeCurrency"));
+        assertFalse(service.dispatchTool(new McpToolInvocationRequest(
+                "saveTravelerPreferences", Map.of("pace", "Relaxed", "dietary", "Pescatarian"))).isError());
+
+        ToolResponse resetTool = service.resetNomadState();
+        assertFalse(resetTool.isError());
+        assertNull(service.getActiveTripSnapshot().get("activeCity"));
+        assertNull(service.getTravelerPreferences().get("travelerName"));
+        assertFalse(service.dispatchTool(new McpToolInvocationRequest("resetNomadState", Map.of())).isError());
 
         assertNotNull(service.weekendCulturalEscapePrompt("Paris").content());
         assertNotNull(service.localMusicAndFoodWalkPrompt("Beirut").content());
@@ -369,5 +401,11 @@ class NomadMcpConciergeServiceTest {
         assertEquals("OK", customMood.get("status"));
         assertEquals("Ambient local sky", customMood.get("weatherCondition"));
         assertEquals("regional acoustic", customMood.get("genre"));
+
+        // Verify readiness check reports DOWN with upstream error details when an upstream fails
+        service.setHttpProbe(url -> new NomadMcpConciergeService.UpstreamHttpResult(503, null, "Upstream offline", 9L));
+        var downCheck = readinessCheck.call();
+        assertEquals(org.eclipse.microprofile.health.HealthCheckResponse.Status.DOWN, downCheck.getStatus());
+        assertEquals("Upstream offline", downCheck.getData().orElseThrow().get("open-meteo.error"));
     }
 }

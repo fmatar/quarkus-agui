@@ -39,6 +39,8 @@ flowchart TD
   ADR_003["ADR-003: Multi-Extension BOM and Concentric Transport Architecture (Core, SSE, WebSockets)"]
   _30["Ticket #30 (feat/bom-multi-extension-clean-arch)"]
   ADR_004["ADR-004: ADR-004: Nomad Cultural Concierge Showcase & Modular Svelte 5 AG-UI Component Kit"]
+  ADR_005["ADR-005: Quarkus LangChain4j Reactive AG-UI Bridge, Declarative @McpToolBox & SmallRye Health + REST Countries v5"]
+  _68["Ticket #68 (feature/issue-#68-quarkus-langchain4j-mcp-v5)"]
   CAP_01 -->|specified_by| SPEC_01
   CAP_02 -->|specified_by| SPEC_02
   CAP_01 -->|depends_on| CAP_02
@@ -97,6 +99,12 @@ flowchart TD
   CAP_07 -->|realized_by| ADR_002
   CAP_08 -->|realized_by| ADR_002
   _30 -.->|ADR Drift| ADR_003
+  _68 -->|triggered_drift_adr| ADR_005
+  CAP_03 -.->|ADR Drift| ADR_005
+  CAP_04 -.->|ADR Drift| ADR_005
+  CAP_06 -.->|ADR Drift| ADR_005
+  CAP_07 -.->|ADR Drift| ADR_005
+  CAP_08 -.->|ADR Drift| ADR_005
 ```
 
 ---
@@ -108,7 +116,8 @@ flowchart TD
 | **ADR-001** | Multi-Module Maven & SvelteKit Clean Architecture for AG-UI Protocol | `technical` | `accepted` | #1 | CAP-01, CAP-03, CAP-04, CAP-07 |
 | **ADR-002** | Example-First Tri-Protocol (AG-UI + MCP + A2A) Evolution on Java 25, Quarkus 3.40.1.1 & pnpm | `product` | `accepted` | #2 | CAP-01, CAP-02, CAP-03, CAP-04, CAP-05, CAP-06, CAP-07, CAP-08 |
 | **ADR-003** | Multi-Extension BOM and Concentric Transport Architecture (Core, SSE, WebSockets) | `technical` | `accepted` | #30 | CAP-06, CAP-07 |
-| **ADR-004** | ADR-004: Nomad Cultural Concierge Showcase & Modular Svelte 5 AG-UI Component Kit | `technical` | `accepted` | N/A | None |
+| **ADR-004** | ADR-004: Nomad Cultural Concierge Showcase & Modular Svelte 5 AG-UI Component Kit | `technical` | `accepted` | #32 | CAP-01..CAP-08 |
+| **ADR-005** | Quarkus LangChain4j Reactive AG-UI Bridge, Declarative `@McpToolBox` & SmallRye Health + REST Countries v5 | `technical` | `accepted` | #68 | CAP-03, CAP-04, CAP-06, CAP-07, CAP-08 |
 
 ---
 

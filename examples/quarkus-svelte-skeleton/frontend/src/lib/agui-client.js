@@ -95,7 +95,7 @@ export const SLASH_COMMANDS = [
 	{
 		command: '/a2a',
 		label: 'Travel Advisory Verification',
-		description: 'Run live A2A REST Countries advisory check (surfaces upstream deprecations honestly)',
+		description: 'Run live A2A REST Countries v5 advisory check via api.restcountries.com',
 		protocol: 'A2A',
 		prompt: 'Check the travel advisory for Beirut'
 	},
@@ -328,7 +328,7 @@ export function createInitialWorkbenchState(threadId = 'thread-nomad-1') {
 				role: 'assistant',
 				status: 'completed',
 				content:
-					'### Welcome to Nomad — Conversational Travel & Local Culture Concierge\n\nTell me **where you want to travel**, ask a focused question (live weather, currency conversion, regional music, or travel advisories), or pick a destination below.\n\n- **Zero Assumed Defaults**: When planning a trip, Nomad never assumes 3 or 4 days or a preset budget—it asks for **duration**, **budget & currency**, and **travel focus** first.\n- **Native `quarkus-mcp` (`:8081/mcp`) + Official `A2A` (`:8082`)**: Live Open-Meteo weather, Wikipedia & iTunes 30s audio, and Frankfurter ECB FX.\n- **Honest Service Health**: Upstream API failures or deprecations (such as `restcountries.com/v3.1`) are surfaced transparently in the Top-Bar Health Pill, Execution Spine, and chat.',
+					'### Welcome to Nomad — Conversational Travel & Local Culture Concierge\n\nTell me **where you want to travel**, ask a focused question (live weather, currency conversion, regional music, or travel advisories), or pick a destination below.\n\n- **Zero Assumed Defaults**: When planning a trip, Nomad never assumes 3 or 4 days or a preset budget—it asks for **duration**, **budget & currency**, and **travel focus** first.\n- **Quarkus LangChain4j `@McpToolBox("nomad")` (`:8081/mcp`) + Official `A2A` (`:8082`)**: Live Open-Meteo weather, Wikipedia & iTunes 30s audio, Frankfurter ECB FX, and REST Countries v5 (`api.restcountries.com`).\n- **MicroProfile SmallRye Health (`/q/health/ready`)**: Live readiness across MCP clients, A2A upstreams, and Ollama is surfaced transparently in the Top-Bar Health Pill, Execution Spine, and chat.',
 				reasoning: null,
 				timeline: [],
 				mcpCalls: [],
@@ -863,11 +863,90 @@ function extractErrorDetail(payload) {
 	);
 }
 
+const HEALTH_CHECK_LABELS = {
+	'MCP clients health check': 'Quarkus LangChain4j MCP Client (nomad)',
+	'Quarkus LangChain4j MCP clients': 'Quarkus LangChain4j MCP Client (nomad)',
+	'nomad-mcp-upstreams': 'Quarkus MCP Server (:8081/q/health/ready)',
+	'nomad-a2a-specialist': 'Quarkus A2A Specialist (:8082/q/health/ready)',
+	'nomad-a2a-upstreams': 'Quarkus A2A Specialist Upstreams (:8082)',
+	'ollama-chat-model': 'Ollama Local LLM',
+	'open-meteo': 'Open-Meteo Weather & Geocoding API',
+	wikipedia: 'Wikipedia REST v1 Cultural API',
+	'wikipedia-rest': 'Wikipedia REST v1 Cultural API',
+	itunes: 'Apple iTunes 30s Acoustic API',
+	'itunes-audio': 'Apple iTunes 30s Acoustic API',
+	frankfurter: 'Frankfurter ECB FX Reference API',
+	'frankfurter-fx': 'Frankfurter ECB FX Reference API',
+	restcountries: 'REST Countries v5 Travel Advisory API (api.restcountries.com)',
+	'restcountries-advisory': 'REST Countries v5 Travel Advisory API (api.restcountries.com)'
+};
+
+function resolveHealthCheckLabel(id, data) {
+	if (id === 'ollama-chat-model' && data?.model) {
+		return `Ollama Local LLM (${data.model})`;
+	}
+	return HEALTH_CHECK_LABELS[id] ?? id;
+}
+
+function normalizeSmallRyeChecks(checks) {
+	const services = [];
+	for (const check of checks) {
+		if (!check || typeof check !== 'object') continue;
+		const id = check.name ?? 'health-check';
+		const data = check.data && typeof check.data === 'object' ? check.data : {};
+		let primaryError = data.error ?? null;
+		const subServices = [];
+
+		for (const [key, val] of Object.entries(data)) {
+			if (key.endsWith('.status')) {
+				const subId = key.slice(0, -'.status'.length);
+				const subStatus = String(val ?? 'DOWN').toUpperCase();
+				const subError = data[`${subId}.error`] ? String(data[`${subId}.error`]) : null;
+				if (subStatus !== 'UP' && !primaryError && subError) {
+					primaryError = subError;
+				}
+				subServices.push({
+					id: subId,
+					via: id,
+					name: resolveHealthCheckLabel(subId, data),
+					status: subStatus,
+					error: subError
+				});
+			}
+		}
+
+		if (check.status !== 'UP' && !primaryError) {
+			const failedEntry = Object.entries(data).find(
+				([k, v]) => !k.endsWith('.status') && !k.endsWith('.error') && k !== 'endpoint' && k !== 'model' && v !== 'OK'
+			);
+			if (failedEntry) {
+				primaryError = `${failedEntry[0]}: ${failedEntry[1]}`;
+			}
+		}
+
+		services.push({
+			id,
+			name: resolveHealthCheckLabel(id, data),
+			status: String(check.status ?? 'DOWN').toUpperCase(),
+			error: primaryError
+		});
+		services.push(...subServices);
+	}
+	return services;
+}
+
 /**
- * Summarizes the aggregated `/api/agent/health` report for the Top-Bar Health Pill & Dossier Footer.
+ * Summarizes MicroProfile SmallRye Health (`/q/health/ready` `{ status, checks }`) or legacy
+ * `/api/agent/health` (`{ status, services }`) payloads for the Top-Bar Health Pill & Popover.
  */
 export function summarizeHealthReport(health) {
-	if (!health || !Array.isArray(health.services)) {
+	const fromChecks = Array.isArray(health?.checks);
+	const services = fromChecks
+		? normalizeSmallRyeChecks(health.checks)
+		: Array.isArray(health?.services)
+			? health.services
+			: null;
+	if (!services) {
 		return {
 			status: 'UNKNOWN',
 			label: 'Checking Health...',
@@ -878,12 +957,20 @@ export function summarizeHealthReport(health) {
 			services: []
 		};
 	}
-	const services = health.services;
 	const downServices = services.filter((s) => s.status !== 'UP');
 	const downCount = downServices.length;
 	const healthyCount = services.length - downCount;
-	const status =
-		health.status ?? (downCount === 0 ? 'UP' : healthyCount === 0 ? 'DOWN' : 'DEGRADED');
+	let status;
+	if (fromChecks) {
+		status =
+			downCount === 0 && String(health.status ?? 'UP').toUpperCase() === 'UP'
+				? 'UP'
+				: healthyCount === 0
+					? 'DOWN'
+					: 'DEGRADED';
+	} else {
+		status = health.status ?? (downCount === 0 ? 'UP' : healthyCount === 0 ? 'DOWN' : 'DEGRADED');
+	}
 	const label =
 		status === 'UP'
 			? 'All Systems Operational'
@@ -921,8 +1008,11 @@ function summarizeToolResult(tool, result) {
 	if (tool === 'retrieveCulturalFieldNotes') {
 		return `${result.chunksRetrieved ?? 3} field notes retrieved (cosine similarity ${result.topSimilarity ?? 0.98})`;
 	}
-	if (tool === 'sampleAcousticMoodProfile') {
+	if (tool === 'sampleAcousticMoodProfile' || tool === 'sampleAcousticMood') {
 		return result.sampledMood ?? 'Sampled acoustic twilight mood';
+	}
+	if (tool === 'saveTravelerPreferences' && result.travelerName) {
+		return `Traveler profile updated: ${result.travelerName}`;
 	}
 	if (result.architecturalHighlight) {
 		return `${result.city} — ${result.architecturalHighlight}`;
