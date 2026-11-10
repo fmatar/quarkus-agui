@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- fix(a2a,showcase): support non-ECB currencies (`LBP`, `MAD`, `EGP`, `JOD`, `AED`, `ARS`, `COP`, `PEN`, `CLP`, `VND`, `TWD`) via keyless ISO 4217 `open.er-api.com` fallback when `api.frankfurter.dev` returns `404 not found`, accept both `currency` and `targetCurrency` context keys in `NomadTravelAdvisorService.performCurrencyAndBudgetAudit`, and parse trailing currency symbols (e.g. `2000$`, `1500€`, `1000£`) in `TripDossierStore.extractBudgetFromPrompt` & `NomadTravelAdvisorService` ([#76](https://github.com/fmatar/quarkus-agui/issues/76))
+
 ### Changed
 - feat(arch,showcase): factor out framework-agnostic AG-UI modules (`ag-ui-core`, `ag-ui-a2a`, `ag-ui-langchain4j`) and plain Quarkus adapter (`ag-ui-quarkus`) managed by `ag-ui-bom`, eliminate all 5 Quarkus build-time `-deployment` extension modules in favor of standard `META-INF/beans.xml` + GraalVM `META-INF/native-image/.../reflect-config.json`, sanitize placeholder music genres and resolve curated destination soundtracks in `NomadMcpConciergeService`, auto-enrich `TripDossierStore.finalizeTurnDossier` with Wikipedia landmark photography (`heroImageUrl`), 30s Apple iTunes audio preview (`soundtrack`), weather, and FX rates, and render the landmark plate & audio player in `TripDossierPanel.svelte` (`ADR-006`, [#74](https://github.com/fmatar/quarkus-agui/issues/74))
 
