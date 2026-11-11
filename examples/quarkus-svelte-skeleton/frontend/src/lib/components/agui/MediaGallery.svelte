@@ -1,9 +1,11 @@
 <script>
 	import { ExternalLink, FileText, Film, Image as ImageIcon, Music, Radio } from '@lucide/svelte';
+	import { sanitizeExternalUrl } from '$lib/agui-client.js';
 
 	let { media = [] } = $props();
 	let lightboxImage = $state(null);
 	let dialogEl = $state(null);
+	let safeLightboxUrl = $derived(sanitizeExternalUrl(lightboxImage?.url));
 
 	const WAVEFORM_BARS = [
 		28, 52, 74, 42, 88, 64, 36, 94, 58, 46, 82, 70, 38, 90, 62, 48, 76, 54, 84, 40, 68, 50, 34, 60
@@ -29,15 +31,17 @@
 {#if media?.length}
 	<div class="turn-media-grid">
 		{#each media as item (item.title + item.type)}
-			{#if item.type === 'image'}
+			{@const safeItemUrl = sanitizeExternalUrl(item.url)}
+			{@const safePosterUrl = sanitizeExternalUrl(item.posterUrl)}
+			{#if item.type === 'image' && safeItemUrl}
 				<div class="nomad-card overflow-hidden rounded-xl">
 					<button
 						type="button"
-						onclick={() => openLightbox(item)}
+						onclick={() => openLightbox({ ...item, url: safeItemUrl })}
 						class="group relative block aspect-[16/10] max-h-60 w-full overflow-hidden bg-[#EFECE6] text-left"
 					>
 						<img
-							src={item.url}
+							src={safeItemUrl}
 							alt={item.title}
 							loading="lazy"
 							class="block h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
@@ -95,23 +99,25 @@
 						</div>
 					</div>
 
-					<div class="mt-3">
-						<audio
-							controls
-							preload="none"
-							src={item.url}
-							aria-label="Play 30 second audio preview for {item.title}"
-							class="h-9 w-full"
-						></audio>
-					</div>
+					{#if safeItemUrl}
+						<div class="mt-3">
+							<audio
+								controls
+								preload="none"
+								src={safeItemUrl}
+								aria-label="Play 30 second audio preview for {item.title}"
+								class="h-9 w-full"
+							></audio>
+						</div>
+					{/if}
 				</div>
-			{:else if item.type === 'video'}
+			{:else if item.type === 'video' && safeItemUrl}
 				<div class="nomad-card overflow-hidden rounded-xl">
 					<video
 						controls
 						preload="metadata"
-						poster={item.posterUrl}
-						src={item.url}
+						poster={safePosterUrl ?? undefined}
+						src={safeItemUrl}
 						class="h-36 w-full bg-[#141413] object-cover"
 					>
 						<track kind="captions" />
@@ -126,11 +132,11 @@
 						{/if}
 					</div>
 				</div>
-			{:else if item.type === 'document'}
+			{:else if item.type === 'document' && safeItemUrl}
 				<a
-					href={item.url}
+					href={safeItemUrl}
 					target="_blank"
-					rel="noreferrer"
+					rel="noopener noreferrer"
 					class="nomad-card flex items-center justify-between gap-3 rounded-xl p-3.5 text-left transition-colors hover:bg-[#FAF9F6]"
 				>
 					<div class="flex items-center gap-2.5 min-w-0">
@@ -160,10 +166,10 @@
 	}}
 	class="nomad-lightbox-dialog m-auto w-full max-w-5xl overflow-hidden rounded-2xl border border-[#E4E0D8] bg-white p-0 shadow-2xl"
 >
-	{#if lightboxImage}
+	{#if lightboxImage && safeLightboxUrl}
 		<div class="flex items-center justify-center bg-[#141413] p-2 sm:p-4">
 			<img
-				src={lightboxImage.url}
+				src={safeLightboxUrl}
 				alt={lightboxImage.title}
 				class="block max-h-[78vh] w-full rounded-lg object-contain"
 			/>
@@ -174,17 +180,15 @@
 				<div class="text-xs text-[#575551]">{lightboxImage.subtitle ?? ''}</div>
 			</div>
 			<div class="flex items-center gap-2">
-				{#if lightboxImage.url}
-					<a
-						href={lightboxImage.url}
-						target="_blank"
-						rel="noreferrer"
-						class="inline-flex items-center gap-1.5 rounded-lg border border-[#E4E0D8] bg-[#FAF9F6] px-3 py-1.5 text-xs font-medium text-[#141413] hover:bg-[#EFECE6]"
-					>
-						<span>Open Original</span>
-						<ExternalLink class="size-3 text-[#575551]" />
-					</a>
-				{/if}
+				<a
+					href={safeLightboxUrl}
+					target="_blank"
+					rel="noopener noreferrer"
+					class="inline-flex items-center gap-1.5 rounded-lg border border-[#E4E0D8] bg-[#FAF9F6] px-3 py-1.5 text-xs font-medium text-[#141413] hover:bg-[#EFECE6]"
+				>
+					<span>Open Original</span>
+					<ExternalLink class="size-3 text-[#575551]" />
+				</a>
 				<button
 					type="button"
 					onclick={closeLightbox}

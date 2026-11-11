@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+	AGUI_ACTIVITY_TYPES,
 	AbstractAgent,
 	EventType,
 	HttpAgent,
@@ -11,9 +12,12 @@ import {
 	WebSocketAgent,
 	applyJsonPatch,
 	applyJsonPatchOperation,
+	buildPlaceMapLinks,
 	buildResumeArray,
+	createActivityRegistry,
 	createAgUiStore,
 	filterInspectorEvents,
+	formatCoordinatesLabel,
 	getRunOutcome,
 	lockTurnInteraction,
 	parseSseChunk,
@@ -21,8 +25,10 @@ import {
 	reduceCanonicalAgUiEvent,
 	resolveEventProtocolMeta,
 	resolveProtocolCallMeta,
+	sanitizeExternalUrl,
 	selectTurnOption,
 	unescapeJsonPointerToken,
+	upsertActivityList,
 	useAgUiAgent
 } from '../src/index.js';
 
@@ -180,8 +186,10 @@ test('applyJsonPatch applies RFC 6902 add, replace, and remove immutably with RF
 });
 
 test('Tri-Protocol taxonomy extracts provenance from canonical rawEvent, metadata, and payload', () => {
-	assert.equal(Object.keys(PROTOCOL_CALL_TAXONOMY).length, 14);
+	assert.equal(Object.keys(PROTOCOL_CALL_TAXONOMY).length, 15);
 	assert.equal(resolveProtocolCallMeta('mcp:tool').family, 'MCP');
+	assert.equal(resolveProtocolCallMeta('agui:activity').family, 'AG-UI');
+	assert.equal(resolveProtocolCallMeta(null, 'AG-UI').callType, 'agui:activity');
 	assert.equal(resolveProtocolCallMeta(null, 'A2A').callType, 'a2a:task');
 	assert.equal(resolveProtocolCallMeta(null, 'GUARDRAIL').callType, 'guardrail:input');
 	assert.equal(resolveProtocolCallMeta(null, 'RAG').callType, 'rag:retrieval');
@@ -898,4 +906,127 @@ test('backward compatibility: parseSseChunk, interaction helpers, and fetch fall
 	assert.equal(customAgent.state.threadId, 'th-pkg-2');
 	unsub();
 	assert.ok(snapshots.length >= 4);
+});
+
+test('AG-UI activity surface kit: taxonomy, registry, map deep-links, coordinate formatting, and idempotent upsert', () => {
+	assert.deepEqual(AGUI_ACTIVITY_TYPES, {
+		WEATHER: 'agui:weather',
+		MAP_PLACES: 'agui:map-places',
+		SECURITY_ADVISORY: 'agui:security-advisory',
+		FX_BUDGET: 'agui:fx-budget',
+		CULTURE_AUDIO: 'agui:culture-audio'
+	});
+
+	const weatherEvt = {
+		type: EventType.ACTIVITY_SNAPSHOT,
+		messageId: 'act-weather-kyoto',
+		activityType: AGUI_ACTIVITY_TYPES.WEATHER,
+		content: { city: 'Kyoto', temperatureC: 18.4 }
+	};
+	assert.equal(resolveEventProtocolMeta(weatherEvt).callType, 'agui:activity');
+	assert.equal(resolveEventProtocolMeta(weatherEvt).family, 'AG-UI');
+
+	const registry = createActivityRegistry({
+		[AGUI_ACTIVITY_TYPES.WEATHER]: 'WeatherComponent'
+	});
+	registry.register(AGUI_ACTIVITY_TYPES.MAP_PLACES, 'MapComponent');
+	registry.register('', 'Ignored');
+	assert.equal(registry.has(AGUI_ACTIVITY_TYPES.WEATHER), true);
+	assert.equal(registry.has('agui:unknown'), false);
+	assert.equal(registry.resolve(AGUI_ACTIVITY_TYPES.WEATHER), 'WeatherComponent');
+	assert.equal(registry.resolve(weatherEvt), 'WeatherComponent');
+	assert.equal(registry.resolve(null), null);
+	assert.deepEqual(registry.listTypes(), [
+		AGUI_ACTIVITY_TYPES.WEATHER,
+		AGUI_ACTIVITY_TYPES.MAP_PLACES
+	]);
+
+	assert.equal(formatCoordinatesLabel(35.0116, 135.7681), '35.0116° N, 135.7681° E');
+	assert.equal(formatCoordinatesLabel(-33.8688, -70.6693), '33.8688° S, 70.6693° W');
+	assert.equal(formatCoordinatesLabel(null, 135.76), null);
+	assert.equal(formatCoordinatesLabel(Number.NaN, 10), null);
+
+	// OWASP XSS URL sanitization (CWE-79)
+	assert.equal(
+		sanitizeExternalUrl('  https://en.wikipedia.org/wiki/Kyoto  '),
+		'https://en.wikipedia.org/wiki/Kyoto'
+	);
+	assert.equal(sanitizeExternalUrl('http://localhost:8080/q/health'), 'http://localhost:8080/q/health');
+	assert.equal(sanitizeExternalUrl('javascript:alert(1)'), null);
+	assert.equal(sanitizeExternalUrl('JAVASCRIPT:alert(document.domain)'), null);
+	assert.equal(sanitizeExternalUrl('data:text/html,<script>alert(1)</script>'), null);
+	assert.equal(sanitizeExternalUrl('vbscript:msgbox(1)'), null);
+	assert.equal(sanitizeExternalUrl('file:///etc/passwd'), null);
+	assert.equal(sanitizeExternalUrl('\u0001javascript:alert(1)'), null);
+	assert.equal(sanitizeExternalUrl('https://user:secret@evil.example/path'), null);
+	assert.equal(sanitizeExternalUrl('not a valid url', 'https://fallback.example/'), 'https://fallback.example/');
+	assert.equal(sanitizeExternalUrl(null), null);
+	assert.equal(sanitizeExternalUrl('   '), null);
+
+	const xssWikiLinks = buildPlaceMapLinks({
+		city: 'Kyoto',
+		wikiUrl: 'javascript:alert(1)'
+	});
+	assert.equal(xssWikiLinks.wikipediaUrl, 'https://en.wikipedia.org/wiki/Kyoto');
+
+	const cityLinks = buildPlaceMapLinks({
+		city: 'Kyoto',
+		country: 'Japan',
+		latitude: 35.0116,
+		longitude: 135.7681,
+		wikiUrl: 'https://en.wikipedia.org/wiki/Kyoto'
+	});
+	assert.equal(cityLinks.coordinatesLabel, '35.0116° N, 135.7681° E');
+	assert.equal(cityLinks.coordinatesRaw, '35.0116, 135.7681');
+	assert.ok(cityLinks.openStreetMapUrl.includes('mlat=35.0116'));
+	assert.ok(cityLinks.openStreetMapEmbedUrl.includes('openstreetmap.org/export/embed.html'));
+	assert.ok(cityLinks.googleMapsUrl.includes('35.0116,135.7681'));
+	assert.ok(cityLinks.appleMapsUrl.includes('ll=35.0116,135.7681'));
+	assert.equal(cityLinks.wikipediaUrl, 'https://en.wikipedia.org/wiki/Kyoto');
+
+	const stopLinks = buildPlaceMapLinks({
+		name: 'Fushimi Inari Taisha',
+		city: 'Kyoto',
+		country: 'Japan'
+	});
+	assert.equal(stopLinks.openStreetMapEmbedUrl, null);
+	assert.equal(stopLinks.coordinatesLabel, null);
+	assert.ok(stopLinks.googleMapsUrl.includes('Fushimi%20Inari%20Taisha'));
+	assert.ok(stopLinks.appleMapsUrl.includes('Fushimi%20Inari%20Taisha'));
+	assert.ok(stopLinks.openStreetMapUrl.includes('openstreetmap.org/search'));
+	assert.ok(stopLinks.wikipediaUrl.includes('Special:Search'));
+
+	const stopWithCoords = buildPlaceMapLinks({
+		name: 'Kiyomizu-dera Timber Stage',
+		city: 'Kyoto',
+		country: 'Japan',
+		latitude: 34.9949,
+		longitude: 135.785
+	});
+	assert.ok(stopWithCoords.googleMapsUrl.includes('Kiyomizu-dera'));
+	assert.ok(stopWithCoords.openStreetMapEmbedUrl.includes('34.99490'));
+
+	const fallbackLinks = buildPlaceMapLinks();
+	assert.ok(fallbackLinks.wikipediaUrl.includes('wikipedia.org/wiki/'));
+
+	let list = upsertActivityList([], weatherEvt);
+	assert.equal(list.length, 1);
+	list = upsertActivityList(list, {
+		type: EventType.ACTIVITY_SNAPSHOT,
+		messageId: 'act-weather-kyoto',
+		activityType: AGUI_ACTIVITY_TYPES.WEATHER,
+		content: { city: 'Kyoto', temperatureC: 21.0 }
+	});
+	assert.equal(list.length, 1);
+	assert.equal(list[0].content.temperatureC, 21.0);
+
+	list = upsertActivityList(list, {
+		type: EventType.ACTIVITY_SNAPSHOT,
+		messageId: 'act-sec-kyoto',
+		activityType: AGUI_ACTIVITY_TYPES.SECURITY_ADVISORY,
+		content: { status: 'VERIFIED' }
+	});
+	assert.equal(list.length, 2);
+	assert.equal(upsertActivityList(list, null), list);
+	assert.equal(upsertActivityList(list, { activityType: '   ' }), list);
 });

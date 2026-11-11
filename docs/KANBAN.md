@@ -5,7 +5,7 @@
 > To refresh this board: `.agent/skills/sdlc-kanban/scripts/kanban-sync.sh`
 
 > **Repository**: `fmatar/quarkus-agui`  
-> **Last Synced**: `2026-11-10 23:22:00 UTC`
+> **Last Synced**: `2026-11-11 02:28:00 UTC`
 
 ---
 
@@ -13,6 +13,7 @@
 
 | 📥 Backlog | 📋 Ready | ⚡ In Progress | 🔍 In Review | ✅ Done |
 | :--- | :--- | :--- | :--- | :--- |
+|  |  |  |  | [#93 feat(agui,showcase,ci): canonical AG-UI activity cards, complete Trip Dossier report & local-quarkus-agui CI](https://github.com/fmatar/quarkus-agui/issues/93) |
 |  |  |  |  | [#90 fix(showcase): eliminate cold-start A2A/MCP readiness timeout & parallelize health probes](https://github.com/fmatar/quarkus-agui/issues/90) |
 |  |  |  |  | [#87 feat: chore(release): finalize ADR-007 Stage 8 hygiene, sync specs & release v0.1.0](https://github.com/fmatar/quarkus-agui/issues/87) |
 |  |  |  |  | [#85 feat(showcase,core): cut over Nomad showcase to canonical AG-UI, delete ag-ui-core & verify GraalVM 25 native](https://github.com/fmatar/quarkus-agui/issues/85) |
@@ -66,6 +67,7 @@
 
 | Issue | Status | Priority | Component | Quality Gate | Spec Link |
 | :--- | :--- | :--- | :--- | :--- | :--- |
+| [#93 feat(agui,showcase,ci): canonical AG-UI activity cards, complete Trip Dossier report & local-quarkus-agui CI](https://github.com/fmatar/quarkus-agui/issues/93) | `status:done` | P1 - High | Architecture | `Passed` | [ADR-008](docs/adr/ADR-008-canonical-ag-ui-activity-snapshot-surface-kit-co.md) |
 | [#90 fix(showcase): eliminate cold-start A2A/MCP readiness timeout & parallelize health probes](https://github.com/fmatar/quarkus-agui/issues/90) | `status:done` | P0 - Critical | Backend | `Passed` | [ADR-005](docs/adr/ADR-005-quarkus-langchain4j-mcp-and-smallrye-health.md) |
 | [#87 feat: chore(release): finalize ADR-007 Stage 8 hygiene, sync specs & release v0.1.0](https://github.com/fmatar/quarkus-agui/issues/87) | `status:done` | P0 - Critical | DevOps | `Passed` | [ADR-007](docs/adr/ADR-007-adopt-upstream-ag-ui-sdks-com-ag-ui-community-ag.md) |
 | [#85 feat(showcase,core): cut over Nomad showcase to canonical AG-UI, delete ag-ui-core & verify GraalVM 25 native](https://github.com/fmatar/quarkus-agui/issues/85) | `status:done` | P0 - Critical | Architecture | `Passed` | [ADR-007](docs/adr/ADR-007-adopt-upstream-ag-ui-sdks-com-ag-ui-community-ag.md) |

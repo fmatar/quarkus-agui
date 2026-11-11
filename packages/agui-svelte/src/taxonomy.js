@@ -15,6 +15,13 @@ export const PROTOCOL_CALL_TAXONOMY = {
 		iconName: 'LayoutGrid',
 		badgeClass: 'badge-ui'
 	},
+	'agui:activity': {
+		callType: 'agui:activity',
+		label: 'AG-UI Activity Card',
+		family: 'AG-UI',
+		iconName: 'LayoutDashboard',
+		badgeClass: 'badge-ui'
+	},
 	'mcp:tool': {
 		callType: 'mcp:tool',
 		label: 'MCP Tool',
@@ -108,6 +115,7 @@ const FAMILY_FALLBACK_RULES = [
 	['A2A', 'a2a:task'],
 	['HITL', 'hitl:approval'],
 	['LOCAL', 'tool:function'],
+	['AG-UI', 'agui:activity'],
 	['UI', 'tool:ui']
 ];
 
@@ -122,6 +130,10 @@ const MCP_EVENT_TYPES = new Set([
 ]);
 
 const A2A_EVENT_TYPES = new Set([EventType.STEP_STARTED, EventType.STEP_FINISHED]);
+const AGUI_ACTIVITY_EVENT_TYPES = new Set([
+	EventType.ACTIVITY_SNAPSHOT,
+	EventType.ACTIVITY_DELTA
+]);
 
 function extractProvenanceSource(event) {
 	if (event?.rawEvent && typeof event.rawEvent === 'object') return event.rawEvent;
@@ -145,7 +157,12 @@ export function resolveProtocolCallMeta(callTypeOrEvent, fallbackProtocol = 'MCP
 
 export function resolveEventProtocolMeta(event) {
 	const prov = extractProvenanceSource(event);
-	const defaultFamily = A2A_EVENT_TYPES.has(event?.type) ? 'A2A' : 'MCP';
+	let defaultFamily = 'MCP';
+	if (A2A_EVENT_TYPES.has(event?.type) || event?.activityType === 'a2a.task') {
+		defaultFamily = 'A2A';
+	} else if (AGUI_ACTIVITY_EVENT_TYPES.has(event?.type)) {
+		defaultFamily = 'AG-UI';
+	}
 	const taxonomy = resolveProtocolCallMeta(prov.callType, prov.protocol ?? defaultFamily);
 	return {
 		...taxonomy,

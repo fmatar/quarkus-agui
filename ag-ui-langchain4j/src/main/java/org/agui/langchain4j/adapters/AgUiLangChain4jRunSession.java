@@ -1,5 +1,6 @@
 package org.agui.langchain4j.adapters;
 
+import com.agui.community.core.event.ActivitySnapshotEvent;
 import com.agui.community.core.event.Event;
 import com.agui.community.core.event.JsonPatchOperation;
 import com.agui.community.core.event.ReasoningEndEvent;
@@ -187,6 +188,9 @@ public final class AgUiLangChain4jRunSession {
         appendStateDeltaIfPresent(out, options.postToolStatePatchProvider() == null
                 ? null
                 : options.postToolStatePatchProvider().apply(exec), now);
+        appendActivitiesIfPresent(out, options.postToolActivityProvider() == null
+                ? null
+                : options.postToolActivityProvider().apply(exec));
         return List.copyOf(out);
     }
 
@@ -228,6 +232,9 @@ public final class AgUiLangChain4jRunSession {
         appendStateDeltaIfPresent(out, options.postRunStatePatchProvider() == null
                 ? null
                 : options.postRunStatePatchProvider().get(), now);
+        appendActivitiesIfPresent(out, options.postRunActivityProvider() == null
+                ? null
+                : options.postRunActivityProvider().get());
 
         RunOutcome outcome = resolveRunOutcome();
         Object result = options.runResultSupplier() != null ? options.runResultSupplier().get() : null;
@@ -331,6 +338,17 @@ public final class AgUiLangChain4jRunSession {
     private static void appendStateDeltaIfPresent(List<Event> out, List<JsonPatchOperation> patches, long now) {
         if (patches != null && !patches.isEmpty()) {
             out.add(new StateDeltaEvent(List.copyOf(patches), now, null));
+        }
+    }
+
+    private static void appendActivitiesIfPresent(List<Event> out, List<ActivitySnapshotEvent> activities) {
+        if (activities == null || activities.isEmpty()) {
+            return;
+        }
+        for (ActivitySnapshotEvent activity : activities) {
+            if (activity != null) {
+                out.add(activity);
+            }
         }
     }
 

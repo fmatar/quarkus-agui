@@ -8,7 +8,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.agui.community.core.agent.RunAgentInput;
+import com.agui.community.core.event.ActivitySnapshotEvent;
 import com.agui.community.core.event.Event;
+import com.agui.community.core.event.EventType;
 import com.agui.community.core.interrupt.Resume;
 import com.agui.community.core.interrupt.ResumeStatus;
 import com.agui.community.core.message.Message;
@@ -136,18 +138,28 @@ class NomadConciergeOrchestratorServiceTest {
                         "targetCurrency", ctx.path("targetCurrency").asText("EUR"),
                         "exchangeRate", 0.92,
                         "convertedTotal", 1840.0);
-                case "verify-travel-advisory" -> Map.of(
-                        "status", "OK",
-                        "isError", false,
-                        "city", city,
-                        "country", "France",
-                        "capital", "Paris",
-                        "currency", "EUR",
-                        "source", "api.restcountries.com");
+                case "verify-travel-advisory" -> Map.ofEntries(
+                        Map.entry("status", "OK"),
+                        Map.entry("isError", false),
+                        Map.entry("city", city),
+                        Map.entry("country", A2aGatewayClient.resolveCountryForCity(city)),
+                        Map.entry("capital", "Kyoto".equalsIgnoreCase(city) ? "Tokyo" : city),
+                        Map.entry("region", "Kyoto".equalsIgnoreCase(city) ? "Asia" : "Europe"),
+                        Map.entry("currency", A2aGatewayClient.resolveCurrencyForCountry(A2aGatewayClient.resolveCountryForCity(city))),
+                        Map.entry("timezone", "Kyoto".equalsIgnoreCase(city) ? "UTC+09:00" : "UTC+01:00"),
+                        Map.entry("advisoryLevel", "STANDARD_PRECAUTIONS"),
+                        Map.entry("advisoryStatus", "VERIFIED — Country Metadata & Timezone Confirmed"),
+                        Map.entry("emergencyNumbers", "112 / Local Municipal Dispatch"),
+                        Map.entry("safetyHighlights", List.of("Passport validity confirmed", "Local timezone verified", "HITL >= $1,500 USD hold active")),
+                        Map.entry("source", "api.restcountries.com"));
                 default -> Map.of(
                         "status", "OK",
                         "isError", false,
                         "city", city,
+                        "country", A2aGatewayClient.resolveCountryForCity(city),
+                        "focus", "architecture, local craft & evening acoustics",
+                        "pace", "Unrushed (3 curated stops)",
+                        "stops", List.of("Morning: Historic Sanctuary Walk", "Afternoon: Craft Atelier", "Evening: Acoustic Salon"),
                         "walkingCorridorKm", 4.2);
             };
             writeJson(exchange, a2aAuditHttpStatus, Map.of(
@@ -249,7 +261,10 @@ class NomadConciergeOrchestratorServiceTest {
                                             "isError", false,
                                             "city", wCity,
                                             "country", A2aGatewayClient.resolveCountryForCity(wCity),
+                                            "latitude", 35.0116,
+                                            "longitude", 135.7681,
                                             "temperatureC", 18.4,
+                                            "windSpeedKph", 11.2,
                                             "condition", "Clear Sky & Crisp Light",
                                             "source", "api.open-meteo.com"));
                                 }
@@ -273,6 +288,15 @@ class NomadConciergeOrchestratorServiceTest {
                                         "stopTitle", parsedArgs.path("stopTitle").asText("Hoshinoya"),
                                         "nights", parsedArgs.path("nights").asInt(4),
                                         "allocatedUsd", parsedArgs.path("costUsd").asDouble(1840.0)));
+                                case "sampleAcousticMood" -> {
+                                    String mCity = parsedArgs.path("city").asText("Kyoto");
+                                    yield MAPPER.writeValueAsString(Map.of(
+                                            "status", "OK",
+                                            "isError", false,
+                                            "city", mCity,
+                                            "sampledMood", mCity + " Twilight Resonance",
+                                            "recommendedListeningWindow", "19:30–21:00 Local Dusk"));
+                                }
                                 default -> "{\"status\":\"OK\",\"reset\":true}";
                             };
                             yield ToolExecutionResult.builder().isError(false).resultText(json).build();
@@ -1119,6 +1143,194 @@ class NomadConciergeOrchestratorServiceTest {
         assertEquals(3, taskRuns[0]);
         assertEquals(1, activated[0]);
         assertEquals(1, terminated[0]);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void emitsCanonicalActivitySnapshotsAndCompleteFiveSectionDossierReport() {
+        // 1. Focused weather execution populates coordinates, wind speed, and emits weather + map activities
+        dossierStore.beginTurn("th-act-focus", "What is the weather in Kyoto?");
+        dossierStore.onToolExecuted("th-act-focus", buildExecution(
+                ToolExecutionRequest.builder().id("w-93").name("fetchCityWeather").arguments("{\"city\":\"Kyoto\"}").build(),
+                false,
+                "{\"status\":\"OK\",\"city\":\"Kyoto\",\"country\":\"Japan\",\"latitude\":35.0116,\"longitude\":135.7681,\"temperatureC\":18.4,\"windSpeedKph\":11.2,\"condition\":\"Clear Sky & Crisp Light\",\"source\":\"api.open-meteo.com\"}"));
+        List<ActivitySnapshotEvent> focusedActs = dossierStore.drainPendingActivities("th-act-focus");
+        assertEquals(List.of("agui:weather", "agui:map-places"),
+                focusedActs.stream().map(ActivitySnapshotEvent::activityType).toList());
+        assertTrue(dossierStore.drainPendingActivities("th-act-focus").isEmpty(), "Drain must be idempotent");
+
+        Map<String, Object> focusedTrip = (Map<String, Object>) dossierStore.readTripDossierState().get("nomadTrip");
+        assertEquals(35.0116, focusedTrip.get("latitude"));
+        assertEquals(135.7681, focusedTrip.get("longitude"));
+        assertEquals(11.2, focusedTrip.get("windSpeedKph"));
+
+        // 2. Degraded advisory still records honest DEGRADED securityAdvisory section & activity card
+        dossierStore.beginTurn("th-adv-deg", "Check the travel advisory for Beirut");
+        dossierStore.onToolExecuted("th-adv-deg", buildExecution(
+                ToolExecutionRequest.builder().id("adv-deg").name("verifyTravelAdvisory").arguments("{\"city\":\"Beirut\"}").build(),
+                true,
+                "{\"status\":\"ERROR\",\"isError\":true,\"error\":\"Missing RESTCOUNTRIES_API_KEY configuration\"}"));
+        List<ActivitySnapshotEvent> degActs = dossierStore.drainPendingActivities("th-adv-deg");
+        assertEquals(1, degActs.size());
+        assertEquals("agui:security-advisory", degActs.getFirst().activityType());
+        Map<String, Object> degContent = (Map<String, Object>) degActs.getFirst().content();
+        assertEquals("DEGRADED", degContent.get("status"));
+        assertTrue(String.valueOf(degContent.get("error")).contains("RESTCOUNTRIES_API_KEY"));
+
+        // 3. Complete trip run streams all 5 canonical ACTIVITY_SNAPSHOT envelopes & populates all 5 reportSections
+        List<Event> fullEvents = orchestrator.streamEvents(
+                        runInput("th-full-93", "Plan a 4-night architecture and koto music trip in Kyoto with $2,400 USD", null))
+                .collect().asList().await().indefinitely();
+        List<String> activityTypes = fullEvents.stream()
+                .filter(e -> e.type() == EventType.ACTIVITY_SNAPSHOT)
+                .map(e -> ((ActivitySnapshotEvent) e).activityType())
+                .distinct()
+                .toList();
+        assertTrue(activityTypes.contains("agui:weather"), "Missing agui:weather activity: " + activityTypes);
+        assertTrue(activityTypes.contains("agui:map-places"), "Missing agui:map-places activity: " + activityTypes);
+        assertTrue(activityTypes.contains("agui:security-advisory"), "Missing agui:security-advisory activity: " + activityTypes);
+        assertTrue(activityTypes.contains("agui:fx-budget"), "Missing agui:fx-budget activity: " + activityTypes);
+        assertTrue(activityTypes.contains("agui:culture-audio"), "Missing agui:culture-audio activity: " + activityTypes);
+
+        Map<String, Object> completeDossier = dossierStore.readTripDossierState();
+        Map<String, Object> sections = (Map<String, Object>) completeDossier.get("reportSections");
+        assertNotNull(sections);
+        assertNotNull(sections.get("weather"));
+        assertNotNull(sections.get("mapPlaces"));
+        assertNotNull(sections.get("securityAdvisory"));
+        assertNotNull(sections.get("fxBudget"));
+        assertNotNull(sections.get("cultureAudio"));
+
+        // 4. Error branches for weather, culture, FX, and cadence emit honest ERROR activity payloads
+        dossierStore.beginTurn("th-err-acts", "Test degraded tool responses in Lisbon");
+        dossierStore.onToolExecuted("th-err-acts", buildExecution(
+                ToolExecutionRequest.builder().id("w-err").name("fetchCityWeather").arguments("{\"city\":\"Lisbon\"}").build(),
+                true,
+                "{\"status\":\"ERROR\",\"isError\":true,\"error\":\"Open-Meteo timeout\"}"));
+        dossierStore.onToolExecuted("th-err-acts", buildExecution(
+                ToolExecutionRequest.builder().id("c-err").name("discoverLocalCultureAndMedia").arguments("{\"destination\":\"Lisbon\"}").build(),
+                true,
+                "{\"status\":\"ERROR\",\"isError\":true,\"error\":\"Wikipedia timeout\"}"));
+        dossierStore.onToolExecuted("th-err-acts", buildExecution(
+                ToolExecutionRequest.builder().id("fx-err").name("convertAndAuditBudget").arguments("{\"city\":\"Lisbon\",\"budgetAmount\":1800}").build(),
+                true,
+                "{\"status\":\"ERROR\",\"isError\":true,\"error\":\"Frankfurter unreachable\"}"));
+        dossierStore.onToolExecuted("th-err-acts", buildExecution(
+                ToolExecutionRequest.builder().id("cad-err").name("curateNeighborhoodCadence").arguments("{\"city\":\"Lisbon\"}").build(),
+                true,
+                "{\"status\":\"ERROR\",\"isError\":true,\"error\":\"Cadence offline\"}"));
+
+        List<ActivitySnapshotEvent> errActs = dossierStore.drainPendingActivities("th-err-acts");
+        assertEquals(3, errActs.size());
+        assertTrue(errActs.stream().allMatch(e -> Boolean.TRUE.equals(((Map<?, ?>) e.content()).get("isError"))));
+        Map<String, Object> errFx = (Map<String, Object>) errActs.stream()
+                .filter(e -> "agui:fx-budget".equals(e.activityType()))
+                .findFirst().orElseThrow().content();
+        assertEquals("ERROR", errFx.get("status"));
+        assertEquals("Frankfurter unreachable", errFx.get("error"));
+
+        // 5. Budget, city normalization & media-only post-run enrichment branches
+        assertNull(TripDossierStore.extractBudgetFromPrompt(null));
+        assertNull(TripDossierStore.extractBudgetFromPrompt("   "));
+        assertNull(TripDossierStore.extractBudgetFromPrompt("$0"));
+        assertNull(TripDossierStore.extractBudgetFromPrompt("0€"));
+        assertNull(TripDossierStore.extractBudgetFromPrompt("0 USD"));
+        assertEquals(new TripDossierStore.ParsedBudget(2400.0, "USD"), TripDossierStore.extractBudgetFromPrompt("$2,400"));
+        assertEquals(new TripDossierStore.ParsedBudget(1850.0, "EUR"), TripDossierStore.extractBudgetFromPrompt("€1,850"));
+        assertEquals(new TripDossierStore.ParsedBudget(950.0, "GBP"), TripDossierStore.extractBudgetFromPrompt("£950"));
+        assertEquals(new TripDossierStore.ParsedBudget(1200.0, "CHF"), TripDossierStore.extractBudgetFromPrompt("$1,200 chf"));
+        assertEquals(new TripDossierStore.ParsedBudget(1500.0, "EUR"), TripDossierStore.extractBudgetFromPrompt("1500€"));
+        assertEquals(new TripDossierStore.ParsedBudget(800.0, "GBP"), TripDossierStore.extractBudgetFromPrompt("800£"));
+        assertEquals(new TripDossierStore.ParsedBudget(750.0, "USD"), TripDossierStore.extractBudgetFromPrompt("750$"));
+        assertEquals(new TripDossierStore.ParsedBudget(900.0, "CHF"), TripDossierStore.extractBudgetFromPrompt("900$ chf"));
+        assertEquals(new TripDossierStore.ParsedBudget(3100.0, "CHF"), TripDossierStore.extractBudgetFromPrompt("3,100 chf"));
+        assertFalse(TripDossierStore.isKnownCityName(""));
+        assertTrue(TripDossierStore.isKnownCityName("Kyoto"));
+        assertFalse(TripDossierStore.isKnownCityName("Unknownpolis"));
+        assertEquals("Valencia", TripDossierStore.normalizeCityName("valencia, spain"));
+
+        dossierStore.resetAll("th-full-93");
+        assertTrue(((Map<?, ?>) dossierStore.readTripDossierState().get("reportSections")).isEmpty());
+
+        dossierStore.beginTurn("th-media-only", "Show landmarks and music in Beirut");
+        Map<String, Object> mediaDelta = dossierStore.finalizeTurnDossier("th-media-only", a2aClient);
+        assertFalse(mediaDelta.isEmpty());
+        assertFalse(dossierStore.drainPendingActivities("th-media-only").isEmpty());
+
+        // 6. Post-run enrichment without A2A client vs with A2A client (allocatedUsd math, acoustic mood, cadence stops)
+        dossierStore.resetAll("th-media-only");
+        dossierStore.beginTurn("th-no-a2a", "Plan 3 nights in Lisbon with $1,000");
+        Map<String, Object> noA2aDelta = dossierStore.finalizeTurnDossier("th-no-a2a", null);
+        Map<String, Object> noA2aTrip = (Map<String, Object>) ((Map<?, ?>) noA2aDelta.get("tripDossierState")).get("nomadTrip");
+        assertEquals("EUR", noA2aTrip.get("currency"));
+        assertEquals(650.0, noA2aTrip.get("allocatedUsd"));
+        assertEquals("Lisbon Twilight Resonance", noA2aTrip.get("acousticMood"));
+        assertEquals("Lisbon Acoustic Prelude", ((Map<?, ?>) noA2aTrip.get("soundtrack")).get("trackName"));
+
+        dossierStore.resetAll("th-no-a2a");
+        dossierStore.beginTurn("th-enrich-a2a", "Plan 5 nights in Kyoto with $2,000");
+        Map<String, Object> a2aDelta = dossierStore.finalizeTurnDossier("th-enrich-a2a", a2aClient);
+        Map<String, Object> a2aTrip = (Map<String, Object>) ((Map<?, ?>) a2aDelta.get("tripDossierState")).get("nomadTrip");
+        assertEquals(1300.0, a2aTrip.get("allocatedUsd"));
+        assertEquals("architecture, local craft & evening acoustics", a2aTrip.get("cadenceFocus"));
+        assertEquals("Unrushed (3 curated stops)", a2aTrip.get("cadencePace"));
+        assertEquals(3, ((List<?>) a2aTrip.get("places")).size());
+
+        Map<String, Object> updatedParamsState = dossierStore.updateTripParameters(6, "GBP");
+        Map<String, Object> updatedFxSection = (Map<String, Object>) ((Map<?, ?>) updatedParamsState.get("reportSections")).get("fxBudget");
+        assertEquals(6, updatedFxSection.get("nights"));
+        assertEquals("GBP", updatedFxSection.get("baseCurrency"));
+
+        // 7. Unknown-city advisory fallbacks, currency preservation on error, and FX convertedTotal fallback math
+        dossierStore.beginTurn("th-unk-adv", "Check Unknownpolis");
+        dossierStore.onToolExecuted("th-unk-adv", buildExecution(
+                ToolExecutionRequest.builder().id("adv-unk").name("verifyTravelAdvisory").arguments("{\"city\":\"Unknownpolis\"}").build(),
+                false,
+                "{\"status\":\"OK\",\"city\":\"Unknownpolis\",\"country\":\"\"}"));
+        Map<String, Object> unkAdv = (Map<String, Object>) dossierStore.drainPendingActivities("th-unk-adv").getFirst().content();
+        assertEquals("VERIFIED", unkAdv.get("status"));
+        assertEquals("STANDARD_PRECAUTIONS", unkAdv.get("advisoryLevel"));
+        assertTrue(String.valueOf(unkAdv.get("advisoryStatus")).contains("VERIFIED"));
+        List<String> unkHighlights = (List<String>) unkAdv.get("safetyHighlights");
+        assertTrue(unkHighlights.get(0).contains("Unknownpolis"));
+        assertTrue(unkHighlights.get(1).contains("(USD)"));
+
+        // Preserve existing currency when degraded advisory arrives
+        dossierStore.beginTurn("th-fx-math", "Audit FX");
+        Map<String, Object> fxStateDelta = dossierStore.onToolExecuted("th-fx-math", buildExecution(
+                ToolExecutionRequest.builder().id("fx-open").name("convertAndAuditBudget")
+                        .arguments("{\"city\":\"Beirut\",\"budgetAmount\":1000}").build(),
+                false,
+                "{\"status\":\"OK\",\"city\":\"Beirut\",\"country\":\"Lebanon\",\"baseCurrency\":\"USD\",\"targetCurrency\":\"LBP\",\"exchangeRate\":1.25,\"source\":\"open.er-api.com\"}"));
+        Map<String, Object> fxAct = (Map<String, Object>) dossierStore.drainPendingActivities("th-fx-math").getFirst().content();
+        assertEquals("Beirut", fxAct.get("city"));
+        assertEquals(650.0, fxAct.get("allocatedUsd"));
+        assertEquals(1250.0, fxAct.get("convertedTotal"));
+        assertFalse(fxAct.containsKey("error"));
+        List<Map<String, Object>> fxSources = (List<Map<String, Object>>) fxStateDelta.get("sources");
+        assertTrue(fxSources.stream().anyMatch(s -> "ExchangeRate-API ISO 4217 FX Reference".equals(s.get("title"))
+                && "verified".equals(s.get("status"))
+                && "".equals(s.get("error"))));
+
+        dossierStore.onToolExecuted("th-fx-math", buildExecution(
+                ToolExecutionRequest.builder().id("adv-keep-curr").name("verifyTravelAdvisory")
+                        .arguments("{\"city\":\"Beirut\"}").build(),
+                true,
+                "{\"status\":\"ERROR\",\"isError\":true,\"city\":\"Beirut\",\"currency\":\"XXX\",\"error\":\"Timeout\"}"));
+        assertEquals("LBP", ((Map<?, ?>) dossierStore.readTripDossierState().get("nomadTrip")).get("currency"));
+
+        // Mode prop fallback via forwardedProps.mode
+        RunAgentInput modeInput = new RunAgentInput(
+                "th-mode-prop",
+                "run-mode-prop",
+                Map.of(),
+                List.of(new com.agui.community.core.message.UserMessage("u-m", "Hi, my name is Fady")),
+                List.of(),
+                List.of(),
+                Map.of("mode", "ollama"),
+                null);
+        AgentChatResponse modeChat = orchestrator.executeChat(modeInput);
+        assertEquals("COMPLETED", modeChat.status());
     }
 
     private static RunAgentInput runInput(String threadId, String prompt, String llmMode) {

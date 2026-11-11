@@ -1,5 +1,6 @@
 package org.agui.langchain4j.adapters;
 
+import com.agui.community.core.event.ActivitySnapshotEvent;
 import com.agui.community.core.event.JsonPatchOperation;
 import com.agui.community.core.interrupt.Interrupt;
 import dev.langchain4j.service.tool.ToolExecution;
@@ -19,6 +20,8 @@ public record AgUiRunOptions(
         AgUiToolClassifier toolClassifier,
         Function<ToolExecution, List<JsonPatchOperation>> postToolStatePatchProvider,
         Supplier<List<JsonPatchOperation>> postRunStatePatchProvider,
+        Function<ToolExecution, List<ActivitySnapshotEvent>> postToolActivityProvider,
+        Supplier<List<ActivitySnapshotEvent>> postRunActivityProvider,
         Supplier<List<Interrupt>> interruptSupplier,
         Supplier<Object> runResultSupplier
 ) {
@@ -29,6 +32,28 @@ public record AgUiRunOptions(
         toolClassifier = toolClassifier == null
                 ? AgUiToolClassifier.defaultMcpClassifier("langchain4j-mcp")
                 : toolClassifier;
+    }
+
+    public AgUiRunOptions(
+            String runId,
+            String llmMode,
+            Map<String, Object> initialStateSnapshot,
+            AgUiToolClassifier toolClassifier,
+            Function<ToolExecution, List<JsonPatchOperation>> postToolStatePatchProvider,
+            Supplier<List<JsonPatchOperation>> postRunStatePatchProvider,
+            Supplier<List<Interrupt>> interruptSupplier,
+            Supplier<Object> runResultSupplier) {
+        this(
+                runId,
+                llmMode,
+                initialStateSnapshot,
+                toolClassifier,
+                postToolStatePatchProvider,
+                postRunStatePatchProvider,
+                null,
+                null,
+                interruptSupplier,
+                runResultSupplier);
     }
 
     public static AgUiRunOptions defaults() {
@@ -46,6 +71,8 @@ public record AgUiRunOptions(
                 toolClassifier,
                 postToolStatePatchProvider,
                 postRunStatePatchProvider,
+                postToolActivityProvider,
+                postRunActivityProvider,
                 interruptSupplier,
                 runResultSupplier);
     }
@@ -61,6 +88,8 @@ public record AgUiRunOptions(
         private AgUiToolClassifier toolClassifier;
         private Function<ToolExecution, List<JsonPatchOperation>> postToolStatePatchProvider;
         private Supplier<List<JsonPatchOperation>> postRunStatePatchProvider;
+        private Function<ToolExecution, List<ActivitySnapshotEvent>> postToolActivityProvider;
+        private Supplier<List<ActivitySnapshotEvent>> postRunActivityProvider;
         private Supplier<List<Interrupt>> interruptSupplier;
         private Supplier<Object> runResultSupplier;
 
@@ -97,6 +126,16 @@ public record AgUiRunOptions(
             return this;
         }
 
+        public Builder postToolActivityProvider(Function<ToolExecution, List<ActivitySnapshotEvent>> provider) {
+            this.postToolActivityProvider = provider;
+            return this;
+        }
+
+        public Builder postRunActivityProvider(Supplier<List<ActivitySnapshotEvent>> provider) {
+            this.postRunActivityProvider = provider;
+            return this;
+        }
+
         public Builder interruptSupplier(Supplier<List<Interrupt>> interruptSupplier) {
             this.interruptSupplier = interruptSupplier;
             return this;
@@ -115,6 +154,8 @@ public record AgUiRunOptions(
                     toolClassifier,
                     postToolStatePatchProvider,
                     postRunStatePatchProvider,
+                    postToolActivityProvider,
+                    postRunActivityProvider,
                     interruptSupplier,
                     runResultSupplier);
         }

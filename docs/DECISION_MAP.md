@@ -44,6 +44,8 @@ flowchart TD
   _74["Ticket #74"]
   ADR_007["ADR-007: Adopt Upstream AG-UI SDKs (com.ag-ui.community & @ag-ui/client) and Orthogonal Java 17 Quarkus Modules"]
   _81["Ticket #81 (feature/issue-#81-adopt-upstream-ag-ui-java-sdks)"]
+  ADR_008["ADR-008: Canonical AG-UI ACTIVITY_SNAPSHOT Surface Kit, Complete Trip Dossier Report & local-quarkus-agui CI"]
+  _93["Ticket #93"]
   __9450["##9450"]
   _66["Ticket #66 (feature/issue-#66-nomad-travel-chatbot-mcp-health)"]
   _68["Ticket #68 (feature/issue-#68-quarkus-langchain4j-mcp-v5)"]
@@ -51,6 +53,8 @@ flowchart TD
   _70["Ticket #70 (chore/issue-#70-sync-develop-kanban-state)"]
   _83["Ticket #83 (feature/issue-#83-headless-agui-svelte-sdk)"]
   _85["Ticket #85 (feature/issue-#85-nomad-showcase-cutover-delete-core)"]
+  _87["Ticket #87 (chore/issue-#87-release-v0.1.0)"]
+  _90["Ticket #90 (fix/issue-#90-cold-start-readiness-timeout)"]
   CAP_01 -->|specified_by| SPEC_01
   CAP_02 -->|specified_by| SPEC_02
   CAP_01 -->|depends_on| CAP_02
@@ -92,6 +96,11 @@ flowchart TD
   CAP_05 -.->|ADR Drift| ADR_007
   CAP_06 -.->|ADR Drift| ADR_007
   ADR_006 -.->|ADR Drift| ADR_007
+  _93 -->|triggered_drift_adr| ADR_008
+  CAP_03 -.->|ADR Drift| ADR_008
+  CAP_04 -.->|ADR Drift| ADR_008
+  CAP_08 -.->|ADR Drift| ADR_008
+  ADR_004 -.->|ADR Drift| ADR_008
   CAP_01 -->|realized_by| CAP_02
   CAP_01 -->|realized_by| CAP_03
   CAP_02 -->|realized_by| CAP_03
@@ -119,6 +128,11 @@ flowchart TD
   _30 -.->|ADR Drift| ADR_003
   __9450 -.->|ADR Drift| ADR_006
   _81 -.->|ADR Drift| ADR_007
+  _93 -.->|ADR Drift| ADR_008
+  CAP_03 -->|realized_by| ADR_008
+  CAP_04 -->|realized_by| ADR_008
+  CAP_08 -->|realized_by| ADR_008
+  ADR_004 -->|realized_by| ADR_008
 ```
 
 ---
@@ -134,6 +148,7 @@ flowchart TD
 | **ADR-005** | ADR-005: Quarkus LangChain4j Reactive AG-UI Bridge, Declarative `@McpToolBox` & SmallRye Health + REST Countries v5 | `technical` | `accepted` | N/A | None |
 | **ADR-006** | Framework-Agnostic Module Topology (ag-ui-core, ag-ui-a2a, ag-ui-langchain4j, ag-ui-quarkus) and Removal of Quarkus Deployment Processors | `technical` | `accepted` | #74 | CAP-06, CAP-07, ADR-003 |
 | **ADR-007** | Adopt Upstream AG-UI SDKs (com.ag-ui.community & @ag-ui/client) and Orthogonal Java 17 Quarkus Modules | `technical` | `accepted` | #81 | CAP-05, CAP-06, ADR-006 |
+| **ADR-008** | Canonical AG-UI ACTIVITY_SNAPSHOT Surface Kit, Complete Trip Dossier Report & local-quarkus-agui CI | `technical` | `accepted` | #93 | CAP-03, CAP-04, CAP-08, ADR-004 |
 
 ---
 

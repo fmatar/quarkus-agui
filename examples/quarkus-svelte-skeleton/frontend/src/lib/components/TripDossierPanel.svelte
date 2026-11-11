@@ -2,12 +2,9 @@
 	import {
 		Activity,
 		AlertTriangle,
-		CloudSun,
 		Compass,
-		Coins,
 		Download,
 		Minus,
-		Music,
 		Plus,
 		Server,
 		ShieldCheck,
@@ -16,9 +13,11 @@
 	import gsap from 'gsap';
 	import {
 		NOMAD_DESTINATIONS,
+		deriveDossierActivities,
 		formatTripDossierMarkdown,
 		summarizeHealthReport
 	} from '$lib/agui-client.js';
+	import AgUiActivityRenderer from './agui/AgUiActivityRenderer.svelte';
 
 	let {
 		tripDossierState = null,
@@ -53,7 +52,8 @@
 		}
 	);
 
-	let hasActiveCity = $derived(Boolean(nomadTrip?.activeCity));
+	let dossierActivities = $derived(deriveDossierActivities(activeDossier));
+	let hasActiveCity = $derived(Boolean(nomadTrip?.activeCity || dossierActivities.length > 0));
 
 	let preferences = $derived(
 		activeDossier?.preferences ?? {
@@ -67,79 +67,21 @@
 	);
 
 	let activeHomeCurrency = $derived(preferences.homeCurrency ?? nomadTrip.homeCurrency ?? null);
-
-	let homeCurrencySymbol = $derived(
-		activeHomeCurrency === 'EUR' ? '€' : activeHomeCurrency === 'GBP' ? '£' : '$'
-	);
-
-	let homeCurrencyFactor = $derived(
-		activeHomeCurrency === 'EUR' ? 0.92 : activeHomeCurrency === 'GBP' ? 0.79 : 1
-	);
-
-	let budgetPercent = $derived(
-		hasActiveCity && nomadTrip.budgetUsd != null && nomadTrip.budgetUsd > 0
-			? Math.min(100, Math.round(((nomadTrip.allocatedUsd ?? 0) / nomadTrip.budgetUsd) * 100))
-			: 0
-	);
-
-	let convertedTotal = $derived(
-		hasActiveCity && nomadTrip.allocatedUsd != null && nomadTrip.exchangeRate != null
-			? Math.round(nomadTrip.allocatedUsd * nomadTrip.exchangeRate)
-			: null
-	);
-
 	let healthSummary = $derived(summarizeHealthReport(systemHealth));
 
-	const rawCounters = {
-		temp: 0,
-		fxTotal: 0,
-		allocated: 0
-	};
-
-	let tweenState = $state({
-		temp: 0,
-		fxTotal: 0,
-		allocated: 0
-	});
-
-	let dossierCardEl;
+	let dossierHeaderEl;
 
 	$effect(() => {
-		const targetTemp = Number(nomadTrip.temperatureC ?? 0);
-		const targetFx = Number(convertedTotal ?? 0);
-		const targetAllocated = Number(nomadTrip.allocatedUsd ?? 0);
+		const cityKey = nomadTrip.activeCity;
+		const sectionCount = dossierActivities.length;
 		const prefersReduced =
 			typeof window !== 'undefined' &&
 			window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-
-		if (prefersReduced) {
-			rawCounters.temp = targetTemp;
-			rawCounters.fxTotal = targetFx;
-			rawCounters.allocated = targetAllocated;
-			tweenState.temp = targetTemp;
-			tweenState.fxTotal = targetFx;
-			tweenState.allocated = targetAllocated;
-			return;
-		}
-
-		gsap.to(rawCounters, {
-			temp: targetTemp,
-			fxTotal: targetFx,
-			allocated: targetAllocated,
-			duration: 0.45,
-			ease: 'power3.out',
-			onUpdate: () => {
-				tweenState.temp = rawCounters.temp;
-				tweenState.fxTotal = rawCounters.fxTotal;
-				tweenState.allocated = rawCounters.allocated;
-			}
-		});
-
-		if (dossierCardEl && hasActiveCity) {
+		if (!prefersReduced && dossierHeaderEl && (cityKey || sectionCount > 0)) {
 			gsap.fromTo(
-				dossierCardEl,
+				dossierHeaderEl,
 				{ boxShadow: '0 0 0 2px rgba(200, 75, 49, 0.22)' },
-				{ boxShadow: '0 0 0 0px rgba(200, 75, 49, 0)', duration: 0.55, ease: 'power2.out' }
+				{ boxShadow: '0 0 0 0px rgba(200, 75, 49, 0)', duration: 0.5, ease: 'power2.out' }
 			);
 		}
 	});
@@ -156,14 +98,6 @@
 		if (currency !== activeHomeCurrency) {
 			onUpdateTripParams?.({ nights: nomadTrip.nights, homeCurrency: currency });
 		}
-	}
-
-	function formatFxAmount(val) {
-		const rounded = Math.round(val);
-		if (rounded >= 1_000_000) {
-			return `${(rounded / 1_000_000).toFixed(1)}M`;
-		}
-		return rounded.toLocaleString();
 	}
 
 	function exportDossierMarkdown() {
@@ -186,11 +120,11 @@
 	class="workbench-sidebar nomad-rail flex flex-col justify-between overflow-hidden rounded-2xl p-4"
 	aria-label="Trip Dossier and Traveler Profile"
 >
-	<div class="scrollable-region space-y-4 pr-0.5">
+	<div class="scrollable-region space-y-3.5 pr-0.5">
 		<div class="flex items-center justify-between border-b border-[#E4E0D8] pb-3">
 			<div class="flex items-center gap-2">
 				<div class="flex size-7 items-center justify-center rounded-lg bg-[#141413] text-white">
-					<Compass class="size-4" />
+					<Compass class="size-4" aria-hidden="true" />
 				</div>
 				<h2 class="text-sm font-bold tracking-tight text-[#141413]">Trip Dossier</h2>
 			</div>
@@ -200,30 +134,35 @@
 				onclick={exportDossierMarkdown}
 				class="inline-flex items-center gap-1 rounded-md border border-[#CFCAC0] bg-white px-2 py-1 font-mono text-[10px] font-semibold text-[#141413] transition-colors hover:border-[#C84B31] hover:text-[#C84B31] disabled:cursor-not-allowed disabled:opacity-45"
 				title={hasActiveCity
-					? 'Export active destination dossier as Markdown (.md)'
+					? 'Export complete destination dossier report as Markdown (.md)'
 					: 'Select a destination first to export its dossier'}
 			>
-				<Download class="size-3" />
+				<Download class="size-3" aria-hidden="true" />
 				<span>Export .md</span>
 			</button>
 		</div>
 
-		<!-- Active Destination Summary Card -->
-		<div bind:this={dossierCardEl} class="rounded-xl border border-[#E4E0D8] bg-white p-3.5 space-y-3">
+		<!-- Active Destination & Live Parameter Controls -->
+		<section
+			bind:this={dossierHeaderEl}
+			class="rounded-xl border border-[#E4E0D8] bg-white p-3.5 space-y-2.5"
+			aria-label="Destination overview and live parameters"
+		>
 			<div class="flex items-start justify-between gap-2">
 				<div class="min-w-0">
-					{#if hasActiveCity}
-						<h3 class="text-base font-bold text-[#141413] truncate">
+					{#if nomadTrip.activeCity}
+						<h3 class="truncate text-base font-bold text-[#141413]">
 							{nomadTrip.activeCity}{nomadTrip.country ? `, ${nomadTrip.country}` : ''}
 						</h3>
-						<p class="text-xs text-[#575551] leading-snug" title={nomadTrip.stopTitle ?? 'Awaiting duration, budget & focus'}>
-							{nomadTrip.stopTitle ?? 'Share duration, budget & travel focus to build itinerary'}
+						<p
+							class="text-xs leading-snug text-[#575551]"
+							title={nomadTrip.stopTitle ?? 'Complete AG-UI Dossier Report'}
+						>
+							{nomadTrip.stopTitle ?? `${dossierActivities.length} of 5 AG-UI dossier sections active`}
 						</p>
 					{:else}
-						<h3 class="text-sm font-bold text-[#141413]">
-							Awaiting Destination
-						</h3>
-						<p class="text-xs text-[#575551] leading-snug">
+						<h3 class="text-sm font-bold text-[#141413]">Awaiting Destination</h3>
+						<p class="text-xs leading-snug text-[#575551]">
 							No defaults assumed — choose a city & share your trip details
 						</p>
 					{/if}
@@ -231,7 +170,7 @@
 
 				<!-- Instant WebSocket Nights Stepper -->
 				<div
-					class="inline-flex items-center gap-1 rounded-lg border border-[#E4E0D8] bg-[#F6F5F2] px-1.5 py-0.5 shrink-0"
+					class="inline-flex shrink-0 items-center gap-1 rounded-lg border border-[#E4E0D8] bg-[#F6F5F2] px-1.5 py-0.5"
 					role="group"
 					aria-label="Adjust trip nights"
 				>
@@ -242,7 +181,7 @@
 						aria-label="Decrease nights"
 						class="rounded p-0.5 text-[#141413] transition-colors hover:bg-[#E4E0D8] disabled:opacity-40"
 					>
-						<Minus class="size-3" />
+						<Minus class="size-3" aria-hidden="true" />
 					</button>
 					<span class="px-1 font-mono text-[11px] font-semibold text-[#141413] tabular-nums">
 						{nomadTrip.nights != null ? `${nomadTrip.nights}N` : '-- N'}
@@ -254,169 +193,93 @@
 						aria-label="Increase nights"
 						class="rounded p-0.5 text-[#141413] transition-colors hover:bg-[#E4E0D8] disabled:opacity-40"
 					>
-						<Plus class="size-3" />
+						<Plus class="size-3" aria-hidden="true" />
 					</button>
 				</div>
 			</div>
 
-			{#if hasActiveCity && nomadTrip.heroImageUrl}
-				<div class="overflow-hidden rounded-lg border border-[#E4E0D8] bg-[#FAF9F6]">
-					<img
-						src={nomadTrip.heroImageUrl}
-						alt="{nomadTrip.activeCity} landmark photography"
-						loading="lazy"
-						class="h-28 w-full object-cover"
-					/>
-					<div class="border-t border-[#E4E0D8] bg-white px-2.5 py-1 text-[10px] font-medium text-[#575551]">
-						Wikipedia REST API v1 • {nomadTrip.activeCity} Landmark Plate
-					</div>
-				</div>
-			{/if}
-
-			<div class="grid grid-cols-2 gap-2 pt-1">
-				<div class="rounded-lg bg-[#F6F5F2] p-2.5">
-					<div class="flex items-center gap-1.5 text-[11px] font-medium text-[#575551]">
-						<CloudSun class="size-3.5 text-[#C84B31]" />
-						<span>Open-Meteo</span>
-					</div>
-					{#if hasActiveCity && nomadTrip.temperatureC != null}
-						<div class="mt-1 font-mono text-sm font-bold text-[#141413] tabular-nums">
-							{tweenState.temp.toFixed(1)}°C
-						</div>
-						<div class="truncate text-[11px] text-[#575551]" title={nomadTrip.weatherCondition}>
-							{nomadTrip.weatherCondition}
-						</div>
-					{:else}
-						<div class="mt-1 font-mono text-sm font-bold text-[#575551] tabular-nums">
-							--°C
-						</div>
-						<div class="truncate text-[11px] text-[#575551]">
-							{hasActiveCity ? 'Awaiting weather tool' : 'Awaiting city selection'}
-						</div>
-					{/if}
-				</div>
-
-				<div class="rounded-lg bg-[#F6F5F2] p-2.5">
-					<div class="flex items-center gap-1.5 text-[11px] font-medium text-[#575551]">
-						<Coins class="size-3.5 text-[#1F6E50] shrink-0" />
-						<span class="truncate">Frankfurter FX</span>
-					</div>
-					{#if hasActiveCity && nomadTrip.currency && nomadTrip.exchangeRate != null}
-						<div class="mt-1 truncate whitespace-nowrap font-mono text-sm font-bold text-[#141413] tabular-nums">
-							{convertedTotal != null ? `${formatFxAmount(tweenState.fxTotal)} ${nomadTrip.currency}` : nomadTrip.currency}
-						</div>
-						<div class="truncate text-[11px] text-[#575551] tabular-nums">
-							1 {activeHomeCurrency ?? 'USD'} = {formatFxAmount(nomadTrip.exchangeRate)} {nomadTrip.currency}
-						</div>
-					{:else}
-						<div class="mt-1 truncate whitespace-nowrap font-mono text-sm font-bold text-[#575551] tabular-nums">
-							--
-						</div>
-						<div class="truncate text-[11px] text-[#575551] tabular-nums">
-							{activeHomeCurrency ? `1 ${activeHomeCurrency} = --` : 'Currency not set'}
-						</div>
-					{/if}
+			<div class="flex items-center justify-between border-t border-[#E4E0D8] pt-2 text-[11px] text-[#575551]">
+				<span>Home Currency</span>
+				<div class="inline-flex items-center gap-1" role="group" aria-label="Select Home Currency">
+					{#each HOME_CURRENCIES as cur (cur)}
+						<button
+							type="button"
+							onclick={() => selectHomeCurrency(cur)}
+							class="rounded px-1.5 py-0.5 font-mono text-[11px] font-semibold transition-colors {activeHomeCurrency ===
+							cur
+								? 'bg-[#141413] text-white'
+								: 'bg-[#F6F5F2] text-[#575551] hover:bg-[#E4E0D8] hover:text-[#141413]'}"
+						>
+							{cur}
+						</button>
+					{/each}
 				</div>
 			</div>
+		</section>
 
-			<!-- Budget Allocation Bar + Home Currency Switcher -->
-			<div class="space-y-1.5 pt-1">
-				<div class="flex items-center justify-between gap-2 text-[11px] text-[#575551] tabular-nums">
-					<span class="whitespace-nowrap">Trip Budget</span>
-					{#if nomadTrip.budgetUsd != null}
-						<span class="whitespace-nowrap font-mono font-semibold text-[#141413]">
-							{homeCurrencySymbol}{Math.round(tweenState.allocated * homeCurrencyFactor).toLocaleString()} / {homeCurrencySymbol}{Math.round(nomadTrip.budgetUsd * homeCurrencyFactor).toLocaleString()} ({budgetPercent}%)
-						</span>
-					{:else}
-						<span class="whitespace-nowrap font-mono text-[11px] text-[#575551]">
-							Not set
-						</span>
-					{/if}
+		<!-- Complete AG-UI Dossier Report Sections (Weather, Map & Places, Security, FX, Culture & Audio) -->
+		{#if dossierActivities.length > 0}
+			<section class="space-y-2.5" aria-label="Complete AG-UI Dossier Report">
+				<div class="flex items-center justify-between">
+					<h3 class="text-xs font-bold text-[#141413]">AG-UI Dossier Report</h3>
+					<span class="font-mono text-[10px] font-medium text-[#575551] tabular-nums">
+						{dossierActivities.length} {dossierActivities.length === 1 ? 'surface' : 'surfaces'}
+					</span>
 				</div>
-				<div class="h-1.5 w-full overflow-hidden rounded-full bg-[#EFECE6]">
-					<div
-						class="h-full rounded-full bg-[#1F6E50] transition-all duration-300"
-						style="width: {budgetPercent}%"
-					></div>
-				</div>
-				<div class="flex items-center justify-between pt-1 text-[11px] text-[#575551]">
-					<span>Home Currency</span>
-					<div class="inline-flex items-center gap-1" role="group" aria-label="Select Home Currency">
-						{#each HOME_CURRENCIES as cur (cur)}
-							<button
-								type="button"
-								onclick={() => selectHomeCurrency(cur)}
-								class="rounded px-1.5 py-0.5 font-mono text-[11px] font-semibold transition-colors {activeHomeCurrency === cur
-									? 'bg-[#141413] text-white'
-									: 'bg-[#F6F5F2] text-[#575551] hover:bg-[#E4E0D8] hover:text-[#141413]'}"
-							>
-								{cur}
-							</button>
-						{/each}
-					</div>
-				</div>
-			</div>
-
-			{#if nomadTrip.soundtrack}
-				<div class="space-y-1.5 rounded-lg border border-[#E4E0D8] bg-[#FAF9F6] px-2.5 py-2 text-[11px]">
-					<div class="flex items-center gap-2">
-						<Music class="size-3.5 text-[#C84B31] shrink-0" />
-						<div class="min-w-0">
-							<div class="truncate font-semibold text-[#141413]">{nomadTrip.soundtrack.trackName}</div>
-							<div class="truncate text-[11px] text-[#575551]">{nomadTrip.soundtrack.artistName}</div>
-						</div>
-					</div>
-					{#if nomadTrip.soundtrack.previewUrl}
-						<audio
-							controls
-							preload="none"
-							src={nomadTrip.soundtrack.previewUrl}
-							aria-label={`Play 30-second audio preview for ${nomadTrip.soundtrack.trackName}`}
-							class="h-8 w-full"
-						></audio>
-					{/if}
-				</div>
-			{/if}
-		</div>
+				<AgUiActivityRenderer activities={dossierActivities} variant="dossier" />
+			</section>
+		{/if}
 
 		<!-- Live Traveler Profile (traveler://preferences MCP Resource) -->
-		<div class="rounded-xl border border-[#E4E0D8] bg-white p-3 space-y-2">
+		<section class="rounded-xl border border-[#E4E0D8] bg-white p-3 space-y-2" aria-label="Traveler Profile">
 			<div class="flex items-center justify-between">
 				<div class="flex items-center gap-1.5">
-					<UserCheck class="size-3.5 text-[#1F6E50]" />
+					<UserCheck class="size-3.5 text-[#1F6E50]" aria-hidden="true" />
 					<h3 class="text-xs font-bold text-[#141413]">Traveler Profile</h3>
 				</div>
 				<code class="font-mono text-[10px] text-[#575551]">traveler://preferences</code>
 			</div>
-			<div class="grid grid-cols-1 gap-1.5 text-[11px]">
+			<dl class="grid grid-cols-1 gap-1.5 text-[11px] m-0">
 				{#if preferences.travelerName}
-					<div class="flex items-start justify-between gap-2 rounded-lg bg-[#F6F5F2] px-2.5 py-1.5">
-						<span class="font-medium text-[#575551] shrink-0">Traveler</span>
-						<span class="text-right font-semibold text-[#141413] leading-snug" title={preferences.travelerName}>
+					<div class="flex items-start justify-between gap-2 border-b border-[#E4E0D8] pb-1.5">
+						<dt class="shrink-0 font-medium text-[#575551]">Traveler</dt>
+						<dd class="m-0 text-right leading-snug font-semibold text-[#141413]">
 							{preferences.travelerName}
-						</span>
+						</dd>
 					</div>
 				{/if}
-				<div class="flex items-start justify-between gap-2 rounded-lg bg-[#F6F5F2] px-2.5 py-1.5">
-					<span class="font-medium text-[#575551] shrink-0">Style</span>
-					<span class="text-right leading-snug {preferences.style ? 'font-semibold text-[#141413]' : 'text-[#575551] italic'}">
+				<div class="flex items-start justify-between gap-2 border-b border-[#E4E0D8] pb-1.5">
+					<dt class="shrink-0 font-medium text-[#575551]">Style</dt>
+					<dd
+						class="m-0 text-right leading-snug {preferences.style
+							? 'font-semibold text-[#141413]'
+							: 'italic text-[#575551]'}"
+					>
 						{preferences.style ?? 'Not specified yet'}
-					</span>
+					</dd>
 				</div>
-				<div class="flex items-start justify-between gap-2 rounded-lg bg-[#F6F5F2] px-2.5 py-1.5">
-					<span class="font-medium text-[#575551] shrink-0">Dietary</span>
-					<span class="text-right leading-snug {preferences.dietary ? 'font-semibold text-[#141413]' : 'text-[#575551] italic'}">
+				<div class="flex items-start justify-between gap-2 border-b border-[#E4E0D8] pb-1.5">
+					<dt class="shrink-0 font-medium text-[#575551]">Dietary</dt>
+					<dd
+						class="m-0 text-right leading-snug {preferences.dietary
+							? 'font-semibold text-[#141413]'
+							: 'italic text-[#575551]'}"
+					>
 						{preferences.dietary ?? 'Not specified yet'}
-					</span>
+					</dd>
 				</div>
-				<div class="flex items-start justify-between gap-2 rounded-lg bg-[#F6F5F2] px-2.5 py-1.5">
-					<span class="font-medium text-[#575551] shrink-0">Music</span>
-					<span class="text-right leading-snug {preferences.musicTaste ? 'font-semibold text-[#141413]' : 'text-[#575551] italic'}">
+				<div class="flex items-start justify-between gap-2">
+					<dt class="shrink-0 font-medium text-[#575551]">Music</dt>
+					<dd
+						class="m-0 text-right leading-snug {preferences.musicTaste
+							? 'font-semibold text-[#141413]'
+							: 'italic text-[#575551]'}"
+					>
 						{preferences.musicTaste ?? 'Not specified yet'}
-					</span>
+					</dd>
 				</div>
-			</div>
-		</div>
+			</dl>
+		</section>
 
 		<!-- Curated Destination Switcher -->
 		<div class="space-y-2">
@@ -429,14 +292,14 @@
 						disabled={isStreaming}
 						onclick={() => onTriggerSkill?.(dest.prompt)}
 						class="flex w-full items-center justify-between gap-2 rounded-xl border px-3 py-2 text-left text-xs transition-colors disabled:opacity-40 {isActive
-							? 'border-[#C84B31] bg-white text-[#141413] font-semibold'
+							? 'border-[#C84B31] bg-white font-semibold text-[#141413]'
 							: 'border-[#E4E0D8] bg-white/70 text-[#141413] hover:bg-white'}"
 					>
 						<div class="min-w-0">
 							<div>{dest.city}, {dest.country}</div>
 							<div class="truncate text-[10px] text-[#575551]">{dest.tagline}</div>
 						</div>
-						<span class="font-mono text-[10px] font-medium text-[#575551] shrink-0 tabular-nums">
+						<span class="shrink-0 font-mono text-[10px] font-medium text-[#575551] tabular-nums">
 							{dest.currency} • {dest.region}
 						</span>
 					</button>
@@ -450,8 +313,10 @@
 			<div class="space-y-1.5">
 				<button
 					type="button"
-					disabled={isStreaming || !hasActiveCity}
-					title={hasActiveCity ? `Convert trip budget for ${nomadTrip.activeCity}` : 'Select a destination first'}
+					disabled={isStreaming || !nomadTrip.activeCity}
+					title={nomadTrip.activeCity
+						? `Convert trip budget for ${nomadTrip.activeCity}`
+						: 'Select a destination first'}
 					onclick={() =>
 						onTriggerSkill?.(
 							nomadTrip.budgetUsd != null
@@ -460,25 +325,31 @@
 						)}
 					class="flex w-full items-center justify-between rounded-xl border border-[#E4E0D8] bg-white px-3 py-2 text-left text-xs font-medium text-[#141413] transition-colors hover:border-[#1F6E50] disabled:cursor-not-allowed disabled:opacity-45"
 				>
-					<span class="truncate">Audit FX & Trip Budget{nomadTrip.currency ? ` (${nomadTrip.currency})` : ''}</span>
-					<ShieldCheck class="size-3.5 text-[#1F6E50] shrink-0" />
+					<span class="truncate">
+						Audit FX & Trip Budget{nomadTrip.currency ? ` (${nomadTrip.currency})` : ''}
+					</span>
+					<ShieldCheck class="size-3.5 shrink-0 text-[#1F6E50]" aria-hidden="true" />
 				</button>
 
 				<button
 					type="button"
-					disabled={isStreaming || !hasActiveCity}
-					title={hasActiveCity ? `Check travel advisory for ${nomadTrip.activeCity}` : 'Select a destination first'}
+					disabled={isStreaming || !nomadTrip.activeCity}
+					title={nomadTrip.activeCity
+						? `Check travel advisory for ${nomadTrip.activeCity}`
+						: 'Select a destination first'}
 					onclick={() => onTriggerSkill?.(`Check the travel advisory for ${nomadTrip.activeCity}`)}
 					class="flex w-full items-center justify-between rounded-xl border border-[#E4E0D8] bg-white px-3 py-2 text-left text-xs font-medium text-[#141413] transition-colors hover:border-[#C84B31] disabled:cursor-not-allowed disabled:opacity-45"
 				>
 					<span class="truncate">Verify Entry & Travel Advisory</span>
-					<ShieldCheck class="size-3.5 text-[#575551] shrink-0" />
+					<ShieldCheck class="size-3.5 shrink-0 text-[#575551]" aria-hidden="true" />
 				</button>
 
 				<button
 					type="button"
-					disabled={isStreaming || !hasActiveCity}
-					title={hasActiveCity ? `Reserve sanctuary stay in ${nomadTrip.activeCity}` : 'Select a destination first'}
+					disabled={isStreaming || !nomadTrip.activeCity}
+					title={nomadTrip.activeCity
+						? `Reserve sanctuary stay in ${nomadTrip.activeCity}`
+						: 'Select a destination first'}
 					onclick={() =>
 						onTriggerSkill?.(
 							`Reserve ${nomadTrip.stopTitle ?? `${nomadTrip.activeCity} Architectural Sanctuary`} in ${nomadTrip.activeCity} for ${nomadTrip.nights ?? 4} nights ($1840)`
@@ -486,18 +357,21 @@
 					class="flex w-full items-center justify-between rounded-xl border border-[#9E331D]/35 bg-[#FBEEE9]/70 px-3 py-2 text-left text-xs font-semibold text-[#9E331D] transition-colors hover:bg-[#FBEEE9] disabled:cursor-not-allowed disabled:opacity-45"
 				>
 					<span class="truncate">Hold Sanctuary Suite ($1,840)</span>
-					<Server class="size-3.5 shrink-0" />
+					<Server class="size-3.5 shrink-0" aria-hidden="true" />
 				</button>
 			</div>
 		</div>
 	</div>
 
-	<div class="mt-3 flex items-center justify-between gap-2 border-t border-[#E4E0D8] pt-2.5 font-mono text-[10px] text-[#575551]">
+	<div
+		class="mt-3 flex items-center justify-between gap-2 border-t border-[#E4E0D8] pt-2.5 font-mono text-[10px] text-[#575551]"
+	>
 		<span class="truncate">MCP :8081 • A2A :8082 • Ollama</span>
 		<button
 			type="button"
 			onclick={() => onToggleHealthPopover?.()}
-			class="inline-flex items-center gap-1 rounded px-1.5 py-0.5 font-semibold transition-colors shrink-0 {healthSummary.status === 'UP'
+			class="inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 font-semibold transition-colors {healthSummary.status ===
+			'UP'
 				? 'bg-[#EAF4EF] text-[#1F6E50]'
 				: healthSummary.status === 'UNKNOWN'
 					? 'bg-[#F6F5F2] text-[#575551]'
@@ -505,9 +379,9 @@
 			title="Click to inspect live upstream & protocol healthchecks (/q/health/ready)"
 		>
 			{#if healthSummary.status === 'UP'}
-				<Activity class="size-2.5" />
+				<Activity class="size-2.5" aria-hidden="true" />
 			{:else}
-				<AlertTriangle class="size-2.5" />
+				<AlertTriangle class="size-2.5" aria-hidden="true" />
 			{/if}
 			<span>{healthSummary.label}</span>
 		</button>

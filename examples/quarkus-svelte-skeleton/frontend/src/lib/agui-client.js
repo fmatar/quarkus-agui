@@ -5,35 +5,47 @@
  */
 
 import {
+	AGUI_ACTIVITY_TYPES,
 	EventType,
 	HttpAgent,
 	PROTOCOL_CALL_TAXONOMY,
 	WebSocketAgent,
 	applyJsonPatch,
+	buildPlaceMapLinks,
+	createActivityRegistry,
 	filterInspectorEvents,
+	formatCoordinatesLabel,
 	lockTurnInteraction,
 	parseSseChunk,
 	randomUUID,
 	recordClientOutboundEvent,
 	resolveEventProtocolMeta,
 	resolveProtocolCallMeta,
+	sanitizeExternalUrl,
 	selectTurnOption,
+	upsertActivityList,
 	useAgUiAgent as createBaseAgUiAgent
 } from '@agui/svelte';
 
 export {
+	AGUI_ACTIVITY_TYPES,
 	EventType,
 	HttpAgent,
 	PROTOCOL_CALL_TAXONOMY,
 	WebSocketAgent,
 	applyJsonPatch,
+	buildPlaceMapLinks,
+	createActivityRegistry,
 	filterInspectorEvents,
+	formatCoordinatesLabel,
 	lockTurnInteraction,
 	parseSseChunk,
 	recordClientOutboundEvent,
 	resolveEventProtocolMeta,
 	resolveProtocolCallMeta,
-	selectTurnOption
+	sanitizeExternalUrl,
+	selectTurnOption,
+	upsertActivityList
 };
 
 export const NOMAD_DESTINATIONS = [
@@ -180,6 +192,9 @@ const CLEARED_TRIP_DESTINATION = {
 	currency: null,
 	exchangeRate: null,
 	temperatureC: null,
+	windSpeedKph: null,
+	latitude: null,
+	longitude: null,
 	weatherCondition: null,
 	stopTitle: null,
 	allocatedUsd: null,
@@ -187,10 +202,19 @@ const CLEARED_TRIP_DESTINATION = {
 	soundtrack: null
 };
 
+const ACTIVITY_TO_SECTION_KEY = Object.freeze({
+	[AGUI_ACTIVITY_TYPES.WEATHER]: 'weather',
+	[AGUI_ACTIVITY_TYPES.MAP_PLACES]: 'mapPlaces',
+	[AGUI_ACTIVITY_TYPES.SECURITY_ADVISORY]: 'securityAdvisory',
+	[AGUI_ACTIVITY_TYPES.FX_BUDGET]: 'fxBudget',
+	[AGUI_ACTIVITY_TYPES.CULTURE_AUDIO]: 'cultureAudio'
+});
+
 function createEmptyActiveTurn() {
 	return {
 		reasoning: null,
 		timeline: [],
+		activities: [],
 		media: [],
 		interaction: null,
 		sources: [],
@@ -216,7 +240,8 @@ export function createInitialWorkbenchState(threadId = 'thread-nomad-1') {
 			musicTaste: null,
 			pace: null,
 			homeCurrency: null
-		}
+		},
+		reportSections: {}
 	};
 	return {
 		threadId,
@@ -248,6 +273,7 @@ function createWelcomeAssistantMessage() {
 		timeline: [],
 		mcpCalls: [],
 		a2aSteps: [],
+		activities: [],
 		media: [],
 		interaction: {
 			id: 'welcome-city-picker',
@@ -491,7 +517,8 @@ function applyTurnStateDelta(state, fields, nextEvents) {
 	const nextClusterState = fields.awaitingDestination
 		? {
 				...incomingCluster,
-				nomadTrip: { ...(incomingCluster?.nomadTrip ?? {}), ...CLEARED_TRIP_DESTINATION, nights: null }
+				nomadTrip: { ...(incomingCluster?.nomadTrip ?? {}), ...CLEARED_TRIP_DESTINATION, nights: null },
+				reportSections: {}
 			}
 		: incomingCluster;
 	const nextPending =
@@ -900,23 +927,64 @@ function upsertFinishedStepTimeline(timeline, info) {
 	];
 }
 
+function syncDossierFromActivity(currentDossier, event) {
+	const sectionKey = ACTIVITY_TO_SECTION_KEY[event.activityType];
+	if (!sectionKey || !event.content || typeof event.content !== 'object') {
+		return currentDossier;
+	}
+	const prevTrip = currentDossier?.nomadTrip ?? {};
+	const prevSections = currentDossier?.reportSections ?? {};
+	const city = nonBlankString(event.content.city) ?? prevTrip.activeCity ?? null;
+	const country = nonBlankString(event.content.country) ?? prevTrip.country ?? null;
+	return {
+		...currentDossier,
+		nomadTrip: {
+			...prevTrip,
+			activeCity: city,
+			country
+		},
+		reportSections: {
+			...prevSections,
+			[sectionKey]: structuredClone(event.content)
+		}
+	};
+}
+
 function handleActivitySnapshot(state, event, nextEvents) {
 	const currentTurn = state.activeTurn ?? createEmptyActiveTurn();
 	const meta = event.rawEvent ?? {};
+	const isAgUiCard = typeof event.activityType === 'string' && event.activityType.startsWith('agui:');
+	const isErr = Boolean(event.content?.isError);
+	const preferredId = event.messageId || `act-${nextEvents.length}`;
 	const entry = {
-		id: uniqueTimelineId(currentTurn.timeline, event.messageId, nextEvents.length),
-		callType: meta.callType ?? 'a2a:artifact',
+		id: preferredId,
+		callType: meta.callType ?? (isAgUiCard ? 'agui:activity' : 'a2a:artifact'),
 		title: meta.artifactName ?? event.activityType ?? 'activity',
-		subtitle: meta.agentName ?? 'Nomad-A2A-Specialist (:8082)',
-		status: 'completed',
+		subtitle: meta.agentName ?? (isAgUiCard ? 'AG-UI Activity Surface' : 'Nomad-A2A-Specialist (:8082)'),
+		status: isErr ? 'error' : 'completed',
+		isError: isErr,
 		detail: null,
 		result: event.content
 	};
+	const existingIdx = currentTurn.timeline.findIndex((item) => item.id === preferredId);
+	const nextTimeline =
+		existingIdx >= 0
+			? currentTurn.timeline.map((item, idx) => (idx === existingIdx ? entry : item))
+			: [...currentTurn.timeline, entry];
+	const nextActivities = isAgUiCard
+		? upsertActivityList(currentTurn.activities ?? [], event)
+		: (currentTurn.activities ?? []);
+	const nextDossier = isAgUiCard
+		? syncDossierFromActivity(resolveCurrentDossier(state), event)
+		: resolveCurrentDossier(state);
 	return {
 		...state,
+		tripDossierState: nextDossier,
+		clusterState: nextDossier,
 		activeTurn: {
 			...currentTurn,
-			timeline: [...currentTurn.timeline, entry]
+			timeline: nextTimeline,
+			activities: nextActivities
 		},
 		events: nextEvents
 	};
@@ -1006,6 +1074,7 @@ function buildCompletedAssistantTurn(event, content, currentTurn, state) {
 		timeline: currentTurn.timeline,
 		mcpCalls: state.mcpCalls,
 		a2aSteps: state.a2aSteps,
+		activities: currentTurn.activities ?? [],
 		media: currentTurn.media,
 		interaction: currentTurn.interaction,
 		sources: currentTurn.sources,
@@ -1313,21 +1382,233 @@ export function useAgUiAgent(options = {}) {
 }
 
 /**
- * Formats the active Trip Dossier, Traveler Profile (`traveler://preferences`), and latest itinerary
- * into a downloadable Markdown document (`.md`).
+ * Derives normalized canonical AG-UI Activity descriptors (`agui:weather`, `agui:map-places`,
+ * `agui:security-advisory`, `agui:fx-budget`, `agui:culture-audio`) from the live Trip Dossier state.
+ */
+export function deriveDossierActivities(dossierState) {
+	const trip = dossierState?.nomadTrip ?? {};
+	const prefs = dossierState?.preferences ?? {};
+	const sections = dossierState?.reportSections ?? {};
+	const hasCity = Boolean(trip.activeCity);
+	const hasSections = Boolean(sections && Object.keys(sections).length > 0);
+	if (!hasCity && !hasSections) {
+		return [];
+	}
+
+	const city = trip.activeCity ?? sections.weather?.city ?? sections.mapPlaces?.city ?? sections.securityAdvisory?.city ?? 'Destination';
+	const country = trip.country ?? sections.weather?.country ?? sections.mapPlaces?.country ?? sections.securityAdvisory?.country ?? '';
+	const list = [];
+
+	const weatherContent =
+		sections.weather ??
+		(trip.temperatureC != null || trip.weatherCondition != null
+			? {
+					status: 'OK',
+					isError: false,
+					city,
+					country,
+					temperatureC: trip.temperatureC,
+					windSpeedKph: trip.windSpeedKph ?? null,
+					condition: trip.weatherCondition,
+					latitude: trip.latitude ?? null,
+					longitude: trip.longitude ?? null,
+					source: 'api.open-meteo.com'
+				}
+			: null);
+	if (weatherContent) {
+		list.push({
+			messageId: `dossier-weather-${city}`,
+			activityType: AGUI_ACTIVITY_TYPES.WEATHER,
+			content: weatherContent
+		});
+	}
+
+	const mapContent =
+		sections.mapPlaces ??
+		(hasCity
+			? {
+					status: 'OK',
+					isError: false,
+					city,
+					country,
+					latitude: trip.latitude ?? null,
+					longitude: trip.longitude ?? null,
+					stopTitle: trip.stopTitle ?? null,
+					focus: trip.cadenceFocus ?? 'architecture, local craft & evening acoustics',
+					pace: trip.cadencePace ?? 'Unrushed curated walk',
+					stops: Array.isArray(trip.places) && trip.places.length > 0
+						? trip.places
+						: trip.stopTitle
+							? [trip.stopTitle]
+							: [`${city} Historic Center & Cultural District`],
+					wikiSourceUrl: trip.wikiSourceUrl ?? null
+				}
+			: null);
+	if (mapContent) {
+		list.push({
+			messageId: `dossier-map-${city}`,
+			activityType: AGUI_ACTIVITY_TYPES.MAP_PLACES,
+			content: mapContent
+		});
+	}
+
+	const securityContent = sections.securityAdvisory ?? trip.securityAdvisory ?? null;
+	if (securityContent) {
+		list.push({
+			messageId: `dossier-security-${city}`,
+			activityType: AGUI_ACTIVITY_TYPES.SECURITY_ADVISORY,
+			content: securityContent
+		});
+	}
+
+	const baseFx = sections.fxBudget ?? null;
+	const hasTripFx =
+		trip.budgetUsd != null || trip.exchangeRate != null || trip.allocatedUsd != null;
+	if (baseFx || hasTripFx) {
+		const liveHomeCurrency = prefs.homeCurrency ?? trip.homeCurrency ?? baseFx?.baseCurrency ?? 'USD';
+		const liveBudget = trip.budgetUsd ?? baseFx?.budgetUsd ?? null;
+		const liveAllocated = trip.allocatedUsd ?? baseFx?.allocatedUsd ?? null;
+		const liveRate = trip.exchangeRate ?? baseFx?.exchangeRate ?? null;
+		const liveConverted =
+			liveBudget != null && liveRate != null
+				? Math.round(liveBudget * liveRate * 100) / 100
+				: (baseFx?.convertedTotal ?? null);
+		list.push({
+			messageId: `dossier-fx-${city}`,
+			activityType: AGUI_ACTIVITY_TYPES.FX_BUDGET,
+			content: {
+				status: baseFx?.status ?? 'OK',
+				isError: Boolean(baseFx?.isError),
+				error: baseFx?.error ?? null,
+				city,
+				country,
+				nights: trip.nights ?? baseFx?.nights ?? null,
+				stopTitle: trip.stopTitle ?? baseFx?.stopTitle ?? null,
+				baseCurrency: liveHomeCurrency,
+				targetCurrency: trip.currency ?? baseFx?.targetCurrency ?? null,
+				exchangeRate: liveRate,
+				budgetUsd: liveBudget,
+				allocatedUsd: liveAllocated,
+				convertedTotal: liveConverted,
+				hitlThresholdUsd: baseFx?.hitlThresholdUsd ?? 1500,
+				source: baseFx?.source ?? 'api.frankfurter.dev'
+			}
+		});
+	}
+
+	const baseCulture = sections.cultureAudio ?? null;
+	const hasTripCulture = Boolean(trip.heroImageUrl || trip.soundtrack || trip.culturalSummary);
+	if (baseCulture || hasTripCulture) {
+		list.push({
+			messageId: `dossier-culture-${city}`,
+			activityType: AGUI_ACTIVITY_TYPES.CULTURE_AUDIO,
+			content: {
+				status: baseCulture?.status ?? 'OK',
+				isError: Boolean(baseCulture?.isError),
+				error: baseCulture?.error ?? null,
+				city,
+				country,
+				culturalSummary: trip.culturalSummary ?? baseCulture?.culturalSummary ?? null,
+				heroImageUrl: trip.heroImageUrl ?? baseCulture?.heroImageUrl ?? null,
+				wikiSourceUrl: trip.wikiSourceUrl ?? baseCulture?.wikiSourceUrl ?? null,
+				acousticMood: trip.acousticMood ?? baseCulture?.acousticMood ?? null,
+				listeningWindow: trip.listeningWindow ?? baseCulture?.listeningWindow ?? null,
+				soundtrack: trip.soundtrack ?? baseCulture?.soundtrack ?? null
+			}
+		});
+	}
+
+	return list;
+}
+
+/**
+ * Formats the active Trip Dossier, Traveler Profile (`traveler://preferences`), all AG-UI report sections,
+ * and latest itinerary into a downloadable Markdown document (`.md`).
  */
 export function formatTripDossierMarkdown(clusterState, messages = []) {
 	const trip = clusterState?.nomadTrip ?? {};
 	const prefs = clusterState?.preferences ?? {};
+	const activities = deriveDossierActivities(clusterState);
 	const lines = [
 		...buildTripOverviewMarkdownLines(trip, prefs),
-		...buildTravelerProfileMarkdownLines(prefs)
+		...buildTravelerProfileMarkdownLines(prefs),
+		...buildActivitiesMarkdownLines(activities)
 	];
 	const latestBriefing = findLatestAssistantContent(messages);
 	if (latestBriefing) {
 		lines.push(`## Curated Concierge Briefing`, ``, latestBriefing, ``);
 	}
 	return lines.join('\n');
+}
+
+function buildActivitiesMarkdownLines(activities) {
+	if (!Array.isArray(activities) || activities.length === 0) {
+		return [];
+	}
+	const out = [];
+	for (const act of activities) {
+		const c = act.content ?? {};
+		if (act.activityType === AGUI_ACTIVITY_TYPES.WEATHER) {
+			const coords = formatCoordinatesLabel(c.latitude, c.longitude);
+			out.push(
+				`## Weather & Microclimate (\`agui:weather\`)`,
+				`- **Forecast**: ${formatTemperatureLabel(c.temperatureC)} — ${pickField(c.condition, null, 'Pending')}`,
+				`- **Wind Speed**: ${c.windSpeedKph != null ? `${c.windSpeedKph} km/h` : '--'}`,
+				`- **Coordinates**: ${coords ?? 'Not resolved'}`,
+				`- **Source**: ${pickField(c.source, null, 'api.open-meteo.com')}`,
+				``
+			);
+		} else if (act.activityType === AGUI_ACTIVITY_TYPES.MAP_PLACES) {
+			out.push(`## Places & Map Links (\`agui:map-places\`)`);
+			const stops = Array.isArray(c.stops) ? c.stops : [];
+			for (const stop of stops) {
+				const safeStopLabel = String(stop ?? '').replace(/[[\]()]/g, ' ').trim() || 'Stop';
+				const links = buildPlaceMapLinks({
+					name: stop,
+					city: c.city,
+					country: c.country,
+					latitude: c.latitude,
+					longitude: c.longitude,
+					wikiUrl: c.wikiSourceUrl
+				});
+				out.push(
+					`- **${safeStopLabel}** — [Google Maps](${links.googleMapsUrl}) • [Apple Maps](${links.appleMapsUrl}) • [OpenStreetMap](${links.openStreetMapUrl}) • [Wikipedia](${links.wikipediaUrl})`
+				);
+			}
+			out.push(``);
+		} else if (act.activityType === AGUI_ACTIVITY_TYPES.SECURITY_ADVISORY) {
+			out.push(
+				`## Security & Travel Advisory (\`agui:security-advisory\`)`,
+				`- **Verification Status**: ${pickField(c.status, null, 'PENDING')} — ${pickField(c.advisoryStatus, null, '')}`,
+				`- **Emergency Contacts**: ${pickField(c.emergencyNumbers, null, '112 Universal GSM')}`,
+				`- **Country Metadata**: Capital ${pickField(c.capital, null, '--')} • Timezone ${pickField(c.timezone, null, '--')} • Currency ${pickField(c.currencyCode, null, '--')}`,
+				`- **HITL Safeguard Threshold**: >= $${c.hitlThresholdUsd ?? 1500} USD`
+			);
+			if (Array.isArray(c.safetyHighlights)) {
+				for (const item of c.safetyHighlights) {
+					out.push(`  - ${item}`);
+				}
+			}
+			out.push(``);
+		} else if (act.activityType === AGUI_ACTIVITY_TYPES.FX_BUDGET) {
+			out.push(
+				`## FX & Budget Audit (\`agui:fx-budget\`)`,
+				`- **Exchange Rate**: ${c.exchangeRate != null ? `1 ${c.baseCurrency ?? 'USD'} = ${c.exchangeRate} ${c.targetCurrency ?? ''}` : 'Awaiting FX audit'}`,
+				`- **Converted Total**: ${c.convertedTotal != null ? `${c.convertedTotal.toLocaleString()} ${c.targetCurrency ?? ''}` : '--'}`,
+				`- **Allocation**: ${formatUsdAmount(c.allocatedUsd, 'Not allocated')} / ${formatUsdAmount(c.budgetUsd, 'Not set')} (${formatNightsLabel(c.nights)})`,
+				``
+			);
+		} else if (act.activityType === AGUI_ACTIVITY_TYPES.CULTURE_AUDIO) {
+			out.push(
+				`## Cultural Notes & Acoustic Preview (\`agui:culture-audio\`)`,
+				`- **Cultural Summary**: ${pickField(c.culturalSummary, null, 'Awaiting Wikipedia summary')}`,
+				`- **Acoustic Mood**: ${pickField(c.acousticMood, null, '--')} (${pickField(c.listeningWindow, null, '--')})`,
+				`- **Soundtrack**: ${formatSoundtrackLine(c.soundtrack)}`,
+				``
+			);
+		}
+	}
+	return out;
 }
 
 function buildTripOverviewMarkdownLines(trip, prefs) {
