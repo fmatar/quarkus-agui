@@ -4,6 +4,7 @@
 	import ExecutionTimeline from './ExecutionTimeline.svelte';
 	import StreamingMarkdownBody from './StreamingMarkdownBody.svelte';
 	import MediaGallery from './MediaGallery.svelte';
+	import AgUiActivityRenderer from './AgUiActivityRenderer.svelte';
 	import StructuredResponseBlock from './StructuredResponseBlock.svelte';
 	import HitlApprovalCard from './HitlApprovalCard.svelte';
 	import TurnFooter from './TurnFooter.svelte';
@@ -20,8 +21,22 @@
 		onRejectHitl
 	} = $props();
 
+	let turnActivities = $derived(Array.isArray(turn.activities) ? turn.activities : []);
+	let hasCultureCard = $derived(
+		turnActivities.some((act) => act?.activityType === 'agui:culture-audio')
+	);
+	let supplementaryMedia = $derived(
+		hasCultureCard
+			? (turn.media ?? []).filter((item) => item.type !== 'image' && item.type !== 'audio')
+			: (turn.media ?? [])
+	);
 	let hasCompanion = $derived(
-		Boolean(turn.media?.length || turn.interaction || pendingApproval)
+		Boolean(
+			turnActivities.length ||
+				supplementaryMedia.length ||
+				turn.interaction ||
+				pendingApproval
+		)
 	);
 </script>
 
@@ -52,8 +67,13 @@
 		</div>
 
 		{#if hasCompanion}
-			<aside class="turn-companion-col space-y-3.5 min-w-0" aria-label="Destination Media & Interactive Controls">
-				<MediaGallery media={turn.media} />
+			<aside
+				class="turn-companion-col space-y-3.5 min-w-0"
+				aria-label="AG-UI Activity Surfaces & Interactive Controls"
+			>
+				<AgUiActivityRenderer activities={turnActivities} variant="turn" />
+
+				<MediaGallery media={supplementaryMedia} />
 
 				<StructuredResponseBlock
 					interaction={turn.interaction}

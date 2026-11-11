@@ -19,7 +19,13 @@
 	let scrollContainer;
 
 	$effect(() => {
-		if (messages.length || streamBuffer || activeTurn?.timeline?.length || pendingApproval) {
+		if (
+			messages.length ||
+			streamBuffer ||
+			activeTurn?.timeline?.length ||
+			activeTurn?.activities?.length ||
+			pendingApproval
+		) {
 			requestAnimationFrame(() => {
 				if (scrollContainer) {
 					scrollContainer.scrollTop = scrollContainer.scrollHeight;
@@ -66,6 +72,7 @@
 					content: streamBuffer,
 					reasoning: activeTurn?.reasoning,
 					timeline: activeTurn?.timeline ?? [],
+					activities: activeTurn?.activities ?? [],
 					media: activeTurn?.media ?? [],
 					interaction: activeTurn?.interaction ?? null,
 					sources: activeTurn?.sources ?? [],

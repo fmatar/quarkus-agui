@@ -5,37 +5,140 @@ on:
     branches: [ main, develop ]
   pull_request:
     branches: [ main, develop ]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   quality-gate:
-    name: Universal Quality Gate, Spec-Drift & Merkle Receipt Defense
-    runs-on: local-archlens
+    name: Tri-Protocol Quality Gate (local-quarkus-agui)
+    runs-on: local-quarkus-agui
+    timeout-minutes: 25
 
     steps:
-      - name: Checkout Code
+      - name: Checkout Repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Setup Node.js Runtime
+      - name: Discover Local Worker Toolchain (JDK 25, Node, pnpm)
+        id: toolchain
+        shell: bash
+        run: |
+          for candidate in \
+            "$HOME/.sdkman/candidates/java/current/bin" \
+            "$HOME/.local/share/pnpm" \
+            "$HOME/Library/pnpm" \
+            "/opt/homebrew/bin" \
+            "/usr/local/bin" \
+            "$HOME/.local/bin"; do
+            if [ -d "$candidate" ]; then
+              echo "$candidate" >> "$GITHUB_PATH"
+              export PATH="$candidate:$PATH"
+            fi
+          done
+
+          NEED_JAVA="true"
+          if command -v java >/dev/null 2>&1; then
+            JAVA_MAJOR=$(java -version 2>&1 | head -n 1 | sed -E 's/.*"([0-9]+).*/\1/')
+            if [ -n "$JAVA_MAJOR" ] && [ "$JAVA_MAJOR" -ge 25 ] 2>/dev/null; then
+              NEED_JAVA="false"
+              echo "Using local worker JDK ($JAVA_MAJOR): $(command -v java)"
+            fi
+          fi
+
+          NEED_NODE="true"
+          if command -v node >/dev/null 2>&1; then
+            NODE_MAJOR=$(node -p "process.versions.node.split('.')[0]" 2>/dev/null || echo "0")
+            if [ "$NODE_MAJOR" -ge 22 ] 2>/dev/null; then
+              NEED_NODE="false"
+              echo "Using local worker Node.js ($(node -v)): $(command -v node)"
+            fi
+          fi
+
+          NEED_PNPM="true"
+          if command -v pnpm >/dev/null 2>&1; then
+            NEED_PNPM="false"
+            echo "Using local worker pnpm ($(pnpm -v)): $(command -v pnpm)"
+          elif command -v corepack >/dev/null 2>&1; then
+            corepack enable >/dev/null 2>&1 || true
+            if command -v pnpm >/dev/null 2>&1; then
+              NEED_PNPM="false"
+              echo "Activated pnpm via corepack: $(pnpm -v)"
+            fi
+          fi
+
+          echo "need_java=$NEED_JAVA" >> "$GITHUB_OUTPUT"
+          echo "need_node=$NEED_NODE" >> "$GITHUB_OUTPUT"
+          echo "need_pnpm=$NEED_PNPM" >> "$GITHUB_OUTPUT"
+
+      - name: Fallback Setup JDK 25
+        if: steps.toolchain.outputs.need_java == 'true'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+
+      - name: Fallback Setup Node.js 24
+        if: steps.toolchain.outputs.need_node == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '24'
 
-      - name: Detect SDLC Stack & Configure Environment
+      - name: Fallback Setup pnpm
+        if: steps.toolchain.outputs.need_pnpm == 'true'
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Install Workspace Dependencies (pnpm)
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify @agui/svelte & Svelte 5 Frontend (Typecheck, Coverage & Vite Build)
+        run: |
+          pnpm --filter @agui/svelte check
+          pnpm --filter @agui/svelte test:coverage
+          pnpm --filter quarkus-svelte-skeleton-frontend check
+          pnpm --filter quarkus-svelte-skeleton-frontend test:coverage
+          pnpm --filter quarkus-svelte-skeleton-frontend build
+
+      - name: Verify Maven Reactor Unit Tests, Install & JaCoCo Coverage
+        run: ./mvnw -B install jacoco:report
+
+      - name: Run Changed-Module PITest Mutation Defense
+        shell: bash
+        run: |
+          BASE_REF="${{ github.base_ref || 'develop' }}"
+          CHANGED_FILES=$(git diff --name-only "origin/$BASE_REF"...HEAD 2>/dev/null || git diff --name-only HEAD~1 2>/dev/null || true)
+          PIT_MODULES=()
+          for mod in \
+            ag-ui-a2a \
+            ag-ui-langchain4j \
+            ag-ui-quarkus \
+            ag-ui-quarkus-langchain4j \
+            examples/quarkus-svelte-skeleton/mcp-server \
+            examples/quarkus-svelte-skeleton/a2a-server \
+            examples/quarkus-svelte-skeleton/backend; do
+            if echo "$CHANGED_FILES" | grep -q "^${mod}/"; then
+              PIT_MODULES+=("$mod")
+            fi
+          done
+
+          if [ "${#PIT_MODULES[@]}" -eq 0 ]; then
+            echo "No Java source module changes detected against origin/$BASE_REF; skipping PITest."
+          else
+            MOD_CSV=$(IFS=,; echo "${PIT_MODULES[*]}")
+            echo "Running PITest mutation coverage on changed modules: $MOD_CSV"
+            ./mvnw -B test-compile org.pitest:pitest-maven:mutationCoverage -DoutputFormats=XML,HTML -pl "$MOD_CSV"
+          fi
+
+      - name: Verify SDLC Spec-Drift & Merkle Audit Chain
         run: |
           if [ -f ".agent/scripts/sdlc-engine.mjs" ]; then
             node .agent/scripts/sdlc-engine.mjs detect
-          fi
-
-      - name: Verify Universal Quality Gate, Spec Drift & Merkle Audit Chain
-        run: |
-          if [ -f ".agent/scripts/sdlc-engine.mjs" ]; then
             node .agent/scripts/sdlc-engine.mjs drift check
             node .agent/scripts/sdlc-engine.mjs audit verify
-            node .agent/scripts/sdlc-engine.mjs gate
-          elif npm run | grep -q 'gate'; then
-            npm run gate
-          else
-            npm test
           fi

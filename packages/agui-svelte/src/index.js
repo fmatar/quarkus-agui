@@ -23,6 +23,14 @@ export {
 	resolveProtocolCallMeta
 } from './taxonomy.js';
 
+export {
+	AGUI_ACTIVITY_TYPES,
+	buildPlaceMapLinks,
+	createActivityRegistry,
+	formatCoordinatesLabel,
+	upsertActivityList
+} from './activities.js';
+
 export { WebSocketAgent } from './websocket-agent.js';
 
 export {

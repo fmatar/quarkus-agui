@@ -2,6 +2,7 @@ package org.agui.showcase.backend;
 
 import com.agui.community.core.agent.Agent;
 import com.agui.community.core.agent.RunAgentInput;
+import com.agui.community.core.event.ActivitySnapshotEvent;
 import com.agui.community.core.event.Event;
 import com.agui.community.core.event.JsonPatchOperation;
 import com.agui.community.core.event.RunErrorEvent;
@@ -211,7 +212,9 @@ public class NomadConciergeOrchestratorService implements Agent {
                         "memoryTurns", turns))
                 .toolClassifier(this::classifyToolExecution)
                 .postToolStatePatchProvider(exec -> buildStatePatches(threadId, dossierStore.onToolExecuted(threadId, exec)))
+                .postToolActivityProvider(exec -> dossierStore.drainPendingActivities(threadId))
                 .postRunStatePatchProvider(() -> buildStatePatches(threadId, dossierStore.finalizeTurnDossier(threadId, a2aClient)))
+                .postRunActivityProvider(() -> dossierStore.drainPendingActivities(threadId))
                 .interruptSupplier(() -> buildInterrupts(threadId))
                 .runResultSupplier(() -> buildRunResult(threadId))
                 .build();
@@ -322,6 +325,17 @@ public class NomadConciergeOrchestratorService implements Agent {
         deltaFields.put("memoryTurns", getMemoryTurnCount(threadId));
         deltaFields.put("pendingApproval", null);
         events.add(new StateDeltaEvent(AgUiStatePatch.upsertRootFields(deltaFields), now, null));
+        if (!isError && dossier.get("reportSections") instanceof Map<?, ?> sections
+                && sections.get("fxBudget") instanceof Map<?, ?> fxBudget) {
+            String slug = city.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", "-");
+            events.add(new ActivitySnapshotEvent(
+                    "act-fx-budget-" + slug,
+                    TripDossierStore.ACT_FX_BUDGET,
+                    fxBudget,
+                    true,
+                    now,
+                    Map.of("protocol", "AG-UI", "callType", "agui:activity", "activityType", TripDossierStore.ACT_FX_BUDGET, "city", city)));
+        }
 
         String replyText = isError
                 ? "Reservation commit failed on MCP server (:8081): " + outcome.getOrDefault("error", "Unavailable")

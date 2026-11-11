@@ -204,3 +204,66 @@ export declare function createAgUiStore<TState = AgUiDefaultStoreState>(
 export declare function useAgUiAgent<TState = AgUiDefaultStoreState>(
 	options?: UseAgUiAgentOptions<TState>
 ): AgUiAgentController<TState>;
+
+export declare const AGUI_ACTIVITY_TYPES: Readonly<{
+	WEATHER: 'agui:weather';
+	MAP_PLACES: 'agui:map-places';
+	SECURITY_ADVISORY: 'agui:security-advisory';
+	FX_BUDGET: 'agui:fx-budget';
+	CULTURE_AUDIO: 'agui:culture-audio';
+}>;
+
+export interface AgUiPlaceMapLinkOptions {
+	name?: string;
+	city?: string;
+	country?: string;
+	latitude?: number | null;
+	longitude?: number | null;
+	wikiUrl?: string;
+	zoom?: number;
+}
+
+export interface AgUiPlaceMapLinks {
+	searchQuery: string;
+	coordinatesLabel: string | null;
+	coordinatesRaw: string | null;
+	googleMapsUrl: string;
+	appleMapsUrl: string;
+	openStreetMapUrl: string;
+	openStreetMapEmbedUrl: string | null;
+	wikipediaUrl: string;
+}
+
+export interface AgUiActivityRegistry<TRenderer = any> {
+	register(activityType: string, renderer: TRenderer): this;
+	has(activityType: string): boolean;
+	resolve(activityTypeOrEvent?: string | { activityType?: string } | null): TRenderer | null;
+	listTypes(): string[];
+}
+
+export interface AgUiActivityEntry<TContent = Record<string, any>> {
+	messageId: string;
+	activityType: string;
+	content: TContent;
+	replace: boolean;
+	timestamp: number | null;
+	rawEvent: any;
+}
+
+export declare function formatCoordinatesLabel(
+	latitude?: number | null,
+	longitude?: number | null
+): string | null;
+
+export declare function buildPlaceMapLinks(
+	options?: AgUiPlaceMapLinkOptions
+): AgUiPlaceMapLinks;
+
+export declare function createActivityRegistry<TRenderer = any>(
+	initialEntries?: Record<string, TRenderer>
+): AgUiActivityRegistry<TRenderer>;
+
+export declare function upsertActivityList(
+	existingList?: AgUiActivityEntry[],
+	event?: Record<string, any> | null
+): AgUiActivityEntry[];

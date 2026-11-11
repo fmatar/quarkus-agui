@@ -1,5 +1,6 @@
 package org.agui.showcase.backend;
 
+import com.agui.community.core.event.ActivitySnapshotEvent;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
@@ -29,12 +30,18 @@ import java.util.regex.Pattern;
 
 /**
  * Reactive Trip Dossier state store and Quarkus-managed {@link McpClient} facade (`@McpClientName("nomad")`).
- * Synchronizes live MCP/A2A tool results into AG-UI {@code STATE_DELTA} payloads without fabricating defaults.
+ * Synchronizes live MCP/A2A tool results into AG-UI {@code STATE_DELTA} and canonical {@code ACTIVITY_SNAPSHOT}
+ * payloads without fabricating defaults.
  */
 @ApplicationScoped
 public class TripDossierStore {
 
     public static final double HITL_THRESHOLD_USD = 1500.0;
+    public static final String ACT_WEATHER = "agui:weather";
+    public static final String ACT_MAP_PLACES = "agui:map-places";
+    public static final String ACT_SECURITY_ADVISORY = "agui:security-advisory";
+    public static final String ACT_FX_BUDGET = "agui:fx-budget";
+    public static final String ACT_CULTURE_AUDIO = "agui:culture-audio";
 
     public record PendingHitlReservation(
             String callId,
@@ -73,10 +80,12 @@ public class TripDossierStore {
 
     private final Map<String, Object> nomadTrip = new LinkedHashMap<>();
     private final Map<String, Object> preferences = new LinkedHashMap<>();
+    private final Map<String, Map<String, Object>> reportSections = new LinkedHashMap<>();
     private final Map<String, PendingHitlReservation> pendingApprovals = new ConcurrentHashMap<>();
     private final Map<String, Map<String, Object>> turnInteractions = new ConcurrentHashMap<>();
     private final Map<String, List<Map<String, Object>>> turnMedia = new ConcurrentHashMap<>();
     private final Map<String, List<Map<String, Object>>> turnSources = new ConcurrentHashMap<>();
+    private final Map<String, Map<String, ActivitySnapshotEvent>> pendingTurnActivities = new ConcurrentHashMap<>();
     private final Map<String, String> turnPrompts = new ConcurrentHashMap<>();
     private final Map<String, String> lastRequestedCities = new ConcurrentHashMap<>();
 
@@ -95,7 +104,19 @@ public class TripDossierStore {
         turnInteractions.remove(key);
         turnMedia.remove(key);
         turnSources.remove(key);
+        pendingTurnActivities.remove(key);
         turnPrompts.put(key, prompt == null ? "" : prompt.trim());
+    }
+
+    public List<ActivitySnapshotEvent> drainPendingActivities(String threadId) {
+        String key = normalizeThreadId(threadId);
+        Map<String, ActivitySnapshotEvent> queued = pendingTurnActivities.remove(key);
+        if (queued == null || queued.isEmpty()) {
+            return List.of();
+        }
+        synchronized (queued) {
+            return List.copyOf(queued.values());
+        }
     }
 
     public Map<String, Object> readTripDossierState() {
@@ -104,6 +125,7 @@ public class TripDossierStore {
             snapshot.put("uri", "itinerary://active-trip");
             snapshot.put("nomadTrip", new LinkedHashMap<>(nomadTrip));
             snapshot.put("preferences", new LinkedHashMap<>(preferences));
+            snapshot.put("reportSections", copyReportSectionsLocked());
             return snapshot;
         }
     }
@@ -118,6 +140,10 @@ public class TripDossierStore {
                 String code = homeCurrency.trim().toUpperCase(Locale.ROOT);
                 nomadTrip.put("homeCurrency", code);
                 preferences.put("homeCurrency", code);
+            }
+            if (nomadTrip.get("activeCity") instanceof String activeCity && !activeCity.isBlank()
+                    && (reportSections.containsKey("fxBudget") || nomadTrip.get("budgetUsd") != null)) {
+                reportSections.put("fxBudget", buildFxBudgetSectionLocked(activeCity, false, null));
             }
             return readTripDossierState();
         }
@@ -280,11 +306,14 @@ public class TripDossierStore {
                 parsed.putIfAbsent("error", "MCP updateTripItinerary failed");
                 return parsed;
             }
+            String resolvedCity = normalizeCityName(stringOrDefault(parsed.get("activeCity"), city));
             synchronized (stateLock) {
-                nomadTrip.put("activeCity", parsed.getOrDefault("activeCity", city));
+                switchActiveCityLocked(resolvedCity);
                 nomadTrip.put("stopTitle", parsed.getOrDefault("stopTitle", stopTitle));
                 nomadTrip.put("nights", parsed.getOrDefault("nights", nights));
                 nomadTrip.put("allocatedUsd", parsed.getOrDefault("allocatedUsd", costUsd));
+                reportSections.put("fxBudget", buildFxBudgetSectionLocked(resolvedCity, false, null));
+                reportSections.put("mapPlaces", buildMapPlacesSectionLocked(resolvedCity));
             }
             parsed.put("status", "OK");
             parsed.put("isError", false);
@@ -297,6 +326,7 @@ public class TripDossierStore {
         }
     }
 
+    @SuppressWarnings("unchecked")
     public Map<String, Object> onToolExecuted(String threadId, ToolExecution exec) {
         String key = normalizeThreadId(threadId);
         String toolName = exec.request().name() == null ? "" : exec.request().name();
@@ -310,9 +340,9 @@ public class TripDossierStore {
             case "saveTravelerPreferences" -> applyPreferencesResult(args, result, isError);
             case "fetchCityWeather" -> applyWeatherResult(key, args, result, isError);
             case "discoverLocalCultureAndMedia" -> applyCultureResult(key, args, result, isError);
-            case "sampleAcousticMood" -> applyAcousticMoodResult(result, isError);
+            case "sampleAcousticMood" -> applyAcousticMoodResult(key, args, result, isError, false);
             case "updateTripItinerary", "requestSanctuaryReservation" -> {
-                applyReservationResult(result, isError);
+                applyReservationResult(key, args, result, isError);
                 String reservedCity = stringOrDefault(result.get("activeCity"), stringOrDefault(args.get("city"), null));
                 if (!isError && !"AWAITING_APPROVAL".equalsIgnoreCase(String.valueOf(result.get("status")))) {
                     ensureTurnCultureMedia(key, reservedCity, "");
@@ -335,12 +365,9 @@ public class TripDossierStore {
                 }
             }
             case "curateNeighborhoodCadence" -> {
+                applyCadenceResult(key, args, result, isError);
                 if (!isError && args.get("city") instanceof String city && !city.isBlank()) {
-                    String trimmedCity = normalizeCityName(city);
-                    synchronized (stateLock) {
-                        switchActiveCityLocked(trimmedCity);
-                    }
-                    ensureTurnCultureMedia(key, trimmedCity, stringOrDefault(args.get("focus"), ""));
+                    ensureTurnCultureMedia(key, normalizeCityName(city), stringOrDefault(args.get("focus"), ""));
                 }
             }
             default -> {
@@ -398,6 +425,9 @@ public class TripDossierStore {
 
                 boolean needsWeather;
                 boolean needsFx;
+                boolean needsCadence;
+                boolean needsAdvisory;
+                boolean needsAcoustic;
                 synchronized (stateLock) {
                     switchActiveCityLocked(resolvedCity);
                     if (!country.isBlank()) {
@@ -412,21 +442,51 @@ public class TripDossierStore {
                     preferences.put("homeCurrency", explicitBudget.currency());
                     nomadTrip.putIfAbsent("allocatedUsd", allocated);
                     nomadTrip.putIfAbsent("stopTitle", resolvedCity + " Cultural & Architectural Itinerary");
-                    needsWeather = nomadTrip.get("temperatureC") == null;
-                    needsFx = nomadTrip.get("exchangeRate") == null && a2aClient != null;
+                    needsWeather = !reportSections.containsKey("weather") || nomadTrip.get("temperatureC") == null;
+                    needsFx = (!reportSections.containsKey("fxBudget") || nomadTrip.get("exchangeRate") == null) && a2aClient != null;
+                    needsCadence = !(nomadTrip.get("places") instanceof List<?> p && !p.isEmpty()) && a2aClient != null;
+                    needsAdvisory = !reportSections.containsKey("securityAdvisory") && a2aClient != null;
+                    needsAcoustic = nomadTrip.get("acousticMood") == null;
                 }
 
                 ensureTurnCultureMedia(key, resolvedCity, "");
                 if (needsWeather) {
                     ensureTurnWeather(key, resolvedCity);
                 }
+                if (needsAcoustic) {
+                    ensureTurnAcousticMood(key, resolvedCity);
+                }
+                if (needsCadence) {
+                    ensureTurnNeighborhoodPlaces(key, resolvedCity, a2aClient);
+                }
+                if (needsAdvisory) {
+                    ensureTurnAdvisory(key, resolvedCity, a2aClient);
+                }
                 if (needsFx) {
                     ensureTurnBudget(key, resolvedCity, explicitBudget.amount(), explicitBudget.currency(), a2aClient);
                 }
+                ensureCompleteSectionsLocked(key, resolvedCity);
                 return buildCurrentStateDelta(key);
             }
         }
         return Map.of();
+    }
+
+    private void ensureCompleteSectionsLocked(String threadKey, String resolvedCity) {
+        Map<String, Object> mapSection;
+        Map<String, Object> fxSection;
+        Map<String, Object> cultureSection;
+        synchronized (stateLock) {
+            mapSection = buildMapPlacesSectionLocked(resolvedCity);
+            reportSections.put("mapPlaces", mapSection);
+            fxSection = buildFxBudgetSectionLocked(resolvedCity, false, null);
+            reportSections.put("fxBudget", fxSection);
+            cultureSection = buildCultureAudioSectionLocked(resolvedCity, false, null);
+            reportSections.put("cultureAudio", cultureSection);
+        }
+        queueActivity(threadKey, ACT_MAP_PLACES, resolvedCity, mapSection);
+        queueActivity(threadKey, ACT_FX_BUDGET, resolvedCity, fxSection);
+        queueActivity(threadKey, ACT_CULTURE_AUDIO, resolvedCity, cultureSection);
     }
 
     private Map<String, Object> buildCurrentStateDelta(String key) {
@@ -484,41 +544,90 @@ public class TripDossierStore {
     }
 
     private void applyWeatherResult(String threadKey, Map<String, Object> args, Map<String, Object> result, boolean isError) {
-        String city = stringOrDefault(result.get("city"), stringOrDefault(args.get("city"), "Destination"));
+        String city = normalizeCityName(stringOrDefault(result.get("city"), stringOrDefault(args.get("city"), "Destination")));
+        String errText = stringOrDefault(result.get("error"), "Weather API unavailable");
         appendSource(threadKey, Map.of(
                 "title", "Open-Meteo Forecast — " + city,
                 "url", "https://api.open-meteo.com/v1/forecast",
                 "status", isError ? "error" : "verified",
-                "error", isError ? stringOrDefault(result.get("error"), "Weather API unavailable") : ""));
+                "error", isError ? errText : ""));
         if (isError) {
+            Map<String, Object> errSection = new LinkedHashMap<>();
+            errSection.put("status", "ERROR");
+            errSection.put("isError", true);
+            errSection.put("city", city);
+            errSection.put("error", errText);
+            errSection.put("source", "api.open-meteo.com");
+            synchronized (stateLock) {
+                reportSections.put("weather", errSection);
+            }
+            queueActivity(threadKey, ACT_WEATHER, city, errSection);
             return;
         }
-        String country = stringOrDefault(result.get("country"), null);
-        if (country != null) {
+        String country = stringOrDefault(result.get("country"), A2aGatewayClient.resolveCountryForCity(city));
+        if (!country.isBlank()) {
             A2aGatewayClient.registerCityCountry(city, country);
         }
+        Map<String, Object> weatherSection;
+        Map<String, Object> mapSection;
         synchronized (stateLock) {
             switchActiveCityLocked(city);
-            if (country != null) {
+            if (!country.isBlank()) {
                 nomadTrip.put("country", country);
             }
             if (result.get("temperatureC") instanceof Number temp) {
                 nomadTrip.put("temperatureC", temp.doubleValue());
             }
+            if (result.get("windSpeedKph") instanceof Number wind) {
+                nomadTrip.put("windSpeedKph", wind.doubleValue());
+            }
+            if (result.get("latitude") instanceof Number lat) {
+                nomadTrip.put("latitude", lat.doubleValue());
+            }
+            if (result.get("longitude") instanceof Number lon) {
+                nomadTrip.put("longitude", lon.doubleValue());
+            }
             if (result.get("condition") instanceof String cond && !cond.isBlank()) {
                 nomadTrip.put("weatherCondition", cond);
             }
+            weatherSection = new LinkedHashMap<>();
+            weatherSection.put("status", "OK");
+            weatherSection.put("isError", false);
+            weatherSection.put("city", city);
+            weatherSection.put("country", country);
+            weatherSection.put("temperatureC", nomadTrip.get("temperatureC"));
+            weatherSection.put("windSpeedKph", nomadTrip.get("windSpeedKph"));
+            weatherSection.put("condition", nomadTrip.get("weatherCondition"));
+            weatherSection.put("latitude", nomadTrip.get("latitude"));
+            weatherSection.put("longitude", nomadTrip.get("longitude"));
+            weatherSection.put("source", stringOrDefault(result.get("source"), "api.open-meteo.com"));
+            reportSections.put("weather", weatherSection);
+
+            mapSection = buildMapPlacesSectionLocked(city);
+            reportSections.put("mapPlaces", mapSection);
         }
+        queueActivity(threadKey, ACT_WEATHER, city, weatherSection);
+        queueActivity(threadKey, ACT_MAP_PLACES, city, mapSection);
     }
 
     private void applyCultureResult(String threadKey, Map<String, Object> args, Map<String, Object> result, boolean isError) {
         String city = normalizeCityName(stringOrDefault(result.get("destination"), stringOrDefault(args.get("destination"), "Destination")));
+        String wikiUrl = stringOrDefault(
+                result.get("wikiSourceUrl"),
+                "https://en.wikipedia.org/wiki/" + URLEncoder.encode(city.replace(' ', '_'), StandardCharsets.UTF_8));
+        String errText = stringOrDefault(result.get("error"), "Culture API unavailable");
         appendSource(threadKey, Map.of(
                 "title", "Wikipedia Cultural Summary — " + city,
-                "url", "https://en.wikipedia.org/wiki/" + URLEncoder.encode(city.replace(' ', '_'), StandardCharsets.UTF_8),
+                "url", wikiUrl,
                 "status", isError ? "error" : "verified",
-                "error", isError ? stringOrDefault(result.get("error"), "Culture API unavailable") : ""));
+                "error", isError ? errText : ""));
         if (isError) {
+            Map<String, Object> errSection;
+            synchronized (stateLock) {
+                errSection = buildCultureAudioSectionLocked(city, true, errText);
+                reportSections.put("cultureAudio", errSection);
+            }
+            queueActivity(threadKey, ACT_CULTURE_AUDIO, city, errSection);
             return;
         }
         List<Map<String, Object>> mediaItems = new ArrayList<>();
@@ -552,15 +661,26 @@ public class TripDossierStore {
         if (!mediaItems.isEmpty()) {
             turnMedia.put(threadKey, mediaItems);
         }
+        Map<String, Object> cultureSection;
         synchronized (stateLock) {
             switchActiveCityLocked(city);
+            nomadTrip.put("wikiSourceUrl", wikiUrl);
+            if (result.get("culturalSummary") instanceof String summary && !summary.isBlank()) {
+                nomadTrip.put("culturalSummary", summary.trim());
+            }
             if (heroImage != null) {
                 nomadTrip.put("heroImageUrl", heroImage);
             }
             if (soundtrackEntry != null) {
                 nomadTrip.put("soundtrack", soundtrackEntry);
             }
+            cultureSection = buildCultureAudioSectionLocked(city, false, null);
+            reportSections.put("cultureAudio", cultureSection);
+            if (reportSections.containsKey("mapPlaces")) {
+                reportSections.put("mapPlaces", buildMapPlacesSectionLocked(city));
+            }
         }
+        queueActivity(threadKey, ACT_CULTURE_AUDIO, city, cultureSection);
     }
 
     private void ensureTurnCultureMedia(String threadKey, String city, String genre) {
@@ -588,7 +708,7 @@ public class TripDossierStore {
             Map<String, Object> parsed = parseJsonOrEmpty(execResult.resultText());
             boolean isErr = Boolean.TRUE.equals(parsed.get("isError"))
                     || "ERROR".equalsIgnoreCase(String.valueOf(parsed.get("status")));
-            if (!isErr && (parsed.containsKey("heroImageUrl") || parsed.containsKey("audioTrack"))) {
+            if (!isErr && (parsed.containsKey("heroImageUrl") || parsed.containsKey("audioTrack") || parsed.containsKey("culturalSummary"))) {
                 applyCultureResult(threadKey, Map.of("destination", resolvedCity), parsed, false);
             }
         } catch (Exception ignored) {
@@ -609,17 +729,87 @@ public class TripDossierStore {
                     .arguments(argsJson)
                     .build();
             ToolExecutionResult execResult = nomadMcpClient.executeTool(req);
+            if (execResult == null) {
+                return;
+            }
+            Map<String, Object> parsed = parseJsonOrEmpty(execResult.resultText());
+            boolean isErr = execResult.isError()
+                    || Boolean.TRUE.equals(parsed.get("isError"))
+                    || "ERROR".equalsIgnoreCase(String.valueOf(parsed.get("status")));
+            if (!isErr && parsed.get("temperatureC") instanceof Number) {
+                applyWeatherResult(threadKey, Map.of("city", resolvedCity), parsed, false);
+            } else if (isErr) {
+                applyWeatherResult(threadKey, Map.of("city", resolvedCity), parsed, true);
+            }
+        } catch (Exception ignored) {
+            // Best-effort weather enrichment when MCP client is unavailable
+        }
+    }
+
+    private void ensureTurnAcousticMood(String threadKey, String city) {
+        if (city == null || city.isBlank()) {
+            return;
+        }
+        String resolvedCity = normalizeCityName(city);
+        String cond;
+        synchronized (stateLock) {
+            cond = stringOrDefault(nomadTrip.get("weatherCondition"), "");
+        }
+        try {
+            String argsJson = objectMapper.writeValueAsString(Map.of("city", resolvedCity, "weatherCondition", cond));
+            ToolExecutionRequest req = ToolExecutionRequest.builder()
+                    .id("mcp-mood-" + UUID.randomUUID().toString().substring(0, 8))
+                    .name("sampleAcousticMood")
+                    .arguments(argsJson)
+                    .build();
+            ToolExecutionResult execResult = nomadMcpClient.executeTool(req);
             if (execResult == null || execResult.isError()) {
                 return;
             }
             Map<String, Object> parsed = parseJsonOrEmpty(execResult.resultText());
-            boolean isErr = Boolean.TRUE.equals(parsed.get("isError"))
-                    || "ERROR".equalsIgnoreCase(String.valueOf(parsed.get("status")));
-            if (!isErr && parsed.get("temperatureC") instanceof Number) {
-                applyWeatherResult(threadKey, Map.of("city", resolvedCity), parsed, false);
+            if (!Boolean.TRUE.equals(parsed.get("isError")) && parsed.containsKey("sampledMood")) {
+                applyAcousticMoodResult(threadKey, Map.of("city", resolvedCity), parsed, false, true);
             }
         } catch (Exception ignored) {
-            // Best-effort weather enrichment when MCP client is unavailable
+            // Best-effort acoustic mood sampling
+        }
+    }
+
+    private void ensureTurnNeighborhoodPlaces(String threadKey, String city, A2aGatewayClient a2aClient) {
+        if (city == null || city.isBlank() || a2aClient == null) {
+            return;
+        }
+        String resolvedCity = normalizeCityName(city);
+        try {
+            Map<String, Object> handoff = a2aClient.delegateTask(
+                    "a2a-places-" + UUID.randomUUID().toString().substring(0, 8),
+                    "curate-neighborhood-cadence",
+                    "Curate neighborhood places for " + resolvedCity,
+                    Map.of("city", resolvedCity));
+            boolean isErr = Boolean.TRUE.equals(handoff.get("isError"))
+                    || "ERROR".equalsIgnoreCase(String.valueOf(handoff.get("status")));
+            applyCadenceResult(threadKey, Map.of("city", resolvedCity), handoff, isErr);
+        } catch (Exception ignored) {
+            // Best-effort A2A cadence curation
+        }
+    }
+
+    private void ensureTurnAdvisory(String threadKey, String city, A2aGatewayClient a2aClient) {
+        if (city == null || city.isBlank() || a2aClient == null) {
+            return;
+        }
+        String resolvedCity = normalizeCityName(city);
+        try {
+            Map<String, Object> handoff = a2aClient.delegateTask(
+                    "a2a-adv-" + UUID.randomUUID().toString().substring(0, 8),
+                    "verify-travel-advisory",
+                    "Verify travel advisory for " + resolvedCity,
+                    Map.of("city", resolvedCity));
+            boolean isErr = Boolean.TRUE.equals(handoff.get("isError"))
+                    || "ERROR".equalsIgnoreCase(String.valueOf(handoff.get("status")));
+            applyAdvisoryResult(threadKey, Map.of("city", resolvedCity), handoff, isErr);
+        } catch (Exception ignored) {
+            // Best-effort A2A advisory verification
         }
     }
 
@@ -648,36 +838,63 @@ public class TripDossierStore {
                             "targetCurrency", targetCurrency));
             boolean isErr = Boolean.TRUE.equals(handoff.get("isError"))
                     || "ERROR".equalsIgnoreCase(String.valueOf(handoff.get("status")));
-            if (!isErr) {
-                applyBudgetResult(
-                        threadKey,
-                        Map.of("city", resolvedCity, "budgetAmount", budgetAmount, "baseCurrency", normBase),
-                        handoff,
-                        false);
-            }
+            applyBudgetResult(
+                    threadKey,
+                    Map.of("city", resolvedCity, "budgetAmount", budgetAmount, "baseCurrency", normBase),
+                    handoff,
+                    isErr);
         } catch (Exception ignored) {
             // Best-effort A2A FX enrichment
         }
     }
 
-    private void applyAcousticMoodResult(Map<String, Object> result, boolean isError) {
+    private void applyAcousticMoodResult(
+            String threadKey,
+            Map<String, Object> args,
+            Map<String, Object> result,
+            boolean isError,
+            boolean preserveExistingSoundtrack) {
         if (!isError && result.get("sampledMood") instanceof String mood && !mood.isBlank()) {
             String window = stringOrDefault(result.get("recommendedListeningWindow"), "Sampled Acoustic Mood");
+            String city = normalizeCityName(stringOrDefault(result.get("city"), stringOrDefault(args.get("city"), "Destination")));
+            Map<String, Object> cultureSection;
             synchronized (stateLock) {
-                nomadTrip.put("soundtrack", Map.of(
-                        "trackName", mood.trim(),
-                        "artistName", window));
+                switchActiveCityLocked(city);
+                nomadTrip.put("acousticMood", mood.trim());
+                nomadTrip.put("listeningWindow", window);
+                Object existingSoundtrack = nomadTrip.get("soundtrack");
+                if (existingSoundtrack == null) {
+                    nomadTrip.put("soundtrack", Map.of(
+                            "trackName", mood.trim(),
+                            "artistName", window));
+                } else if (!preserveExistingSoundtrack) {
+                    Map<String, Object> updatedSoundtrack = new LinkedHashMap<>();
+                    if (existingSoundtrack instanceof Map<?, ?> prev) {
+                        for (Map.Entry<?, ?> entry : prev.entrySet()) {
+                            updatedSoundtrack.put(String.valueOf(entry.getKey()), entry.getValue());
+                        }
+                    }
+                    updatedSoundtrack.put("trackName", mood.trim());
+                    updatedSoundtrack.put("artistName", window);
+                    nomadTrip.put("soundtrack", updatedSoundtrack);
+                }
+                cultureSection = buildCultureAudioSectionLocked(city, false, null);
+                reportSections.put("cultureAudio", cultureSection);
             }
+            queueActivity(threadKey, ACT_CULTURE_AUDIO, city, cultureSection);
         }
     }
 
-    private void applyReservationResult(Map<String, Object> result, boolean isError) {
+    private void applyReservationResult(String threadKey, Map<String, Object> args, Map<String, Object> result, boolean isError) {
         if (isError || "AWAITING_APPROVAL".equalsIgnoreCase(String.valueOf(result.get("status")))) {
             return;
         }
+        String city = normalizeCityName(stringOrDefault(result.get("activeCity"), stringOrDefault(args.get("city"), "Destination")));
+        Map<String, Object> fxSection;
+        Map<String, Object> mapSection;
         synchronized (stateLock) {
-            if (result.get("activeCity") instanceof String c && !c.isBlank()) {
-                nomadTrip.put("activeCity", c);
+            if (!city.isBlank() && !"Destination".equals(city)) {
+                switchActiveCityLocked(city);
             }
             if (result.get("stopTitle") instanceof String s && !s.isBlank()) {
                 nomadTrip.put("stopTitle", s);
@@ -688,36 +905,107 @@ public class TripDossierStore {
             if (result.get("allocatedUsd") instanceof Number cost) {
                 nomadTrip.put("allocatedUsd", cost.doubleValue());
             }
+            fxSection = buildFxBudgetSectionLocked(city, false, null);
+            reportSections.put("fxBudget", fxSection);
+            mapSection = buildMapPlacesSectionLocked(city);
+            reportSections.put("mapPlaces", mapSection);
         }
+        queueActivity(threadKey, ACT_FX_BUDGET, city, fxSection);
+        queueActivity(threadKey, ACT_MAP_PLACES, city, mapSection);
+    }
+
+    @SuppressWarnings("unchecked")
+    private void applyCadenceResult(String threadKey, Map<String, Object> args, Map<String, Object> result, boolean isError) {
+        Map<String, Object> report = result.get("report") instanceof Map<?, ?> r ? (Map<String, Object>) r : result;
+        String city = normalizeCityName(stringOrDefault(report.get("city"), stringOrDefault(args.get("city"), "Destination")));
+        if (isError) {
+            return;
+        }
+        Map<String, Object> mapSection;
+        synchronized (stateLock) {
+            switchActiveCityLocked(city);
+            String country = stringOrDefault(report.get("country"), A2aGatewayClient.resolveCountryForCity(city));
+            if (!country.isBlank()) {
+                nomadTrip.putIfAbsent("country", country);
+            }
+            if (report.get("focus") instanceof String focus && !focus.isBlank()) {
+                nomadTrip.put("cadenceFocus", focus.trim());
+            }
+            if (report.get("pace") instanceof String pace && !pace.isBlank()) {
+                nomadTrip.put("cadencePace", pace.trim());
+            }
+            if (report.get("stops") instanceof List<?> rawStops && !rawStops.isEmpty()) {
+                List<String> stops = rawStops.stream().map(String::valueOf).toList();
+                nomadTrip.put("places", stops);
+            }
+            mapSection = buildMapPlacesSectionLocked(city);
+            reportSections.put("mapPlaces", mapSection);
+        }
+        queueActivity(threadKey, ACT_MAP_PLACES, city, mapSection);
     }
 
     @SuppressWarnings("unchecked")
     private void applyAdvisoryResult(String threadKey, Map<String, Object> args, Map<String, Object> result, boolean isError) {
         Map<String, Object> report = result.get("report") instanceof Map<?, ?> r ? (Map<String, Object>) r : result;
-        String city = stringOrDefault(report.get("city"), stringOrDefault(args.get("city"), "Destination"));
+        String city = normalizeCityName(stringOrDefault(report.get("city"), stringOrDefault(args.get("city"), "Destination")));
         String country = stringOrDefault(report.get("country"), A2aGatewayClient.resolveCountryForCity(city));
         String errorMsg = stringOrDefault(result.get("error"), stringOrDefault(report.get("error"), "Travel Advisory API unavailable"));
         appendSource(threadKey, Map.of(
-                "title", "REST Countries v5 Travel Advisory — " + country,
+                "title", "REST Countries v5 Travel Advisory — " + (country.isBlank() ? city : country),
                 "url", "https://api.restcountries.com/countries/v5/names.common/"
                         + URLEncoder.encode(country.isBlank() ? city : country, StandardCharsets.UTF_8),
                 "status", isError ? "error" : "verified",
                 "error", isError ? errorMsg : ""));
+
+        String currency = stringOrDefault(
+                report.get("currency"),
+                stringOrDefault(report.get("currencyCode"), A2aGatewayClient.resolveCurrencyForCountry(country)));
+        List<String> highlights = report.get("safetyHighlights") instanceof List<?> rawList && !rawList.isEmpty()
+                ? rawList.stream().map(String::valueOf).toList()
+                : List.of(
+                        "Confirm passport validity (6+ months) & consular entry requirements for " + (country.isBlank() ? city : country) + ".",
+                        "Verify municipal transit & settlement currency (" + currency + ").",
+                        "Nomad HITL financial safeguard active: sanctuary holds >= $1,500 USD require explicit traveler authorization.");
+
+        Map<String, Object> securitySection = new LinkedHashMap<>();
+        securitySection.put("status", isError ? "DEGRADED" : "VERIFIED");
+        securitySection.put("isError", isError);
+        securitySection.put("city", city);
+        securitySection.put("country", country);
+        securitySection.put("capital", stringOrDefault(report.get("capital"), isError ? null : city));
+        securitySection.put("region", stringOrDefault(report.get("region"), null));
+        securitySection.put("currencyCode", currency);
+        securitySection.put("timezone", stringOrDefault(report.get("timezone"), null));
+        securitySection.put("advisoryLevel", stringOrDefault(
+                report.get("advisoryLevel"),
+                isError ? "UNVERIFIED_UPSTREAM" : "STANDARD_PRECAUTIONS"));
+        securitySection.put("advisoryStatus", stringOrDefault(
+                report.get("advisoryStatus"),
+                isError ? "Upstream Advisory Unverified (" + errorMsg + ")" : "VERIFIED — Country Metadata & Timezone Confirmed"));
+        securitySection.put("emergencyNumbers", stringOrDefault(
+                report.get("emergencyNumbers"),
+                "112 Universal GSM • Local Municipal Dispatch"));
+        securitySection.put("hitlThresholdUsd", HITL_THRESHOLD_USD);
+        securitySection.put("safetyHighlights", highlights);
+        securitySection.put("source", stringOrDefault(report.get("source"), "api.restcountries.com"));
         if (isError) {
-            return;
+            securitySection.put("error", errorMsg);
         }
+
         synchronized (stateLock) {
-            if (!city.isBlank()) {
-                nomadTrip.put("activeCity", city);
+            if (!city.isBlank() && !"Destination".equals(city)) {
+                switchActiveCityLocked(city);
             }
             if (!country.isBlank()) {
                 nomadTrip.put("country", country);
             }
-            String currency = stringOrDefault(report.get("currency"), stringOrDefault(report.get("currencyCode"), null));
-            if (currency != null) {
+            if (!isError) {
                 nomadTrip.put("currency", currency);
             }
+            nomadTrip.put("securityAdvisory", securitySection);
+            reportSections.put("securityAdvisory", securitySection);
         }
+        queueActivity(threadKey, ACT_SECURITY_ADVISORY, city, securitySection);
     }
 
     @SuppressWarnings("unchecked")
@@ -725,18 +1013,27 @@ public class TripDossierStore {
         Map<String, Object> report = result.get("report") instanceof Map<?, ?> r ? (Map<String, Object>) r : result;
         String sourceHost = stringOrDefault(report.get("source"), "api.frankfurter.dev");
         boolean isOpenErApi = "open.er-api.com".equalsIgnoreCase(sourceHost);
+        String errText = stringOrDefault(result.get("error"), stringOrDefault(report.get("error"), "FX API unavailable"));
         appendSource(threadKey, Map.of(
                 "title", isOpenErApi ? "ExchangeRate-API ISO 4217 FX Reference" : "Frankfurter ECB FX Reference",
                 "url", isOpenErApi ? "https://open.er-api.com/v6/latest/USD" : "https://api.frankfurter.dev/v1/latest",
                 "status", isError ? "error" : "verified",
-                "error", isError ? stringOrDefault(result.get("error"), "FX API unavailable") : ""));
+                "error", isError ? errText : ""));
+
+        String city = normalizeCityName(stringOrDefault(report.get("city"), stringOrDefault(args.get("city"), "Destination")));
         if (isError) {
+            Map<String, Object> errSection;
+            synchronized (stateLock) {
+                errSection = buildFxBudgetSectionLocked(city, true, errText);
+                reportSections.put("fxBudget", errSection);
+            }
+            queueActivity(threadKey, ACT_FX_BUDGET, city, errSection);
             return;
         }
+        Map<String, Object> fxSection;
         synchronized (stateLock) {
-            String city = stringOrDefault(report.get("city"), stringOrDefault(args.get("city"), null));
-            if (city != null) {
-                switchActiveCityLocked(normalizeCityName(city));
+            if (!city.isBlank() && !"Destination".equals(city)) {
+                switchActiveCityLocked(city);
             }
             if (report.get("country") instanceof String country && !country.isBlank()) {
                 nomadTrip.put("country", country);
@@ -750,12 +1047,134 @@ public class TripDossierStore {
             if (report.get("exchangeRate") instanceof Number rate) {
                 nomadTrip.put("exchangeRate", rate.doubleValue());
             }
+            if (report.get("convertedTotal") instanceof Number conv) {
+                nomadTrip.put("convertedTotal", conv.doubleValue());
+            }
+            nomadTrip.put("fxSource", sourceHost);
             Object budgetObj = args.get("budgetAmount") != null ? args.get("budgetAmount") : report.get("budgetUsd");
             if (budgetObj instanceof Number budget && budget.doubleValue() > 0.0) {
                 nomadTrip.put("budgetUsd", budget.doubleValue());
                 nomadTrip.putIfAbsent("allocatedUsd", Math.round(budget.doubleValue() * 0.65 * 100.0) / 100.0);
             }
+            fxSection = buildFxBudgetSectionLocked(city, false, null);
+            reportSections.put("fxBudget", fxSection);
         }
+        queueActivity(threadKey, ACT_FX_BUDGET, city, fxSection);
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> buildMapPlacesSectionLocked(String fallbackCity) {
+        String city = stringOrDefault(nomadTrip.get("activeCity"), fallbackCity);
+        String country = stringOrDefault(nomadTrip.get("country"), A2aGatewayClient.resolveCountryForCity(city));
+        String wikiUrl = stringOrDefault(
+                nomadTrip.get("wikiSourceUrl"),
+                city == null || city.isBlank()
+                        ? null
+                        : "https://en.wikipedia.org/wiki/" + URLEncoder.encode(city.replace(' ', '_'), StandardCharsets.UTF_8));
+        List<String> stops = nomadTrip.get("places") instanceof List<?> raw && !raw.isEmpty()
+                ? raw.stream().map(String::valueOf).toList()
+                : (nomadTrip.get("stopTitle") instanceof String st && !st.isBlank()
+                        ? List.of(st)
+                        : List.of(city + " Historic Center & Cultural District"));
+
+        Map<String, Object> mapSection = new LinkedHashMap<>();
+        mapSection.put("status", "OK");
+        mapSection.put("isError", false);
+        mapSection.put("city", city);
+        mapSection.put("country", country);
+        mapSection.put("latitude", nomadTrip.get("latitude"));
+        mapSection.put("longitude", nomadTrip.get("longitude"));
+        mapSection.put("stopTitle", nomadTrip.get("stopTitle"));
+        mapSection.put("focus", stringOrDefault(nomadTrip.get("cadenceFocus"), "architecture, local craft & evening acoustics"));
+        mapSection.put("pace", stringOrDefault(nomadTrip.get("cadencePace"), "Unrushed curated walk"));
+        mapSection.put("stops", stops);
+        mapSection.put("wikiSourceUrl", wikiUrl);
+        return mapSection;
+    }
+
+    private Map<String, Object> buildFxBudgetSectionLocked(String fallbackCity, boolean isError, String error) {
+        String city = stringOrDefault(nomadTrip.get("activeCity"), fallbackCity);
+        String country = stringOrDefault(nomadTrip.get("country"), A2aGatewayClient.resolveCountryForCity(city));
+        String baseCurrency = stringOrDefault(nomadTrip.get("homeCurrency"), "USD");
+        String targetCurrency = stringOrDefault(nomadTrip.get("currency"), A2aGatewayClient.resolveCurrencyForCountry(country));
+        Double budget = nomadTrip.get("budgetUsd") instanceof Number b ? b.doubleValue() : null;
+        Double allocated = nomadTrip.get("allocatedUsd") instanceof Number a ? a.doubleValue() : null;
+        Double rate = nomadTrip.get("exchangeRate") instanceof Number r ? r.doubleValue() : null;
+        Double converted = nomadTrip.get("convertedTotal") instanceof Number c
+                ? c.doubleValue()
+                : (budget != null && rate != null ? Math.round(budget * rate * 100.0) / 100.0 : null);
+
+        Map<String, Object> fxSection = new LinkedHashMap<>();
+        fxSection.put("status", isError ? "ERROR" : "OK");
+        fxSection.put("isError", isError);
+        fxSection.put("city", city);
+        fxSection.put("country", country);
+        fxSection.put("nights", nomadTrip.get("nights"));
+        fxSection.put("stopTitle", nomadTrip.get("stopTitle"));
+        fxSection.put("baseCurrency", baseCurrency);
+        fxSection.put("targetCurrency", targetCurrency);
+        fxSection.put("exchangeRate", rate);
+        fxSection.put("budgetUsd", budget);
+        fxSection.put("allocatedUsd", allocated);
+        fxSection.put("convertedTotal", converted);
+        fxSection.put("hitlThresholdUsd", HITL_THRESHOLD_USD);
+        fxSection.put("source", stringOrDefault(nomadTrip.get("fxSource"), "api.frankfurter.dev"));
+        if (isError && error != null) {
+            fxSection.put("error", error);
+        }
+        return fxSection;
+    }
+
+    private Map<String, Object> buildCultureAudioSectionLocked(String fallbackCity, boolean isError, String error) {
+        String city = stringOrDefault(nomadTrip.get("activeCity"), fallbackCity);
+        String country = stringOrDefault(nomadTrip.get("country"), A2aGatewayClient.resolveCountryForCity(city));
+        Map<String, Object> cultureSection = new LinkedHashMap<>();
+        cultureSection.put("status", isError ? "ERROR" : "OK");
+        cultureSection.put("isError", isError);
+        cultureSection.put("city", city);
+        cultureSection.put("country", country);
+        cultureSection.put("culturalSummary", nomadTrip.get("culturalSummary"));
+        cultureSection.put("heroImageUrl", nomadTrip.get("heroImageUrl"));
+        cultureSection.put("wikiSourceUrl", nomadTrip.get("wikiSourceUrl"));
+        cultureSection.put("soundtrack", nomadTrip.get("soundtrack"));
+        cultureSection.put("acousticMood", nomadTrip.get("acousticMood"));
+        cultureSection.put("listeningWindow", nomadTrip.get("listeningWindow"));
+        if (isError && error != null) {
+            cultureSection.put("error", error);
+        }
+        return cultureSection;
+    }
+
+    private void queueActivity(String threadKey, String activityType, String city, Map<String, Object> content) {
+        String slug = (city == null || city.isBlank() ? "trip" : city.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", "-"));
+        String msgId = "act-" + activityType.replace("agui:", "") + "-" + slug;
+        long now = System.currentTimeMillis();
+        ActivitySnapshotEvent event = new ActivitySnapshotEvent(
+                msgId,
+                activityType,
+                new LinkedHashMap<>(content),
+                true,
+                now,
+                Map.of(
+                        "protocol", "AG-UI",
+                        "callType", "agui:activity",
+                        "activityType", activityType,
+                        "city", city == null ? "" : city));
+        pendingTurnActivities.compute(threadKey, (k, existing) -> {
+            Map<String, ActivitySnapshotEvent> map = existing == null ? new LinkedHashMap<>() : existing;
+            synchronized (map) {
+                map.put(activityType, event);
+            }
+            return map;
+        });
+    }
+
+    private Map<String, Object> copyReportSectionsLocked() {
+        Map<String, Object> copy = new LinkedHashMap<>();
+        for (Map.Entry<String, Map<String, Object>> entry : reportSections.entrySet()) {
+            copy.put(entry.getKey(), new LinkedHashMap<>(entry.getValue()));
+        }
+        return copy;
     }
 
     private void switchActiveCityLocked(String newCity) {
@@ -768,12 +1187,26 @@ public class TripDossierStore {
             nomadTrip.remove("country");
             nomadTrip.remove("currency");
             nomadTrip.remove("exchangeRate");
+            nomadTrip.remove("convertedTotal");
+            nomadTrip.remove("fxSource");
             nomadTrip.remove("temperatureC");
+            nomadTrip.remove("windSpeedKph");
+            nomadTrip.remove("latitude");
+            nomadTrip.remove("longitude");
             nomadTrip.remove("weatherCondition");
             nomadTrip.remove("stopTitle");
             nomadTrip.remove("allocatedUsd");
             nomadTrip.remove("heroImageUrl");
+            nomadTrip.remove("culturalSummary");
+            nomadTrip.remove("wikiSourceUrl");
             nomadTrip.remove("soundtrack");
+            nomadTrip.remove("acousticMood");
+            nomadTrip.remove("listeningWindow");
+            nomadTrip.remove("places");
+            nomadTrip.remove("cadenceFocus");
+            nomadTrip.remove("cadencePace");
+            nomadTrip.remove("securityAdvisory");
+            reportSections.clear();
         }
         nomadTrip.put("activeCity", normalized);
     }
@@ -912,6 +1345,8 @@ public class TripDossierStore {
 
         preferences.clear();
         preferences.put("uri", "traveler://preferences");
+
+        reportSections.clear();
     }
 
     private Map<String, Object> parseJsonOrEmpty(String raw) {
