@@ -1,0 +1,33 @@
+# Quarkus AG-UI (`quarkus-agui`)
+
+> Orthogonal Java 17 Quarkus, LangChain4j & A2A (`1.5.0.Final`) adapters built on the official upstream AG-UI SDK (`com.ag-ui.community:0.1.1`), paired with a headless Svelte 5 Runes SDK (`@agui/svelte`) and a Java 25 + Quarkus `3.40.1.1` Tri-Protocol (`AG-UI + MCP + A2A`) reference showcase (`v0.2.0`).
+
+## Core Documentation & Developer Guides
+- [README.md](./README.md): 10–30–90 Developer Landing Page, Maven/pnpm Install & Minimal Working Example
+- [wiki/Home.md](./wiki/Home.md): Project Wiki Home, Tutorials, Tri-Protocol Walkthrough & Sitemap
+- [wiki/Architecture.md](./wiki/Architecture.md): Clean Architecture Concentric Rings, Tri-Protocol Design & Coupling Telemetry
+- [wiki/Skills-Reference.md](./wiki/Skills-Reference.md): Public Java 17 / `@agui/svelte` API Reference & Agentic SDLC CLI/Skills Reference
+- [wiki/Traceability.md](./wiki/Traceability.md): Requirements, ADR Lineage, Kanban Operations & Cryptographic Audit Chain
+- [wiki/Codebase-Map.md](./wiki/Codebase-Map.md): Deterministic AST Export Signatures, Archlens Rings, Capabilities & ADRs
+- [examples/quarkus-svelte-skeleton/README.md](./examples/quarkus-svelte-skeleton/README.md): Nomad Cultural & Architectural Concierge Tri-Protocol Showcase Guide (`:8080`, `:8081`, `:8082`)
+- [CONTRIBUTING.md](./CONTRIBUTING.md): Local Reactor Build, JaCoCo/PITest Dual-Gate TDD, GraalVM 25 Native & PR Workflow
+- [CHANGELOG.md](./CHANGELOG.md): Keep-a-Changelog Release History (`v0.1.0` – `v0.2.0` & Unreleased)
+
+## Product Constitution, Specifications & ADRs
+- [PRODUCT.md](./PRODUCT.md): Constitutional Vision, Hard Invariants (`INV-01`–`INV-08`) & Capabilities (`CAP-01`–`CAP-08`)
+- [docs/specs/PRD.md](./docs/specs/PRD.md): Product Requirements Document & User Stories (`US-001`–`US-008`)
+- [docs/specs/SRS.md](./docs/specs/SRS.md): IEEE 29148 Software Requirements Specification (`FR-01`–`FR-08`, `NFR-01`–`NFR-06`)
+- [docs/specs/C4_ARCHITECTURE.md](./docs/specs/C4_ARCHITECTURE.md): C4 System Context, Container Topology & Concentric Ring Diagrams
+- [docs/DECISION_MAP.md](./docs/DECISION_MAP.md): Causal Decision Lineage Graph (`INV` -> `CAP` -> `SPEC` -> `ADR`)
+- [docs/KANBAN.md](./docs/KANBAN.md): Living Milestone & Issue Traceability Board
+- [docs/adr/ADR-007-adopt-upstream-ag-ui-sdks-com-ag-ui-community-ag.md](./docs/adr/ADR-007-adopt-upstream-ag-ui-sdks-com-ag-ui-community-ag.md): Upstream `com.ag-ui.community` & `@ag-ui/client` Adoption + Java 17 Orthogonal Modules
+- [docs/adr/ADR-008-canonical-ag-ui-activity-snapshot-surface-kit-co.md](./docs/adr/ADR-008-canonical-ag-ui-activity-snapshot-surface-kit-co.md): Canonical `ACTIVITY_SNAPSHOT` Surface Kit & Complete Trip Dossier Report
+- [docs/adr/ADR-009-adopt-official-a2a-java-sdk-1-5-0-final-client-a.md](./docs/adr/ADR-009-adopt-official-a2a-java-sdk-1-5-0-final-client-a.md): Official A2A Java SDK `1.5.0.Final` Client (`AgUiA2aClient`, `A2ACardResolver`, `VertxA2AHttpClient`)
+
+## Module & Package Entrypoints (Quick Context for Coding Agents)
+- `ag-ui-bom` (`org.agui:ag-ui-bom:0.2.0`): Maven BOM managing `org.agui:*:0.2.0`, `com.ag-ui.community:{java-core,java-server,java-client}:0.1.1`, and `org.a2aproject.sdk:a2a-java-sdk-bom:1.5.0.Final`.
+- `ag-ui-quarkus` (`org.agui:ag-ui-quarkus:0.2.0`, Java 17): `AgUiQuarkusBridge`, `AgUiWebSocketHandler`, `AgUiJacksonSerializer`, `AgUiObjectMapperCustomizer`, `AgUiSessionRegistry`, and 57-type GraalVM `reflect-config.json`.
+- `ag-ui-langchain4j` (`org.agui:ag-ui-langchain4j:0.2.0`, Java 17): `AgUiLangChain4jBridge`, `AgUiLangChain4jRunSession`, `AgUiRunOptions` (`postToolActivityProvider`, `postRunActivityProvider`, `interruptSupplier`), `AgUiStatePatch` (RFC 6902), and `AgUiMcpBridge`.
+- `ag-ui-quarkus-langchain4j` (`org.agui:ag-ui-quarkus-langchain4j:0.2.0`, Java 17): `AgUiQuarkusLangChain4jBridge` adapting Quarkiverse `Multi<ChatEvent>` into `Multi<Event>`, SSE, and WebSocket JSON payloads.
+- `ag-ui-a2a` (`org.agui:ag-ui-a2a:0.2.0`, Java 17): `AgUiA2aClient`, `AgUiA2aBridge`, `A2aDelegationResult`, and `A2aHandoff` over `org.a2aproject.sdk` `1.5.0.Final`.
+- `packages/agui-svelte` (`@agui/svelte@0.2.0`): `HttpAgent`, `WebSocketAgent`, `createAgUiStore`, `useAgUiAgent`, `applyJsonPatch`, `AGUI_ACTIVITY_TYPES`, `createActivityRegistry`, `buildPlaceMapLinks`, and `PROTOCOL_CALL_TAXONOMY`.

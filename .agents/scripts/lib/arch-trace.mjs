@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execSync } from 'node:child_process';
-import { fileExists, readFileSafe, inspectArchlens, getModifiedFiles } from './core.mjs';
+import { fileExists, readFileSafe, inspectArchlens, getModifiedFiles, gitOutput, gitDiffForFile } from './core.mjs';
 import { getSessionStatus } from './session.mjs';
 
 export function checkArchDiff(repoRoot = '.') {
@@ -19,23 +19,90 @@ export function checkArchDiff(repoRoot = '.') {
     };
   }
 
+  const policyPath = path.resolve(repoRoot, '.archlens/policy.json');
+  let policyLayers = [];
+  if (fileExists(policyPath)) {
+    try {
+      const rawPolicy = JSON.parse(readFileSafe(policyPath) || '{}');
+      if (Array.isArray(rawPolicy.layers)) {
+        policyLayers = rawPolicy.layers.map((l, idx) => ({
+          name: l.name || `Layer-${idx}`,
+          index: idx,
+          paths: (l.paths || [l.name]).filter(Boolean).map((p) => String(p).toLowerCase()),
+          allowedDependencies: Array.isArray(l.allowedDependencies)
+            ? l.allowedDependencies.map((d) => String(d).toLowerCase())
+            : null
+        }));
+      } else if (Array.isArray(rawPolicy.order)) {
+        const levelsMap = rawPolicy.levels && typeof rawPolicy.levels === 'object' ? rawPolicy.levels : {};
+        policyLayers = rawPolicy.order.map((layerName, idx) => {
+          const levelEntry = levelsMap[layerName];
+          const rawPaths = Array.isArray(levelEntry)
+            ? levelEntry
+            : Array.isArray(levelEntry?.paths)
+              ? levelEntry.paths
+              : [layerName];
+          return {
+            name: String(layerName),
+            index: idx,
+            paths: rawPaths.filter(Boolean).map((p) => String(p).toLowerCase()),
+            allowedDependencies: rawPolicy.order.slice(0, idx).map((d) => String(d).toLowerCase())
+          };
+        });
+      }
+    } catch {}
+  }
+
+  const matchPolicyLayer = (targetStr, fromFile = null) => {
+    let normalized = String(targetStr || '').replace(/\\/g, '/');
+    if (fromFile && normalized.startsWith('.')) {
+      const fromDir = path.posix.dirname(String(fromFile).replace(/\\/g, '/'));
+      normalized = path.posix.normalize(path.posix.join(fromDir, normalized));
+    }
+    const lower = normalized.toLowerCase();
+    for (const layer of policyLayers) {
+      if (
+        layer.paths.some(
+          (p) =>
+            p &&
+            (lower.includes(`/${p}/`) ||
+              lower.startsWith(`${p}/`) ||
+              lower === p ||
+              lower.includes(p))
+        )
+      ) {
+        return layer;
+      }
+    }
+    return null;
+  };
+
   const violations = [];
   const addedImportRegex =
     /^\+\s*(import\s+.*from\s+['"]([^'"]+)['"]|import\s+['"]([^'"]+)['"]|import\s+([a-zA-Z0-9_.]+);)/;
 
   for (const file of diffFiles) {
     try {
-      const diffOutput = execSync(`git diff HEAD~1 -- "${file}" 2>/dev/null || git diff -- "${file}" 2>/dev/null || true`, {
-        cwd: repoRoot,
-        encoding: 'utf8'
-      });
+      const diffOutput = gitDiffForFile(file, repoRoot);
 
+      const sourceLayer = matchPolicyLayer(file);
       const lines = diffOutput.split('\n');
       for (const line of lines) {
         if (!line.startsWith('+') || line.startsWith('+++')) continue;
         const match = line.match(addedImportRegex);
         if (match) {
           const importedPath = match[2] || match[3] || match[4] || '';
+          const targetLayer = matchPolicyLayer(importedPath, file);
+
+          let policyViolated = false;
+          if (sourceLayer && targetLayer && sourceLayer.name.toLowerCase() !== targetLayer.name.toLowerCase()) {
+            if (Array.isArray(sourceLayer.allowedDependencies)) {
+              policyViolated = !sourceLayer.allowedDependencies.includes(targetLayer.name.toLowerCase());
+            } else {
+              policyViolated = targetLayer.index > sourceLayer.index;
+            }
+          }
+
           const isDomainFile =
             file.toLowerCase().includes('domain') ||
             file.toLowerCase().includes('entity') ||
@@ -47,7 +114,16 @@ export function checkArchDiff(repoRoot = '.') {
             importedPath.toLowerCase().includes('database') ||
             importedPath.toLowerCase().includes('web');
 
-          if (isDomainFile && importsOuter) {
+          if (policyViolated) {
+            violations.push({
+              file,
+              line: line.trim(),
+              imported: importedPath,
+              sourceLayer: sourceLayer.name,
+              targetLayer: targetLayer.name,
+              rule: `Concentric Layer Inversion (${sourceLayer.name} -> ${targetLayer.name}): Inner ring '${sourceLayer.name}' cannot import '${targetLayer.name}' per .archlens/policy.json`
+            });
+          } else if (isDomainFile && importsOuter) {
             violations.push({
               file,
               line: line.trim(),
@@ -206,6 +282,8 @@ export function recordArchTrace({
     : [
         path.resolve(repoRoot, 'docs/architecture/system.mmd'),
         path.resolve(repoRoot, 'docs/specs/architecture.mmd'),
+        path.resolve(repoRoot, 'wiki/Architecture.md'),
+        path.resolve(repoRoot, 'wiki/Codebase-Map.md'),
         path.resolve(repoRoot, '.agent/skills/sdlc-flow/SKILL.md'),
         path.resolve(repoRoot, 'README.md')
       ].filter((f) => fs.existsSync(f));
@@ -219,7 +297,7 @@ export function recordArchTrace({
 
     let prevContent = '';
     try {
-      prevContent = execSync(`git show HEAD~1:"${relDiagPath}" 2>/dev/null`, { cwd: repoRoot, encoding: 'utf8' });
+      prevContent = gitOutput(['show', `HEAD~1:${relDiagPath}`], repoRoot) || '';
     } catch {
       prevContent = '';
     }

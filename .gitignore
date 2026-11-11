@@ -42,3 +42,10 @@ Thumbs.db
 .impeccable/
 .opencode/
 .pi/
+
+# Agentic SDLC Ephemeral Cache, Binaries & Snapshots
+.agent/.receipt-key
+.agent/skills/*/scripts/bin/
+.agent/workbench/index.html
+.agent/arch-trace.jsonl
+docs/ARCH_TRACE.md

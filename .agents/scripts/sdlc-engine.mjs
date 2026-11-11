@@ -6,7 +6,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { execSync } from 'node:child_process';
+import { execSync, execFileSync } from 'node:child_process';
 
 import {
   loadEnv,
@@ -18,6 +18,7 @@ import {
   parseFrontmatter,
   inspectArchlens,
   detectPMProvider,
+  hasGitHubRemote,
   diagnoseEnvironment,
   getModifiedFiles
 } from './lib/core.mjs';
@@ -38,7 +39,9 @@ import {
   appendAuditRecord,
   verifyAuditChain,
   issueGateReceipt,
-  verifyGateReceipt
+  verifyGateReceipt,
+  loadReceiptKey,
+  verifyReceiptSignature
 } from './lib/audit-chain.mjs';
 
 import {
@@ -50,7 +53,11 @@ import {
 } from './lib/decision-graph.mjs';
 
 import {
+  renderCapabilitySpecMarkdown,
+  renderProductPrdMarkdown,
+  renderProductSrsMarkdown,
   initProductConstitution,
+  scaffoldCapabilitySpec,
   parseProductMarkdown,
   planProductDAG,
   controlProductDAG,
@@ -61,6 +68,7 @@ import {
   listADRs,
   createADR,
   decideADR,
+  compactADRs,
   checkSpecDrift,
   auditContractDrift
 } from './lib/adr-drift.mjs';
@@ -79,22 +87,50 @@ import {
 } from './lib/git-guard.mjs';
 
 import {
+  CANONICAL_ISSUE_TEMPLATES,
+  scaffoldIssueTemplates,
   loadIssueTemplate,
   formatTemplatedIssue,
+  updateLocalKanbanState,
   createTicket,
+  createPMIssue,
+  syncKanbanBoard,
   transitionPMState,
   postPMComment,
-  installFramework,
+  resolveOpenPRNumber,
+  ensurePullRequest,
+  formatConsolidatedReviewComment,
   pollCIPRChecks,
   parseSemVer,
   bumpSemVer
 } from './lib/pm-provider.mjs';
 
 import {
+  ARCHLENS_SKILL_PACKAGE,
+  DEFAULT_GITIGNORE_ENTRIES,
+  upsertGitignore,
+  pinArchlensMcpConfigs,
+  SUPPORTED_AGENTS,
+  CANONICAL_SDLC_SKILLS,
+  DEPRECATED_SDLC_SKILLS,
+  pruneDeprecatedSkills,
+  upsertConstitutionalRulesFile,
+  upsertClaudeSettingsJson,
+  adaptSkillForAgent,
+  createSkillZipBuffer,
+  provisionAgentIntegrations,
+  installFramework,
+  parseInstallArgs,
+  printInstallerHelp,
+  runInstallerCLI
+} from './lib/installer.mjs';
+
+import {
   getSessionPath,
   getSessionStatus,
   startSession,
   updateSession,
+  receiptInputsFromSession,
   switchSession,
   listSessions,
   renderDashboard,
@@ -103,7 +139,8 @@ import {
   getExemptionsPath,
   recordExemption,
   getExemptions,
-  calculateSessionStats
+  calculateSessionStats,
+  executeCompositeStage
 } from './lib/session.mjs';
 
 import {
@@ -123,7 +160,12 @@ import {
   scaffoldReproductionTest,
   assessRisk,
   generatePRSummary,
+  findAffectedTests,
   findAffectededTests,
+  buildSingleTestCommand,
+  buildSingleTestArgv,
+  parseCoverageReport,
+  parseMutationReport,
   runFlakeCheck,
   auditSecurity,
   suggestMutationStrengthening,
@@ -134,13 +176,38 @@ import {
   discoverModules,
   matchFilesToModules,
   generateConfig,
-  printPreview
+  printPreview,
+  auditSkills
 } from './lib/quality-gate.mjs';
 
 import {
+  buildArchDiffPayload,
+  generateArchitectureWidget,
+  ensureWorkbenchRunning,
   renderWorkbenchHTML,
   createWorkbenchServer
 } from './lib/workbench-server.mjs';
+
+import {
+  inspectSourceModule,
+  resolveArchlensRing,
+  buildWikiCodeMap,
+  auditWiki,
+  renderCodebaseMapMarkdown,
+  syncWiki
+} from './lib/wiki-sync.mjs';
+
+import {
+  escapeXml,
+  slugifyHeadingAnchor,
+  detectReadmeArchetype,
+  stripArchetypeBlocks,
+  renderThemeWordmarkSvg,
+  renderVhsDemoTape,
+  renderLlmsTxt,
+  scaffoldReadme,
+  auditReadme
+} from './lib/readme-sync.mjs';
 
 // --- Re-export complete public API for backward compatibility & modular tests ---
 export {
@@ -153,6 +220,7 @@ export {
   parseFrontmatter,
   inspectArchlens,
   detectPMProvider,
+  hasGitHubRemote,
   diagnoseEnvironment,
   getModifiedFiles,
   getGateCachePath,
@@ -168,12 +236,18 @@ export {
   verifyAuditChain,
   issueGateReceipt,
   verifyGateReceipt,
+  loadReceiptKey,
+  verifyReceiptSignature,
   DECISION_GRAPH_FILE,
   DECISION_MAP_MD,
   appendDecisionEvent,
   buildDecisionGraph,
   syncDecisionMapMarkdown,
+  renderCapabilitySpecMarkdown,
+  renderProductPrdMarkdown,
+  renderProductSrsMarkdown,
   initProductConstitution,
+  scaffoldCapabilitySpec,
   parseProductMarkdown,
   planProductDAG,
   controlProductDAG,
@@ -181,6 +255,7 @@ export {
   listADRs,
   createADR,
   decideADR,
+  compactADRs,
   checkSpecDrift,
   auditContractDrift,
   extractExportSignatures,
@@ -190,12 +265,36 @@ export {
   verifyPushGuard,
   installHooks,
   applyBranchProtection,
+  CANONICAL_ISSUE_TEMPLATES,
+  scaffoldIssueTemplates,
   loadIssueTemplate,
   formatTemplatedIssue,
+  updateLocalKanbanState,
   createTicket,
+  createPMIssue,
+  syncKanbanBoard,
   transitionPMState,
   postPMComment,
+  resolveOpenPRNumber,
+  ensurePullRequest,
+  formatConsolidatedReviewComment,
+  ARCHLENS_SKILL_PACKAGE,
+  DEFAULT_GITIGNORE_ENTRIES,
+  upsertGitignore,
+  pinArchlensMcpConfigs,
+  SUPPORTED_AGENTS,
+  CANONICAL_SDLC_SKILLS,
+  DEPRECATED_SDLC_SKILLS,
+  pruneDeprecatedSkills,
+  upsertConstitutionalRulesFile,
+  upsertClaudeSettingsJson,
+  adaptSkillForAgent,
+  createSkillZipBuffer,
+  provisionAgentIntegrations,
   installFramework,
+  parseInstallArgs,
+  printInstallerHelp,
+  runInstallerCLI,
   pollCIPRChecks,
   parseSemVer,
   bumpSemVer,
@@ -203,6 +302,7 @@ export {
   getSessionStatus,
   startSession,
   updateSession,
+  receiptInputsFromSession,
   switchSession,
   listSessions,
   renderDashboard,
@@ -212,6 +312,7 @@ export {
   recordExemption,
   getExemptions,
   calculateSessionStats,
+  executeCompositeStage,
   checkArchDiff,
   parseMermaidDiagram,
   diffMermaidGraphs,
@@ -225,7 +326,12 @@ export {
   scaffoldReproductionTest,
   assessRisk,
   generatePRSummary,
+  findAffectedTests,
   findAffectededTests,
+  buildSingleTestCommand,
+  buildSingleTestArgv,
+  parseCoverageReport,
+  parseMutationReport,
   runFlakeCheck,
   auditSecurity,
   suggestMutationStrengthening,
@@ -237,14 +343,34 @@ export {
   matchFilesToModules,
   generateConfig,
   printPreview,
+  auditSkills,
+  buildArchDiffPayload,
+  generateArchitectureWidget,
+  ensureWorkbenchRunning,
   renderWorkbenchHTML,
-  createWorkbenchServer
+  createWorkbenchServer,
+  inspectSourceModule,
+  resolveArchlensRing,
+  buildWikiCodeMap,
+  auditWiki,
+  renderCodebaseMapMarkdown,
+  syncWiki,
+  escapeXml,
+  slugifyHeadingAnchor,
+  detectReadmeArchetype,
+  stripArchetypeBlocks,
+  renderThemeWordmarkSvg,
+  renderVhsDemoTape,
+  renderLlmsTxt,
+  scaffoldReadme,
+  auditReadme
 };
 
 export function executeRelease({
   bump = 'patch',
   dryRun = false,
   skipGate = false,
+  noCompact = false,
   repoRoot = '.'
 } = {}) {
   console.log(`🚀 Preparing ${bump.toUpperCase()} Release (dryRun: ${dryRun})...`);
@@ -311,6 +437,16 @@ export function executeRelease({
   }
 
   const updatedFiles = [];
+  let compactedAdrs = null;
+  if (!noCompact && listADRs(repoRoot).length > 0) {
+    compactedAdrs = compactADRs({ releaseVersion: releaseTag, repoRoot });
+    for (const rel of ['PRODUCT.md', 'docs/SRS.md', 'docs/DECISION_MAP.md', 'docs/AUDIT_CHAIN.jsonl', '.agent/decision-graph.jsonl']) {
+      if (fileExists(path.resolve(repoRoot, rel)) && !updatedFiles.includes(rel)) {
+        updatedFiles.push(rel);
+      }
+    }
+  }
+
   if (manifestType === 'package.json') {
     const pkg = JSON.parse(readFileSafe(pkgPath));
     pkg.version = newVersion;
@@ -346,9 +482,12 @@ export function executeRelease({
   }
 
   try {
-    execSync(`git add ${updatedFiles.join(' ')}`, { cwd: repoRoot, stdio: 'pipe' });
-    execSync(`git commit -m "chore(release): ${releaseTag}"`, { cwd: repoRoot, stdio: 'pipe' });
-    execSync(`git tag -a ${releaseTag} -m "Release ${releaseTag}"`, { cwd: repoRoot, stdio: 'pipe' });
+    execFileSync('git', ['add', '--', ...updatedFiles], { cwd: repoRoot, stdio: 'pipe' });
+    if (compactedAdrs && compactedAdrs.compactedCount > 0) {
+      execFileSync('git', ['add', '-A', '--', 'docs/adr'], { cwd: repoRoot, stdio: 'pipe' });
+    }
+    execFileSync('git', ['commit', '-m', `chore(release): ${releaseTag}`], { cwd: repoRoot, stdio: 'pipe' });
+    execFileSync('git', ['tag', '-a', releaseTag, '-m', `Release ${releaseTag}`], { cwd: repoRoot, stdio: 'pipe' });
   } catch {}
 
   return {
@@ -357,8 +496,40 @@ export function executeRelease({
     currentVersion,
     newVersion,
     releaseTag,
-    updatedFiles
+    updatedFiles,
+    compactedAdrs
   };
+}
+
+// --- Measured gate helpers ---
+
+/**
+ * Rejects a report that was not (re)written by the command that just ran, so a
+ * stale artifact from an earlier run can never satisfy a gate.
+ */
+function requireFreshReport(report, mod, repoRoot, startedAt) {
+  if (!report.found) return report;
+  const modDir = mod?.path && mod.path !== '.' ? path.resolve(repoRoot, mod.path) : path.resolve(repoRoot);
+  try {
+    const mtime = fs.statSync(path.resolve(modDir, report.file)).mtimeMs;
+    if (mtime + 2000 < startedAt) {
+      return { ...report, passed: false, stale: true, reason: `Report ${report.file} is stale (not regenerated by this run).` };
+    }
+  } catch {}
+  if (!report.passed && !report.reason) {
+    return { ...report, reason: `${report.formatted} < ${report.threshold}% (${report.file})` };
+  }
+  return report;
+}
+
+/** Runs the module's coverage command and parses a fresh report (fails closed). */
+function measureCoverage(mod, repoRoot) {
+  if (!mod.commands?.coverage) {
+    return { found: false, passed: false, reason: 'No coverage command configured.' };
+  }
+  const startedAt = Date.now();
+  execSync(mod.commands.coverage, { stdio: 'inherit', cwd: path.resolve(repoRoot, mod.path) });
+  return requireFreshReport(parseCoverageReport(repoRoot, mod), mod, repoRoot, startedAt);
 }
 
 // --- Universal CLI Router ---
@@ -408,10 +579,11 @@ export function runCLI(customArgs = null, customConfigPath = null, repoRoot = '.
       const affectedOnly = args.includes('--affected-only');
 
       if (affectedOnly) {
-        const affectedTests = findAffectededTests(files, repoRoot);
+        const affectedTests = findAffectedTests(files, repoRoot);
         if (affectedTests.length > 0) {
           for (const testFile of affectedTests) {
-            execSync(`node --test "${testFile}"`, { stdio: 'inherit', cwd: repoRoot });
+            const single = buildSingleTestArgv(testFile, repoRoot);
+            execFileSync(single.file, single.args, { stdio: 'inherit', cwd: repoRoot });
           }
           result.affectedTests = affectedTests;
           return result;
@@ -432,13 +604,29 @@ export function runCLI(customArgs = null, customConfigPath = null, repoRoot = '.
       const activeModules = files.length > 0 ? matchFilesToModules(files, config.modules) : config.modules;
       for (const mod of activeModules) {
         const hit = getGateCacheHit({ checkType: 'coverage', modulePath: mod.path, repoRoot });
-        if (hit.hit && !args.includes('--no-cache')) {
-          console.log(`⚡ [${mod.name}] SHA-256 Coverage Gate Cache Hit (${hit.treeHash.slice(0, 10)})`);
+        if (hit.hit && hit.entry?.result?.coverage && !args.includes('--no-cache')) {
+          console.log(`⚡ [${mod.name}] Coverage cache hit (${hit.treeHash.slice(0, 10)}): ${hit.entry.result.coverage}`);
+          try {
+            updateSession({ manifestUpdate: { coverageReport: hit.entry.result.coverage }, repoRoot });
+          } catch {}
           continue;
         }
-        const cwd = path.resolve(repoRoot, mod.path);
-        execSync(mod.commands.coverage, { stdio: 'inherit', cwd });
-        recordGateCache({ checkType: 'coverage', modulePath: mod.path, result: { passed: true }, repoRoot });
+        const covReport = measureCoverage(mod, repoRoot);
+        result.coverageReport = covReport;
+        if (!covReport.passed) {
+          result.success = false;
+          console.error(`🛑 [${mod.name}] Coverage gate failed: ${covReport.reason}`);
+          return result;
+        }
+        try {
+          updateSession({ manifestUpdate: { coverageReport: covReport.formatted }, repoRoot });
+        } catch {}
+        recordGateCache({
+          checkType: 'coverage',
+          modulePath: mod.path,
+          result: { passed: true, coverage: covReport.formatted },
+          repoRoot
+        });
       }
       result.activeModules = activeModules;
       return result;
@@ -448,14 +636,45 @@ export function runCLI(customArgs = null, customConfigPath = null, repoRoot = '.
       const files = getModifiedFiles('main', repoRoot);
       const activeModules = files.length > 0 ? matchFilesToModules(files, config.modules) : config.modules;
       for (const mod of activeModules) {
+        if (mod.thresholds && mod.thresholds.mutationScore === null) {
+          console.log(`ℹ️  [${mod.name}] Mutation testing not configured (thresholds.mutationScore: null); receipts will record 'not-configured'.`);
+          continue;
+        }
         const hit = getGateCacheHit({ checkType: 'mutation', modulePath: mod.path, repoRoot });
-        if (hit.hit && !args.includes('--no-cache')) {
-          console.log(`⚡ [${mod.name}] SHA-256 Mutation Gate Cache Hit (${hit.treeHash.slice(0, 10)})`);
+        if (hit.hit && hit.entry?.result?.mutation && !args.includes('--no-cache')) {
+          console.log(`⚡ [${mod.name}] Mutation cache hit (${hit.treeHash.slice(0, 10)}): ${hit.entry.result.mutation}`);
+          try {
+            updateSession({ manifestUpdate: { mutationScore: hit.entry.result.mutation }, repoRoot });
+          } catch {}
           continue;
         }
         const cwd = path.resolve(repoRoot, mod.path);
+        const startedAt = Date.now();
+        if (!mod.commands?.mutation) {
+          result.success = false;
+          console.error(`🛑 [${mod.name}] Mutation gate failed: no mutation command configured.`);
+          return result;
+        }
         execSync(mod.commands.mutation, { stdio: 'inherit', cwd });
-        recordGateCache({ checkType: 'mutation', modulePath: mod.path, result: { passed: true }, repoRoot });
+
+        const mutReport = requireFreshReport(parseMutationReport(repoRoot, mod), mod, repoRoot, startedAt);
+        result.mutationReport = mutReport;
+        if (!mutReport.passed) {
+          result.success = false;
+          console.error(
+            `🛑 [${mod.name}] Mutation gate failed: ${mutReport.reason || `${mutReport.formatted} < ${mutReport.threshold}% (${mutReport.file})`}`
+          );
+          return result;
+        }
+        try {
+          updateSession({ manifestUpdate: { mutationScore: mutReport.formatted }, repoRoot });
+        } catch {}
+        recordGateCache({
+          checkType: 'mutation',
+          modulePath: mod.path,
+          result: { passed: true, mutation: mutReport.formatted },
+          repoRoot
+        });
       }
       result.activeModules = activeModules;
       return result;
@@ -471,14 +690,23 @@ export function runCLI(customArgs = null, customConfigPath = null, repoRoot = '.
         const cwd = path.resolve(repoRoot, mod.path);
         if (mod.commands.lint) execSync(mod.commands.lint, { stdio: 'inherit', cwd });
         if (mod.commands.build) execSync(mod.commands.build, { stdio: 'inherit', cwd });
-        execSync(mod.commands.coverage, { stdio: 'inherit', cwd });
-        recordGateCache({ checkType: 'gate', modulePath: mod.path, result: { passed: true }, repoRoot });
+        const covReport = measureCoverage(mod, repoRoot);
+        result.coverageReport = covReport;
+        if (!covReport.passed) {
+          result.success = false;
+          console.error(`🛑 [${mod.name}] Quality gate failed: ${covReport.reason}`);
+          return result;
+        }
+        try {
+          updateSession({ manifestUpdate: { coverageReport: covReport.formatted }, repoRoot });
+        } catch {}
+        recordGateCache({ checkType: 'gate', modulePath: mod.path, result: { passed: true, coverage: covReport.formatted }, repoRoot });
       }
 
       const archInfo = inspectArchlens(repoRoot);
       if (archInfo.installed || config.archlens?.enabled) {
         try {
-          execSync('npx -y @fmatar/archlens-skill prompt --path . 2>/dev/null || true', { cwd: repoRoot, stdio: 'inherit' });
+          execSync('npx -y @fmatar/archlens-skill@1.2.0 prompt --path . 2>/dev/null || true', { cwd: repoRoot, stdio: 'inherit' });
         } catch {}
       }
 
@@ -508,6 +736,21 @@ export function runCLI(customArgs = null, customConfigPath = null, repoRoot = '.
         const auditRes = verifyAuditChain(repoRoot);
         result.audit = auditRes;
         if (!auditRes.valid) throw new Error(`Merkle Audit Chain Verification failed: ${auditRes.error}`);
+
+        const wikiRes = auditWiki(repoRoot, { strict: true });
+        result.wikiAudit = wikiRes;
+        if (wikiRes.enabled && !wikiRes.passed) {
+          throw new Error(`Wiki Audit failed: ${wikiRes.errorsCount} documentation drift / broken path issue(s) detected.`);
+        }
+
+        const readmeRes = auditReadme(repoRoot, { strict: true });
+        result.readmeAudit = readmeRes;
+        if (readmeRes.readmeExists && !readmeRes.passed) {
+          throw new Error(`README Audit failed: ${readmeRes.errorsCount} 10-30-90 blueprint violation(s) detected.`);
+        }
+      } else {
+        result.wikiAudit = auditWiki(repoRoot);
+        result.readmeAudit = auditReadme(repoRoot);
       }
 
       return result;
@@ -529,6 +772,8 @@ export function runCLI(customArgs = null, customConfigPath = null, repoRoot = '.
       if (sub === 'plan') {
         const autoProvision = args.includes('--provision');
         result.product = planProductDAG({ repoRoot, autoProvision });
+        ensureWorkbenchRunning({ repoRoot });
+        result.uiWidget = generateArchitectureWidget({ repoRoot });
         return result;
       }
       if (sub === 'control') {
@@ -536,7 +781,54 @@ export function runCLI(customArgs = null, customConfigPath = null, repoRoot = '.
         result.product = controlProductDAG({ action, repoRoot });
         return result;
       }
+      if (sub === 'spec') {
+        let capId = null,
+          title = 'New Capability',
+          problem = '',
+          inputs = '',
+          processing = '',
+          outputs = '',
+          dependsOn = [];
+        const force = args.includes('--force');
+        for (let i = 2; i < args.length; i++) {
+          if ((args[i] === '--cap' || args[i] === '--id') && args[i + 1]) capId = args[++i];
+          else if (args[i] === '--title' && args[i + 1]) title = args[++i];
+          else if (args[i] === '--problem' && args[i + 1]) problem = args[++i];
+          else if (args[i] === '--inputs' && args[i + 1]) inputs = args[++i];
+          else if (args[i] === '--processing' && args[i + 1]) processing = args[++i];
+          else if (args[i] === '--outputs' && args[i + 1]) outputs = args[++i];
+          else if ((args[i] === '--depends-on' || args[i] === '--depends') && args[i + 1]) {
+            dependsOn = args[++i].split(',').map((s) => s.trim()).filter(Boolean);
+          }
+        }
+        result.spec = scaffoldCapabilitySpec({ capId, title, problem, inputs, processing, outputs, dependsOn, force, repoRoot });
+        return result;
+      }
       result.product = parseProductMarkdown(repoRoot);
+      return result;
+    }
+
+    case 'spec': {
+      let capId = null,
+        title = 'New Capability',
+        problem = '',
+        inputs = '',
+        processing = '',
+        outputs = '',
+        dependsOn = [];
+      const force = args.includes('--force');
+      for (let i = 1; i < args.length; i++) {
+        if ((args[i] === '--cap' || args[i] === '--id') && args[i + 1]) capId = args[++i];
+        else if (args[i] === '--title' && args[i + 1]) title = args[++i];
+        else if (args[i] === '--problem' && args[i + 1]) problem = args[++i];
+        else if (args[i] === '--inputs' && args[i + 1]) inputs = args[++i];
+        else if (args[i] === '--processing' && args[i + 1]) processing = args[++i];
+        else if (args[i] === '--outputs' && args[i + 1]) outputs = args[++i];
+        else if ((args[i] === '--depends-on' || args[i] === '--depends') && args[i + 1]) {
+          dependsOn = args[++i].split(',').map((s) => s.trim()).filter(Boolean);
+        }
+      }
+      result.spec = scaffoldCapabilitySpec({ capId, title, problem, inputs, processing, outputs, dependsOn, force, repoRoot });
       return result;
     }
 
@@ -561,12 +853,35 @@ export function runCLI(customArgs = null, customConfigPath = null, repoRoot = '.
           else if (args[i] === '--consequences' && args[i + 1]) consequences = args[++i];
         }
         result.adr = createADR({ title, scope, ticketId, supersedes, context, decision, consequences, repoRoot });
+        ensureWorkbenchRunning({ repoRoot });
+        result.uiWidget = generateArchitectureWidget({ repoRoot });
         return result;
       }
       if (sub === 'decide') {
-        const adrId = args[2];
-        const action = args[3] || 'approve';
-        result.adr = decideADR({ adrId, action, repoRoot });
+        let adrId = args[2] && !args[2].startsWith('-') ? args[2] : null;
+        let action = args[3] && !args[3].startsWith('-') ? args[3] : 'approve';
+        let reviewer = '@human-operator';
+        let reason = 'Reviewed via SDLC Governance Gate';
+        for (let i = 2; i < args.length; i++) {
+          if (args[i] === '--id' && args[i + 1]) adrId = args[++i];
+          else if ((args[i] === '--status' || args[i] === '--action') && args[i + 1]) action = args[++i];
+          else if ((args[i] === '--by' || args[i] === '--reviewer') && args[i + 1]) reviewer = args[++i];
+          else if (args[i] === '--reason' && args[i + 1]) reason = args[++i];
+        }
+        result.adr = decideADR({ adrId, action, reviewer, reason, repoRoot });
+        return result;
+      }
+      if (sub === 'compact') {
+        let releaseVersion = 'baseline';
+        const dryRun = args.includes('--dry-run');
+        for (let i = 2; i < args.length; i++) {
+          if ((args[i] === '--release' || args[i] === '--version') && args[i + 1]) {
+            releaseVersion = args[++i];
+          } else if (args[i].startsWith('--release=')) {
+            releaseVersion = args[i].split('=')[1];
+          }
+        }
+        result.compact = compactADRs({ releaseVersion, dryRun, repoRoot });
         return result;
       }
       result.adrs = listADRs(repoRoot);
@@ -616,7 +931,17 @@ export function runCLI(customArgs = null, customConfigPath = null, repoRoot = '.
         return result;
       }
       if (sub === 'pre-merge') {
-        result.guard = verifyMergeGuard({ repoRoot });
+        // Inside a pre-merge-commit hook MERGE_HEAD is the commit being merged in;
+        // bind the receipt to that exact SHA rather than "any receipt".
+        let sourceSha = null;
+        try {
+          sourceSha = execFileSync('git', ['rev-parse', '--verify', '-q', 'MERGE_HEAD'], {
+            cwd: repoRoot,
+            encoding: 'utf8',
+            stdio: 'pipe'
+          }).trim() || null;
+        } catch {}
+        result.guard = verifyMergeGuard({ repoRoot, sourceSha });
         result.success = result.guard.allowed;
         if (!result.guard.allowed) console.error(result.guard.message);
         return result;
@@ -629,11 +954,40 @@ export function runCLI(customArgs = null, customConfigPath = null, repoRoot = '.
       }
       if (sub === 'receipt') {
         const sess = getSessionStatus(repoRoot);
+        if (!sess.session) {
+          console.error('🛑 No active SDLC session; cannot issue a gate receipt.');
+          result.success = false;
+          return result;
+        }
+        let cliCoverage = undefined;
+        let cliMutation = undefined;
+        const docsOnly = args.includes('--docs-only') ? true : undefined;
+        let cliReviewer = undefined;
+        for (let i = 2; i < args.length; i++) {
+          if ((args[i] === '--coverage' || args[i] === '--coverage-pct') && args[i + 1]) {
+            const v = args[++i];
+            cliCoverage = v === 'null' ? null : Number.parseFloat(String(v).replace('%', ''));
+          } else if ((args[i] === '--mutation' || args[i] === '--mutation-pct') && args[i + 1]) {
+            const v = args[++i];
+            cliMutation = v === 'null' ? null : Number.parseFloat(String(v).replace('%', ''));
+          } else if (args[i] === '--reviewer' && args[i + 1]) {
+            cliReviewer = args[++i];
+          }
+        }
+        const drift = checkSpecDrift({ ticketId: sess.session.issueId, repoRoot });
+        const sessionInputs = receiptInputsFromSession(sess.session, { driftCheckPassed: Boolean(drift.passed), repoRoot });
         result.receipt = issueGateReceipt({
-          issueId: sess.session?.issueId || 1,
-          branch: sess.session?.branch || 'feature/branch',
+          issueId: sess.session.issueId,
+          branch: sess.session.branch,
+          ...sessionInputs,
+          ...(cliCoverage !== undefined ? { coveragePct: cliCoverage } : {}),
+          ...(cliMutation !== undefined ? { mutationPct: cliMutation } : {}),
+          ...(docsOnly ? { docsOnly: true, coveragePct: null, mutationPct: null } : {}),
+          ...(cliReviewer ? { reviewer: cliReviewer } : {}),
           repoRoot
         });
+        result.success = result.receipt.success;
+        if (!result.success) console.error(`🛑 ${result.receipt.reason}`);
         return result;
       }
       return result;
@@ -646,6 +1000,60 @@ export function runCLI(customArgs = null, customConfigPath = null, repoRoot = '.
         return result;
       }
       result.cache = getGateCacheStats(repoRoot);
+      return result;
+    }
+
+    case 'stage': {
+      const action = args[1] || 'begin';
+      let issueId = null,
+        title = null,
+        type = 'feat',
+        branch = null,
+        worktree = null,
+        prNumber = null,
+        summary = null,
+        checkoutBranch = false;
+      for (let i = 2; i < args.length; i++) {
+        if (args[i] === '--issue' && args[i + 1]) issueId = args[++i];
+        else if (args[i].startsWith('--issue=')) issueId = args[i].split('=')[1];
+        else if (args[i] === '--title' && args[i + 1]) title = args[++i];
+        else if (args[i].startsWith('--title=')) title = args[i].split('=')[1];
+        else if (args[i] === '--type' && args[i + 1]) type = args[++i];
+        else if (args[i].startsWith('--type=')) type = args[i].split('=')[1];
+        else if (args[i] === '--branch' && args[i + 1]) branch = args[++i];
+        else if (args[i] === '--worktree' && args[i + 1]) worktree = args[++i];
+        else if (args[i] === '--pr' && args[i + 1]) prNumber = args[++i];
+        else if (args[i].startsWith('--pr=')) prNumber = args[i].split('=')[1];
+        else if (args[i] === '--summary' && args[i + 1]) summary = args[++i];
+        else if (args[i] === '--checkout') checkoutBranch = true;
+      }
+      const stageRes = executeCompositeStage({
+        action,
+        issueId,
+        title,
+        type,
+        branch,
+        worktree,
+        prNumber,
+        summary,
+        checkoutBranch,
+        repoRoot
+      });
+      result.stage = stageRes;
+      result.success = stageRes.success;
+      if (stageRes.action === 'pre-pr') {
+        if (stageRes.receipt) {
+          console.log(
+            `🧾 Signed gate receipt ${stageRes.receipt.receiptId}: coverage ${stageRes.receipt.coveragePct}%, mutation ${stageRes.receipt.mutationPct ?? stageRes.receipt.mutationStatus}, reviewer ${stageRes.receipt.reviewer || 'n/a'}`
+          );
+        } else if (!stageRes.success) {
+          console.error(`🛑 stage pre-pr: no gate receipt issued. ${stageRes.receiptError || ''}`);
+        } else {
+          console.log(
+            `ℹ️ stage pre-pr: Stage 6 verified${stageRes.prNumber ? ` (PR #${stageRes.prNumber})` : ''}. Run Stage 7 ('review record') next to publish the PR review comment and sign the Stage 7 receipt.`
+          );
+        }
+      }
       return result;
     }
 
@@ -802,7 +1210,7 @@ export function runCLI(customArgs = null, customConfigPath = null, repoRoot = '.
           return result;
         }
         try {
-          execSync('npx -y @fmatar/archlens-skill prompt --path . 2>/dev/null || true', { cwd: repoRoot, stdio: 'inherit' });
+          execSync('npx -y @fmatar/archlens-skill@1.2.0 prompt --path . 2>/dev/null || true', { cwd: repoRoot, stdio: 'inherit' });
           result.passed = true;
         } catch (err) {
           result.passed = false;
@@ -812,7 +1220,7 @@ export function runCLI(customArgs = null, customConfigPath = null, repoRoot = '.
       }
       if (sub === 'update') {
         try {
-          execSync('npx -y @fmatar/archlens-skill update --path .', { cwd: repoRoot, stdio: 'inherit' });
+          execSync('npx -y @fmatar/archlens-skill@1.2.0 update --path .', { cwd: repoRoot, stdio: 'inherit' });
           result.passed = true;
         } catch {
           result.passed = false;
@@ -820,7 +1228,8 @@ export function runCLI(customArgs = null, customConfigPath = null, repoRoot = '.
         return result;
       }
       if (sub === 'diff') {
-        return { ...result, ...checkArchDiff(repoRoot) };
+        const diffRes = checkArchDiff(repoRoot);
+        return { ...result, ...diffRes, success: !(diffRes.enabled && diffRes.passed === false) };
       }
       if (sub === 'trace') {
         let reason = 'Architectural refinement',
@@ -876,6 +1285,88 @@ export function runCLI(customArgs = null, customConfigPath = null, repoRoot = '.
 
     case 'security-audit': {
       result.security = auditSecurity(repoRoot);
+      result.success = result.security.passed !== false;
+      if (!result.success) console.error('🛑 Security audit failed.');
+      return result;
+    }
+
+    case 'skill-audit': {
+      const live = args.includes('--live');
+      result.skillAudit = auditSkills(repoRoot, { live });
+      result.success = result.skillAudit.success;
+      return result;
+    }
+
+    case 'wiki':
+    case 'docs': {
+      const sub = (args[1] || 'sync').toLowerCase();
+      result.subcommand = sub;
+      if (sub === 'map') {
+        result.codeMap = buildWikiCodeMap(repoRoot);
+        return result;
+      }
+      if (sub === 'audit' || sub === 'check' || sub === 'lint') {
+        const strict = args.includes('--strict');
+        const wikiAudit = auditWiki(repoRoot, { strict });
+        result.wikiAudit = wikiAudit;
+        result.success = wikiAudit.passed;
+        console.log(wikiAudit.summary);
+        for (const f of wikiAudit.findings) {
+          console.log(`  [${f.severity}] ${f.rule} (${f.file}:${f.line}): ${f.message}`);
+        }
+        return result;
+      }
+      if (sub === 'sync' || sub === 'generate' || sub === 'update') {
+        const generateMissing =
+          args.includes('--init') ||
+          args.includes('--scaffold') ||
+          args.includes('--generate-missing') ||
+          !fs.existsSync(path.resolve(repoRoot, 'wiki/Home.md'));
+        const wikiSync = syncWiki({ repoRoot, generateMissing });
+        result.wikiSync = wikiSync;
+        result.wikiAudit = wikiSync.audit;
+        result.success = wikiSync.success;
+        console.log(`📚 Synchronized Wiki Codebase Map -> ${wikiSync.codeMapPath} (${wikiSync.modulesCount} modules across ${wikiSync.ringsCount} Archlens rings)`);
+        console.log(wikiSync.audit.summary);
+        for (const f of wikiSync.audit.findings) {
+          console.log(`  [${f.severity}] ${f.rule} (${f.file}:${f.line}): ${f.message}`);
+        }
+        return result;
+      }
+      result.success = false;
+      return result;
+    }
+
+    case 'readme': {
+      const sub = (args[1] || 'audit').toLowerCase();
+      result.subcommand = sub;
+      if (sub === 'init' || sub === 'scaffold' || sub === 'generate') {
+        let archetype = 'auto';
+        let title = null;
+        let hook = null;
+        const force = args.includes('--force') || args.includes('-f');
+        const withAssets = !args.includes('--no-assets');
+        for (let i = 2; i < args.length; i++) {
+          if (args[i] === '--archetype' && args[i + 1]) archetype = args[++i];
+          else if (args[i] === '--title' && args[i + 1]) title = args[++i];
+          else if (args[i] === '--hook' && args[i + 1]) hook = args[++i];
+        }
+        result.readme = scaffoldReadme({ repoRoot, archetype, title, hook, force, withAssets });
+        result.readmeAudit = auditReadme(repoRoot, { strict: true });
+        result.success = result.readmeAudit.passed;
+        return result;
+      }
+      if (sub === 'audit' || sub === 'check' || sub === 'lint') {
+        const strict = args.includes('--strict');
+        const readmeAudit = auditReadme(repoRoot, { strict });
+        result.readmeAudit = readmeAudit;
+        result.success = readmeAudit.passed;
+        for (const f of readmeAudit.findings) {
+          console.log(`  [${f.severity}] ${f.rule} (${f.file}:${f.line}): ${f.message}`);
+        }
+        return result;
+      }
+      result.success = false;
       return result;
     }
 
@@ -899,6 +1390,15 @@ export function runCLI(customArgs = null, customConfigPath = null, repoRoot = '.
         result.pm = pm;
         return result;
       }
+      if (sub === 'sync') {
+        result.synced = syncKanbanBoard(repoRoot);
+        return result;
+      }
+      if (sub === 'templates' || sub === 'init-templates') {
+        const force = args.includes('--force');
+        result.templates = scaffoldIssueTemplates({ repoRoot, force });
+        return result;
+      }
       if (sub === 'transition') {
         const issueId = args[2];
         const state = args[3] || 'in-progress';
@@ -910,19 +1410,33 @@ export function runCLI(customArgs = null, customConfigPath = null, repoRoot = '.
         return result;
       }
       if (sub === 'comment') {
-        const issueId = args[2];
+        let issueId = args[2] && !args[2].startsWith('-') ? args[2] : null;
         let commentText = '',
           prNumber = null;
-        for (let i = 3; i < args.length; i++) {
+        const allowLocalFallback = args.includes('--allow-local-fallback');
+        const startIdx = issueId ? 3 : 2;
+        for (let i = startIdx; i < args.length; i++) {
           if (args[i] === '--pr' && args[i + 1]) prNumber = args[++i];
+          else if (args[i].startsWith('--pr=')) prNumber = args[i].split('=')[1];
+          else if (args[i] === '--issue' && args[i + 1]) issueId = args[++i];
+          else if (args[i].startsWith('--issue=')) issueId = args[i].split('=')[1];
           else if (args[i] === '--body' && args[i + 1]) commentText = args[++i];
         }
-        if (!commentText) commentText = args.slice(3).filter((a) => !a.startsWith('--')).join(' ');
-        if (!issueId || !commentText) {
+        if (!commentText) commentText = args.slice(startIdx).filter((a) => !a.startsWith('--')).join(' ');
+        const sess = getSessionStatus(repoRoot);
+        const resolvedIssue = issueId || sess.session?.issueId || prNumber;
+        if (!resolvedIssue || !commentText) {
           result.success = false;
           return result;
         }
-        result.commented = postPMComment({ issueId, prNumber, comment: commentText, repoRoot });
+        result.commented = postPMComment({
+          issueId: resolvedIssue,
+          prNumber,
+          comment: commentText,
+          allowLocalFallback,
+          repoRoot
+        });
+        result.success = result.commented.success !== false;
         return result;
       }
       result.success = false;
@@ -930,8 +1444,65 @@ export function runCLI(customArgs = null, customConfigPath = null, repoRoot = '.
     }
 
     case 'ticket': {
-      const sub = args[1] || 'create';
+      const knownSubs = ['create', 'transition', 'comment', 'sync', 'templates', 'init-templates'];
+      const rawSub = args[1] || 'create';
+      const sub = knownSubs.includes(rawSub) ? rawSub : 'create';
+      const startIndex = knownSubs.includes(rawSub) ? 2 : 1;
       result.subcommand = sub;
+
+      if (sub === 'templates' || sub === 'init-templates') {
+        const force = args.includes('--force');
+        result.templates = scaffoldIssueTemplates({ repoRoot, force });
+        return result;
+      }
+
+      if (sub === 'sync') {
+        result.synced = syncKanbanBoard(repoRoot);
+        return result;
+      }
+
+      if (sub === 'transition') {
+        const issueId = args[2];
+        const state = args[3] || 'in-progress';
+        if (!issueId) {
+          result.success = false;
+          return result;
+        }
+        result.transitioned = transitionPMState({ issueId, state, repoRoot });
+        return result;
+      }
+
+      if (sub === 'comment') {
+        let issueId = args[2] && !args[2].startsWith('-') ? args[2] : null;
+        let commentText = '',
+          prNumber = null;
+        const allowLocalFallback = args.includes('--allow-local-fallback');
+        const startIdx = issueId ? 3 : 2;
+        for (let i = startIdx; i < args.length; i++) {
+          if (args[i] === '--pr' && args[i + 1]) prNumber = args[++i];
+          else if (args[i].startsWith('--pr=')) prNumber = args[i].split('=')[1];
+          else if (args[i] === '--issue' && args[i + 1]) issueId = args[++i];
+          else if (args[i].startsWith('--issue=')) issueId = args[i].split('=')[1];
+          else if (args[i] === '--body' && args[i + 1]) commentText = args[++i];
+        }
+        if (!commentText) commentText = args.slice(startIdx).filter((a) => !a.startsWith('--')).join(' ');
+        const sess = getSessionStatus(repoRoot);
+        const resolvedIssue = issueId || sess.session?.issueId || prNumber;
+        if (!resolvedIssue || !commentText) {
+          result.success = false;
+          return result;
+        }
+        result.commented = postPMComment({
+          issueId: resolvedIssue,
+          prNumber,
+          comment: commentText,
+          allowLocalFallback,
+          repoRoot
+        });
+        result.success = result.commented.success !== false;
+        return result;
+      }
+
       if (sub === 'create') {
         let title = '',
           type = 'feat',
@@ -942,7 +1513,7 @@ export function runCLI(customArgs = null, customConfigPath = null, repoRoot = '.
           reproduce = '',
           expected = '',
           environment = '';
-        for (let i = 2; i < args.length; i++) {
+        for (let i = startIndex; i < args.length; i++) {
           if (args[i] === '--title' && args[i + 1]) title = args[++i];
           else if (args[i] === '--type' && args[i + 1]) type = args[++i];
           else if (args[i] === '--body' && args[i + 1]) body = args[++i];
@@ -954,7 +1525,7 @@ export function runCLI(customArgs = null, customConfigPath = null, repoRoot = '.
           else if (args[i] === '--expected' && args[i + 1]) expected = args[++i];
           else if (args[i] === '--environment' && args[i + 1]) environment = args[++i];
         }
-        if (!title) title = args.slice(2).filter((a) => !a.startsWith('--')).join(' ');
+        if (!title) title = args.slice(startIndex).filter((a) => !a.startsWith('--')).join(' ');
         if (!title) {
           result.success = false;
           return result;
@@ -979,14 +1550,24 @@ export function runCLI(customArgs = null, customConfigPath = null, repoRoot = '.
 
     case 'init':
     case 'install': {
-      let targetDir = '.',
-        global = false;
-      for (let i = 1; i < args.length; i++) {
-        if (args[i] === '--global' || args[i] === '-g') global = true;
-        else if ((args[i] === '--target' || args[i] === '-t') && args[i + 1]) targetDir = args[++i];
-        else if (!args[i].startsWith('-') && i === 1) targetDir = args[i];
+      const parsed = parseInstallArgs(args, repoRoot);
+      if (parsed.help) {
+        printInstallerHelp();
+        result.help = true;
+        return result;
       }
-      result.installed = installFramework({ targetDir, global, repoRoot });
+      const onDetect = (dir) => {
+        const cfg = generateConfig(dir);
+        const cfgFile = path.join(dir, '.agent', 'sdlc-config.json');
+        fs.mkdirSync(path.dirname(cfgFile), { recursive: true });
+        fs.writeFileSync(cfgFile, JSON.stringify(cfg, null, 2));
+      };
+      const onInstallCi = ({ repoRoot: dir }) => installCIWorkflow({ repoRoot: dir, force: true });
+      result.installed = installFramework({
+        ...parsed,
+        onDetect,
+        onInstallCi
+      });
       return result;
     }
 
@@ -994,7 +1575,7 @@ export function runCLI(customArgs = null, customConfigPath = null, repoRoot = '.
       const archInfo = inspectArchlens(repoRoot);
       if (archInfo.installed) {
         try {
-          execSync('npx -y @fmatar/archlens-skill update --path .', { cwd: repoRoot, stdio: 'inherit' });
+          execSync('npx -y @fmatar/archlens-skill@1.2.0 update --path .', { cwd: repoRoot, stdio: 'inherit' });
         } catch {}
       }
       const freshConfig = generateConfig(repoRoot);
@@ -1017,6 +1598,116 @@ export function runCLI(customArgs = null, customConfigPath = null, repoRoot = '.
         result.reviewPlan = generateReviewPlan({ repoRoot });
         return result;
       }
+      if (sub === 'record') {
+        // Records a reviewer verdict in the session manifest, signs the Stage 7 receipt
+        // when measurements are ready, formats the 4-section consolidated review comment,
+        // and publishes it directly to the GitHub PR (unless --no-comment is passed).
+        let verdict = null,
+          reviewer = null,
+          bodyText = '',
+          peerReviewSummary = '',
+          archSecuritySummary = '',
+          prNumber = null,
+          issueId = null;
+        const noComment = args.includes('--no-comment');
+        const allowLocalFallback = args.includes('--allow-local-fallback');
+        for (let i = 2; i < args.length; i++) {
+          if (args[i] === '--verdict' && args[i + 1]) verdict = args[++i];
+          else if (args[i].startsWith('--verdict=')) verdict = args[i].split('=')[1];
+          else if (args[i] === '--reviewer' && args[i + 1]) reviewer = args[++i];
+          else if (args[i].startsWith('--reviewer=')) reviewer = args[i].split('=')[1];
+          else if (args[i] === '--body' && args[i + 1]) bodyText = args[++i];
+          else if (args[i] === '--peer-review' && args[i + 1]) peerReviewSummary = args[++i];
+          else if (args[i] === '--arch-review' && args[i + 1]) archSecuritySummary = args[++i];
+          else if (args[i] === '--pr' && args[i + 1]) prNumber = args[++i];
+          else if (args[i].startsWith('--pr=')) prNumber = args[i].split('=')[1];
+          else if (args[i] === '--issue' && args[i + 1]) issueId = args[++i];
+          else if (args[i].startsWith('--issue=')) issueId = args[i].split('=')[1];
+        }
+        if (!reviewer && (bodyText || peerReviewSummary || archSecuritySummary)) {
+          reviewer = '@sdlc-gate';
+        }
+        if (!['approve', 'request-changes'].includes(verdict) || !reviewer) {
+          console.error(
+            'Usage: review record --verdict <approve|request-changes> --reviewer <name> [--peer-review <md>] [--arch-review <md>] [--body <md>] [--pr <number>]'
+          );
+          result.success = false;
+          return result;
+        }
+        const sessRes = updateSession({
+          stage: 7,
+          stageName: 'Subagent Review & Quality Gate',
+          manifestUpdate: {
+            ...(prNumber ? { prNumber: Number(String(prNumber).replace(/^#/, '')) || prNumber } : {}),
+            peerReview: {
+              verdict,
+              reviewer,
+              peerReviewSummary: peerReviewSummary || null,
+              archSecuritySummary: archSecuritySummary || null,
+              body: bodyText || null,
+              recordedAt: new Date().toISOString()
+            }
+          },
+          repoRoot
+        });
+
+        let issuedReceipt = null;
+        if (verdict === 'approve' && sessRes?.session) {
+          try {
+            const drift = checkSpecDrift({ ticketId: sessRes.session.issueId, repoRoot });
+            const sessionInputs = receiptInputsFromSession(sessRes.session, {
+              driftCheckPassed: Boolean(drift.passed),
+              repoRoot
+            });
+            const recRes = issueGateReceipt({
+              issueId: sessRes.session.issueId,
+              branch: sessRes.session.branch,
+              ...sessionInputs,
+              reviewer,
+              repoRoot
+            });
+            if (recRes.success) {
+              issuedReceipt = recRes.receipt;
+            }
+          } catch {}
+        }
+
+        const formattedComment = formatConsolidatedReviewComment({
+          issueId: issueId || sessRes?.session?.issueId || null,
+          prNumber: prNumber || sessRes?.session?.manifest?.prNumber || null,
+          branch: sessRes?.session?.branch || null,
+          verdict,
+          reviewer,
+          peerReviewSummary,
+          archSecuritySummary,
+          body: bodyText,
+          receiptId: issuedReceipt?.receiptId || null,
+          repoRoot
+        });
+
+        let commented = null;
+        if (!noComment) {
+          commented = postPMComment({
+            issueId: issueId || sessRes?.session?.issueId || null,
+            prNumber: prNumber || sessRes?.session?.manifest?.prNumber || null,
+            comment: formattedComment,
+            allowLocalFallback,
+            repoRoot
+          });
+          if (commented && commented.success === false) {
+            result.success = false;
+          }
+        }
+
+        result.review = {
+          verdict,
+          reviewer,
+          receipt: issuedReceipt,
+          formattedComment,
+          commented
+        };
+        return result;
+      }
       result.success = false;
       return result;
     }
@@ -1024,13 +1715,15 @@ export function runCLI(customArgs = null, customConfigPath = null, repoRoot = '.
     case 'release': {
       let bump = 'patch',
         dryRun = false,
-        skipGate = false;
+        skipGate = false,
+        noCompact = false;
       for (let i = 1; i < args.length; i++) {
         if (args[i] === '--dry-run') dryRun = true;
         else if (args[i] === '--skip-gate') skipGate = true;
+        else if (args[i] === '--no-compact') noCompact = true;
         else if (['patch', 'minor', 'major'].includes(args[i].toLowerCase())) bump = args[i].toLowerCase();
       }
-      result.release = executeRelease({ bump, dryRun, skipGate, repoRoot });
+      result.release = executeRelease({ bump, dryRun, skipGate, noCompact, repoRoot });
       return result;
     }
 
@@ -1120,14 +1813,41 @@ export function runCLI(customArgs = null, customConfigPath = null, repoRoot = '.
       return result;
     }
 
+    case 'ui-snapshot': {
+      let outputPath = null;
+      for (let i = 1; i < args.length; i++) {
+        if ((args[i] === '--output' || args[i] === '-o') && args[i + 1]) outputPath = args[++i];
+        else if (args[i].startsWith('--output=')) outputPath = args[i].split('=')[1];
+      }
+      const wb = ensureWorkbenchRunning({ repoRoot });
+      const widget = generateArchitectureWidget({ outputPath, repoRoot });
+      result.workbench = wb;
+      result.uiWidget = widget;
+      return result;
+    }
+
     case 'serve': {
       let port = 4120;
       for (let i = 1; i < args.length; i++) {
         if (args[i] === '--port' && args[i + 1]) port = Number(args[++i]) || 4120;
       }
+      const widget = generateArchitectureWidget({ repoRoot });
+      result.uiWidget = widget;
+      if (args.includes('--snapshot-only') || process.env.COWORK || process.env.CLAUDE_COWORK) {
+        result.workbench = {
+          port,
+          snapshotOnly: true,
+          widgetPath: widget.widgetPath || widget.outputPath
+        };
+        return result;
+      }
       const workbench = createWorkbenchServer({ port, repoRoot });
       workbench.listen();
-      result.workbench = { port, url: `http://localhost:${port}` };
+      result.workbench = {
+        port,
+        url: `http://127.0.0.1:${port}/?token=${workbench.token}`,
+        widgetPath: widget.widgetPath || widget.outputPath
+      };
       return result;
     }
 
@@ -1198,6 +1918,7 @@ export function runCLI(customArgs = null, customConfigPath = null, repoRoot = '.
         maxErrorRate = 0.05,
         samples = 5,
         simulatedErrors = 0,
+        probeLive = args.includes('--live'),
         rollbackCommand = null;
       for (let i = 2; i < args.length; i++) {
         if (args[i] === '--url' && args[i + 1]) healthUrl = args[++i];
@@ -1211,6 +1932,7 @@ export function runCLI(customArgs = null, customConfigPath = null, repoRoot = '.
         maxErrorRate,
         samples,
         simulatedErrors,
+        probeLive,
         rollbackCommand,
         repoRoot
       });
@@ -1220,15 +1942,28 @@ export function runCLI(customArgs = null, customConfigPath = null, repoRoot = '.
     }
 
     case 'help':
+    case '--help':
+    case '-h':
     default: {
-      console.log(`
+      const isHelp = ['help', '--help', '-h'].includes(command);
+      if (!isHelp) {
+        console.error(`❌ Unknown command '${command}'. Run 'sdlc-engine.mjs help' for usage.`);
+        result.success = false;
+        result.exitCode = 2;
+      }
+      (isHelp ? console.log : console.error)(`
 Agentic SDLC Universal Engine (sdlc-engine.mjs)
 
 Usage:
+  npx github:fmatar/agentic-sdlc-framework install [--agents <list>] [--global]
+  node .agent/scripts/sdlc-engine.mjs install [--agents gemini,claude,grok,cursor,windsurf,copilot]
+  node .agent/scripts/sdlc-engine.mjs stage <begin|pre-pr|complete> [--issue <id>]
   node .agent/scripts/sdlc-engine.mjs product <init|status|plan|control>
   node .agent/scripts/sdlc-engine.mjs adr <create|list|decide>
   node .agent/scripts/sdlc-engine.mjs drift check
   node .agent/scripts/sdlc-engine.mjs decision-graph <build|sync>
+  node .agent/scripts/sdlc-engine.mjs readme <init|audit> [--archetype <auto|cli|sdk|platform>] [--strict]
+  node .agent/scripts/sdlc-engine.mjs wiki <sync|audit|map> [--strict]
   node .agent/scripts/sdlc-engine.mjs dossier generate --issue <id>
   node .agent/scripts/sdlc-engine.mjs guard <pre-commit|pre-merge|pre-push|receipt>
   node .agent/scripts/sdlc-engine.mjs cache <status|clear>
@@ -1239,16 +1974,230 @@ Usage:
   }
 }
 
+/**
+ * Formats a `runCLI()` result into deterministic stdout text so CLI subcommands
+ * never finish silently when invoked from a terminal or agent device shell.
+ */
+export function formatCLIResult(res, args = []) {
+  if (!res || typeof res !== 'object') return '';
+  if (args.includes('--json')) {
+    return JSON.stringify(res, null, 2);
+  }
+
+  const cmd = res.command;
+  if (!cmd || ['detect', 'doctor', 'help', '--help', '-h'].includes(cmd)) {
+    return '';
+  }
+
+  if (cmd === 'session') {
+    const sub = res.subcommand || 'status';
+    if (sub === 'dashboard') {
+      if (res.dashboard) return res.dashboard;
+      return 'ℹ️ No active SDLC session. Start one with `node .agent/scripts/sdlc-engine.mjs stage begin --title "<title>" --checkout`.';
+    }
+    if (sub === 'status') {
+      const s = res.status?.session;
+      if (!res.status?.active || !s) {
+        return 'ℹ️ SDLC Session Status: IDLE (no active session).';
+      }
+      return `📍 Active SDLC Session #${s.issueId} | Branch: ${s.branch} | Stage: ${s.stage}/8 (${s.stageName}) | Remediations: ${s.remediationCount || 0}/${s.maxRemediations || 3}`;
+    }
+    if (sub === 'list') {
+      const ids = Object.keys(res.sessions || {});
+      return `📋 Sessions (${ids.length}): ${ids.length > 0 ? ids.map((id) => `#${id}`).join(', ') : 'none'} (active: ${res.activeSessionId ? `#${res.activeSessionId}` : 'none'})`;
+    }
+    if (res.session) {
+      return `✅ Session #${res.session.issueId} -> Stage ${res.session.stage}/8 (${res.session.stageName}) on ${res.session.branch}`;
+    }
+    if (res.released) {
+      return `🔓 Released active SDLC session lock.`;
+    }
+  }
+
+  if (cmd === 'stage' && res.stage) {
+    const st = res.stage;
+    if (st.action === 'begin') {
+      return `🚀 Stage Begin (#${st.issueId}): branch '${st.branch}' | Stage ${st.stage}/8 | UI Snapshot: ${st.widgetPath || '.agent/workbench/index.html'}`;
+    }
+    if (st.action === 'pre-pr') {
+      const driftStatus = st.drift?.passed ? 'PASS' : 'FAIL';
+      const wikiStatus = st.wikiAudit?.passed ? 'PASS' : 'FAIL';
+      const prLabel = st.prNumber ? ` | PR=#${st.prNumber}` : '';
+      return `📦 Stage Pre-PR (#${st.issueId})${prLabel}: Drift=${driftStatus} | Wiki=${wikiStatus} | Receipt=${st.receipt?.receiptId || 'PENDING_REVIEW'} | UI Snapshot: ${st.widgetPath || '.agent/workbench/index.html'}`;
+    }
+    if (st.action === 'complete') {
+      return `🏁 Stage Complete (#${st.issueId}): Stage ${st.stage}/8 | Kanban synchronized | Session released: ${Boolean(st.released)}`;
+    }
+  }
+
+  if (cmd === 'drift' && res.drift) {
+    const d = res.drift;
+    if (d.passed) {
+      return `✅ Spec-Drift Check Passed (${(d.modifiedSpecs || []).length} spec/contract touchpoint(s) verified).`;
+    }
+    return `🛑 Spec-Drift Check Failed: ${d.reason || 'Undeclared spec or contract drift requires an accepted ADR.'}`;
+  }
+
+  if (cmd === 'adr') {
+    if (res.compact) {
+      return `📦 Compacted ${res.compact.compactedCount} ADR(s) into ${res.compact.srsPath || 'docs/SRS.md'} (release: ${res.compact.releaseVersion})`;
+    }
+    if (Array.isArray(res.adrs)) {
+      if (res.adrs.length === 0) return '📜 ADRs: none recorded in docs/adr/.';
+      return ['📜 Architecture Decision Records:', ...res.adrs.map((a) => `  • ${a.id}: ${a.title} [${a.scope} | ${a.status}] (${a.file})`)].join('\n');
+    }
+    if (res.adr) {
+      return `📜 ADR ${res.adr.id || res.adr.adrId || ''}: ${res.adr.title || res.adr.status || 'updated'} (${res.adr.file || 'docs/adr'})`;
+    }
+  }
+
+  if (cmd === 'decision-graph' && res.decisionGraph) {
+    const dg = res.decisionGraph;
+    return `🗺️ Decision Graph (${res.subcommand}): ${dg.nodes?.length ?? dg.nodesCount ?? 0} node(s), ${dg.edges?.length ?? dg.edgesCount ?? 0} edge(s)${dg.markdownPath ? ` -> ${dg.markdownPath}` : ''}`;
+  }
+
+  if (cmd === 'ui-snapshot' && res.uiWidget) {
+    const p = res.uiWidget.widgetPath || res.uiWidget.outputPath || '.agent/workbench/index.html';
+    return `📸 Architecture & Decision Workbench snapshot generated: ${p}`;
+  }
+
+  if (cmd === 'serve' && res.workbench?.snapshotOnly) {
+    return `📸 Architecture & Decision Workbench snapshot generated: ${res.workbench.widgetPath || '.agent/workbench/index.html'} (loopback server skipped in Cowork/snapshot mode)`;
+  }
+
+  if (cmd === 'skill-audit' && res.skillAudit) {
+    const sa = res.skillAudit;
+    return `🛡️ Skill Audit: ${sa.skillsAudited || sa.results?.length || 0} skill(s) checked, ${sa.totalFindings || 0} finding(s) (${sa.success ? 'PASSED' : 'FAILED'})`;
+  }
+
+  if (cmd === 'audit' && res.audit) {
+    if (res.audit.valid !== undefined) {
+      return `${res.audit.valid ? '✅' : '🛑'} Merkle Audit Chain: ${res.audit.valid ? 'VALID' : 'INVALID'} (${res.audit.entriesCount ?? 0} record(s))`;
+    }
+    return `📝 Audit record appended: ${res.audit.event || 'OK'} (${res.audit.hash || ''})`;
+  }
+
+  if (cmd === 'stats' && res.stats) {
+    const st = res.stats;
+    return `📊 SDLC Telemetry: Stage=${st.currentStage} | Branch=${st.activeBranch} | Sessions=${st.completedSessions}/${st.totalSessions} | Velocity=${st.velocityScore}% | Saved=${st.estimatedHoursSaved}h ($${st.totalDollarSavingsUSD})`;
+  }
+
+  if (cmd === 'cache' && res.cache) {
+    if (res.cache.cleared !== undefined) return `🧹 Gate cache cleared.`;
+    return `⚡ Gate Cache: ${res.cache.entriesCount ?? Object.keys(res.cache.entries || {}).length} cached module entry(s).`;
+  }
+
+  if ((cmd === 'ticket' || cmd === 'pm')) {
+    if (res.issueId) return `🎫 Ticket #${res.issueId} created via ${res.provider || 'local'} (${res.title || ''})`;
+    if (res.transitioned) return `🔄 Ticket #${res.transitioned.issueId || ''} transitioned to '${res.transitioned.state || ''}'`;
+    if (res.commented) {
+      const targetStr = res.commented.prNumber
+        ? `PR #${res.commented.prNumber} (ticket #${res.commented.targetId || ''})`
+        : `ticket #${res.commented.targetId || res.commented.issueId || ''}`;
+      return `💬 Comment recorded on ${targetStr} via ${res.commented.provider || 'local'}`;
+    }
+    if (res.synced) return `📋 Synchronized living Kanban board -> docs/KANBAN.md`;
+    if (res.templates) return `📄 Issue & PR templates ready (${(res.templates.created || []).length} created).`;
+    if (res.pm) return `🔌 PM Provider: ${res.pm.provider} (${res.pm.key || 'local'})`;
+  }
+
+  if (cmd === 'product' || cmd === 'spec') {
+    if (res.spec) return `📐 Capability Spec scaffolded: ${res.spec.capId || ''} -> ${res.spec.specPath || 'docs/specs/'}`;
+    if (res.product) {
+      const p = res.product;
+      if (p.waves) return `🌊 Product DAG Plan: ${p.waves.length} wave(s) across ${(p.capabilities || []).length} capability(s).`;
+      if (p.capabilities) return `🏛️ Product Constitution: ${(p.capabilities || []).length} capability(s), ${(p.invariants || []).length} invariant(s).`;
+    }
+  }
+
+  if (cmd === 'pr-summary' && res.prSummary) {
+    return typeof res.prSummary === 'string' ? res.prSummary : res.prSummary.markdown || JSON.stringify(res.prSummary, null, 2);
+  }
+
+  if (cmd === 'dossier' && res.dossier) {
+    return `📦 Context Dossier (#${res.dossier.issueId}): ${res.dossier.outputPath || 'generated'}`;
+  }
+
+  if (cmd === 'review') {
+    if (res.review) {
+      const prPart = res.review.commented?.prNumber ? ` -> Published to PR #${res.review.commented.prNumber}` : '';
+      const recPart = res.review.receipt?.receiptId ? ` | Receipt: ${res.review.receipt.receiptId}` : '';
+      return `✅ Recorded peer review verdict '${res.review.verdict}' by ${res.review.reviewer}${recPart}${prPart}`;
+    }
+    if (res.reviewPlan) return `🔍 Review Plan generated (${(res.reviewPlan.files || []).length} modified file(s)).`;
+  }
+
+  if (cmd === 'interop' && res.interop) {
+    return `✅ Exported rules & skills for [${(res.interop.selectedAgents || []).join(', ')}] (${(res.interop.filesCreated || []).length} file(s) updated).`;
+  }
+
+  if (cmd === 'readme') {
+    if (res.readme) {
+      const assets = (res.readme.createdAssets || []).length;
+      return res.readme.written
+        ? `📄 Scaffolded 10-30-90 README.md (archetype: ${res.readme.archetype}, ${assets} companion asset(s) written).`
+        : `ℹ️ ${res.readme.reason || 'README.md unchanged.'}`;
+    }
+    if (res.readmeAudit) {
+      return res.readmeAudit.summary;
+    }
+  }
+
+  return '';
+}
+
+function invokeMainCLI() {
+  const cliArgs = process.argv.slice(2);
+  const cmd = (cliArgs[0] || '').toLowerCase();
+  if (cmd === 'install' || cmd === 'init') {
+    const repoRoot = process.cwd();
+    const onDetect = (dir) => {
+      const cfg = generateConfig(dir);
+      const cfgFile = path.join(dir, '.agent', 'sdlc-config.json');
+      fs.mkdirSync(path.dirname(cfgFile), { recursive: true });
+      fs.writeFileSync(cfgFile, JSON.stringify(cfg, null, 2));
+    };
+    const onInstallCi = ({ repoRoot: dir }) => installCIWorkflow({ repoRoot: dir, force: true });
+    const installRes = runInstallerCLI(cliArgs, { repoRoot, onDetect, onInstallCi });
+    if (installRes && installRes.success === false) process.exitCode = 1;
+    return;
+  }
+  let res;
+  try {
+    res = runCLI();
+  } catch (err) {
+    console.error(`❌ ${err?.message || err}`);
+    process.exitCode = 1;
+    return;
+  }
+  const formatted = formatCLIResult(res, cliArgs);
+  if (formatted) {
+    console.log(formatted);
+  }
+  process.exitCode = cliExitCode(res);
+}
+
+/**
+ * Maps a runCLI() result onto a process exit code.
+ * Any command reporting `success: false` exits non-zero so git hooks,
+ * CI and agents can rely on the exit status.
+ */
+export function cliExitCode(res) {
+  if (!res || typeof res !== 'object') return 0;
+  if (Number.isInteger(res.exitCode)) return res.exitCode;
+  return res.success === false ? 1 : 0;
+}
+
 if (process.argv[1]) {
   try {
     const isDirect = path.resolve(process.argv[1]) === path.resolve(import.meta.filename);
     const isRealTarget = fs.realpathSync(process.argv[1]) === path.resolve(import.meta.filename);
     if (isDirect || isRealTarget) {
-      runCLI();
+      invokeMainCLI();
     }
   } catch {
     if (path.resolve(process.argv[1]) === path.resolve(import.meta.filename)) {
-      runCLI();
+      invokeMainCLI();
     }
   }
 }

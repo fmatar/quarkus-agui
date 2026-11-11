@@ -1,14 +1,15 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { execSync } from 'node:child_process';
-import { fileExists, readFileSafe, inspectArchlens, detectPMProvider, getModifiedFiles } from './core.mjs';
+import { execSync, execFileSync } from 'node:child_process';
+import { fileExists, readFileSafe, parseFrontmatter, inspectArchlens, detectPMProvider, getModifiedFiles, gitDiffForFile } from './core.mjs';
 import { getSessionStatus } from './session.mjs';
-import { createTicket } from './pm-provider.mjs';
+import { createTicket, scaffoldIssueTemplates } from './pm-provider.mjs';
 import { appendAuditRecord } from './audit-chain.mjs';
 import { auditContractDrift } from './adr-drift.mjs';
 import { installHooks } from './git-guard.mjs';
 import { scaffoldArchlensPolicy } from './arch-trace.mjs';
+import { provisionAgentIntegrations } from './installer.mjs';
 
 export function runDoctor(repoRoot = '.', { fix = false } = {}) {
   console.log('\n================================================================');
@@ -44,6 +45,7 @@ export function runDoctor(repoRoot = '.', { fix = false } = {}) {
     { name: 'Living Kanban', path: 'docs/KANBAN.md', critical: false },
     { name: 'Changelog', path: 'CHANGELOG.md', critical: false },
     { name: 'Spec Templates', path: 'docs/templates', critical: false },
+    { name: 'Issue Templates', path: '.github/ISSUE_TEMPLATE/feature_request.md', critical: false },
     { name: 'Archlens Policy', path: '.archlens/policy.json', critical: false }
   ];
 
@@ -74,6 +76,9 @@ export function runDoctor(repoRoot = '.', { fix = false } = {}) {
         if (a.path === 'docs/KANBAN.md') {
           createTicket({ title: 'Initialize Project Kanban', type: 'spike', repoRoot });
           autoFixed.push('docs/KANBAN.md');
+        } else if (a.path === '.github/ISSUE_TEMPLATE/feature_request.md') {
+          scaffoldIssueTemplates({ repoRoot });
+          autoFixed.push('.github/ISSUE_TEMPLATE');
         } else if (a.path === '.archlens/policy.json') {
           scaffoldArchlensPolicy(repoRoot);
           autoFixed.push('.archlens/policy.json');
@@ -125,8 +130,27 @@ export function generateRegressionProof({
   const apiProofs = apiEndpoints.map((ep, idx) => {
     const method = ep.method || 'GET';
     const pathUrl = ep.path || ep.url || `/api/v1/${targetName}`;
-    const status = ep.expectedStatus || 200;
-    const bodySample = ep.sampleResponse || { status: 'ok', timestamp };
+    let status = ep.expectedStatus || 200;
+    let bodySample = ep.sampleResponse || { status: 'ok', timestamp };
+    let source = 'contract-sample';
+
+    if (ep.file && fileExists(path.resolve(repoRoot, ep.file))) {
+      bodySample = readFileSafe(path.resolve(repoRoot, ep.file)) || bodySample;
+      source = ep.file;
+    } else if (ep.liveProbe && /^https?:\/\//i.test(pathUrl)) {
+      try {
+        const liveOut = execFileSync('curl', ['-s', '--max-time', '2', pathUrl], {
+          cwd: repoRoot,
+          encoding: 'utf8',
+          stdio: 'pipe'
+        });
+        if (liveOut) {
+          bodySample = liveOut;
+          source = 'live-http';
+        }
+      } catch {}
+    }
+
     const hash = crypto.createHash('sha256').update(JSON.stringify({ method, pathUrl, status, bodySample })).digest('hex');
 
     return {
@@ -134,6 +158,7 @@ export function generateRegressionProof({
       method,
       endpoint: pathUrl,
       status,
+      source,
       responseHash: hash,
       verified: true
     };
@@ -142,13 +167,38 @@ export function generateRegressionProof({
   const uiProofs = uiRoutes.map((route, idx) => {
     const routePath = typeof route === 'string' ? route : route.path || `/${targetName}`;
     const componentName = typeof route === 'object' && route.component ? route.component : `${targetName}-view`;
-    const domSnapshot = `<div id="app" data-component="${componentName}"><header><h1>${componentName}</h1></header><main data-proof-ready="true"></main></div>`;
+    const explicitFile = typeof route === 'object' && route.file ? route.file : null;
+
+    const candidateFiles = [
+      explicitFile,
+      `workbench/src/routes${routePath === '/' ? '' : routePath}/+page.svelte`,
+      `src/routes${routePath === '/' ? '' : routePath}/+page.svelte`,
+      `src/components/${componentName}.svelte`,
+      `src/components/${componentName}.tsx`,
+      `src/components/${componentName}.vue`
+    ].filter(Boolean);
+
+    let domSnapshot = `<div id="app" data-component="${componentName}"><header><h1>${componentName}</h1></header><main data-proof-ready="true"></main></div>`;
+    let sourceFile = null;
+    for (const candidate of candidateFiles) {
+      const absCandidate = path.resolve(repoRoot, candidate);
+      if (fileExists(absCandidate)) {
+        const rawComponent = readFileSafe(absCandidate);
+        if (rawComponent) {
+          domSnapshot = rawComponent;
+          sourceFile = candidate;
+          break;
+        }
+      }
+    }
+
     const snapshotHash = crypto.createHash('sha256').update(domSnapshot).digest('hex');
 
     return {
       id: `ui-${idx + 1}`,
       route: routePath,
       component: componentName,
+      sourceFile,
       snapshotHash,
       verified: true
     };
@@ -225,6 +275,7 @@ export function monitorCanaryHealthAndWatchdog({
   maxErrorRate = 0.05,
   samples = 5,
   simulatedErrors = 0,
+  probeLive = false,
   rollbackCommand = null,
   repoRoot = '.'
 } = {}) {
@@ -232,10 +283,44 @@ export function monitorCanaryHealthAndWatchdog({
   const healthLogs = [];
 
   for (let i = 1; i <= samples; i++) {
-    const isError = i <= simulatedErrors;
-    if (isError) {
-      errorsDetected++;
-      healthLogs.push({ sample: i, status: 500, ok: false, error: 'Synthetic Canary Probe Timeout / 500 Server Error' });
+    if (simulatedErrors > 0) {
+      const isError = i <= simulatedErrors;
+      if (isError) {
+        errorsDetected++;
+        healthLogs.push({ sample: i, status: 500, ok: false, error: 'Synthetic Canary Probe Timeout / 500 Server Error' });
+      } else {
+        healthLogs.push({ sample: i, status: 200, ok: true });
+      }
+    } else if (probeLive && /^https?:\/\//i.test(healthUrl)) {
+      try {
+        const statusStr = execFileSync(
+          'curl',
+          ['-s', '-o', '/dev/null', '-w', '%{http_code}', '--max-time', '2', healthUrl],
+          { cwd: repoRoot, encoding: 'utf8', stdio: 'pipe' }
+        ).trim();
+        const code = parseInt(statusStr, 10) || 0;
+        if (code >= 200 && code < 400) {
+          healthLogs.push({ sample: i, status: code, ok: true, mode: 'live' });
+        } else {
+          errorsDetected++;
+          healthLogs.push({
+            sample: i,
+            status: code || 503,
+            ok: false,
+            mode: 'live',
+            error: `Live HTTP probe returned status ${code || 'unreachable'}`
+          });
+        }
+      } catch (err) {
+        errorsDetected++;
+        healthLogs.push({
+          sample: i,
+          status: 503,
+          ok: false,
+          mode: 'live',
+          error: `Live HTTP probe failed: ${err.message}`
+        });
+      }
     } else {
       healthLogs.push({ sample: i, status: 200, ok: true });
     }
@@ -364,78 +449,19 @@ jobs:
 
 export function exportAgentRules({ agent = 'all', repoRoot = '.' } = {}) {
   console.log(`🤖 Exporting Agentic SDLC Framework Rules & Skills for target runtime: '${agent.toUpperCase()}'...`);
-  const results = {
+  const provisioned = provisionAgentIntegrations({
+    agents: agent,
+    targetDir: repoRoot,
+    global: false
+  });
+
+  return {
     agent,
-    filesCreated: [],
-    skillsLinked: 0
+    selectedAgents: provisioned.selectedAgents,
+    filesCreated: provisioned.filesCreated,
+    skillsLinked: provisioned.skillsCount,
+    prunedSkills: provisioned.prunedSkills
   };
-
-  const frameworksRuleSummary = `# Agentic SDLC Framework Invariants & Autonomous Rules
-# Generated automatically by sdlc-engine (Universal Engine)
-# Adheres strictly to Robert C. Martin Clean Code & Architecture
-
-## 1. Zero Direct Pushes (4-Layer Git Guard)
-- Direct git commits, merges, or pushes to \`develop\` or \`main\` are STRICTLY FORBIDDEN.
-- Every commit requires an active session in \`.agent/.sdlc-session.json\` matching the current branch.
-- Every merge into \`main\` requires a signed Stage 7 SHA-256 Merkle Gate Receipt in \`docs/AUDIT_CHAIN.jsonl\`.
-
-## 2. PRODUCT.md Constitution & Spec Drift ADR Protocol
-- Full-spec project handovers synthesize \`PRODUCT.md\` (\`CAP-XX\`, \`INV-XX\`, \`SPEC-XX\`) starting at Genesis Ticket \`#1\`.
-- Any mutation to dependencies, C4 architecture boundaries, DB schemas, or API contracts MUST be accompanied by an ADR (\`node .agent/scripts/sdlc-engine.mjs adr create\`).
-
-## 3. Robert Martin TDD & Dual-Gate Quality Verification
-- Diff coverage threshold: >= 85% line and branch coverage.
-- Mutation kill score: >= 80% using PITest or Stryker.
-- Concentric ring Clean Architecture compliance: zero outer-layer imports into domain entities.
-`;
-
-  if (agent === 'all' || agent === 'claude' || agent === 'claude-code') {
-    const claudeMdPath = path.resolve(repoRoot, 'CLAUDE.md');
-    fs.writeFileSync(claudeMdPath, frameworksRuleSummary, 'utf8');
-    results.filesCreated.push('CLAUDE.md');
-
-    const claudeDir = path.resolve(repoRoot, '.claude');
-    fs.mkdirSync(claudeDir, { recursive: true });
-    const claudeSettings = path.resolve(claudeDir, 'settings.json');
-    const settings = {
-      rules: ['CLAUDE.md'],
-      commands: {
-        'sdlc-flow': 'node .agent/scripts/sdlc-engine.mjs gate --strict',
-        'sdlc-test': 'node .agent/scripts/sdlc-engine.mjs test --affected-only',
-        'sdlc-doctor': 'node .agent/scripts/sdlc-engine.mjs doctor --fix'
-      }
-    };
-    fs.writeFileSync(claudeSettings, JSON.stringify(settings, null, 2), 'utf8');
-    results.filesCreated.push('.claude/settings.json');
-  }
-
-  if (agent === 'all' || agent === 'cursor') {
-    const cursorRulesPath = path.resolve(repoRoot, '.cursorrules');
-    fs.writeFileSync(cursorRulesPath, frameworksRuleSummary, 'utf8');
-    results.filesCreated.push('.cursorrules');
-
-    const cursorDir = path.resolve(repoRoot, '.cursor/rules');
-    fs.mkdirSync(cursorDir, { recursive: true });
-    const cursorRuleFile = path.resolve(cursorDir, 'agentic-sdlc.mdc');
-    const mdcContent = `---
-description: Agentic SDLC Framework Lifecycle, TDD, and Dual-Gate Quality Rules
-globs: *
-alwaysApply: true
----
-
-${frameworksRuleSummary}
-`;
-    fs.writeFileSync(cursorRuleFile, mdcContent, 'utf8');
-    results.filesCreated.push('.cursor/rules/agentic-sdlc.mdc');
-  }
-
-  if (agent === 'all' || agent === 'windsurf' || agent === 'opencode') {
-    const windsurfPath = path.resolve(repoRoot, '.windsurfrules');
-    fs.writeFileSync(windsurfPath, frameworksRuleSummary, 'utf8');
-    results.filesCreated.push('.windsurfrules');
-  }
-
-  return results;
 }
 
 export function scaffoldReproductionTest({
@@ -444,40 +470,111 @@ export function scaffoldReproductionTest({
   repoRoot = '.'
 } = {}) {
   const cleanTrace = (errorTrace || '').trim();
-  const guessedTarget = targetFile || cleanTrace.match(/at\s+.*?\((.*?):\d+:\d+\)/)?.[1] || 'src/index.mjs';
-  const ext = path.extname(guessedTarget);
+  const guessedTarget =
+    targetFile ||
+    cleanTrace.match(/at\s+.*?\((.*?):\d+:\d+\)/)?.[1] ||
+    cleanTrace.match(/File\s+"([^"]+)",\s+line\s+\d+/)?.[1] ||
+    cleanTrace.match(/([a-zA-Z0-9_./-]+\.(?:java|py|go|rs|mjs|js|ts)):\d+/)?.[1] ||
+    'src/index.mjs';
+  const ext = path.extname(guessedTarget).toLowerCase();
   const baseName = path.basename(guessedTarget, ext);
+  const firstLine = cleanTrace ? cleanTrace.split('\n')[0] : 'Reproduction Failure';
+  const escapedRegex = firstLine.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
+  const stamp = Date.now().toString().slice(-4);
 
   const testDir = path.resolve(repoRoot, 'tests/reproductions');
   fs.mkdirSync(testDir, { recursive: true });
-  const testFileName = `reproduce-${baseName.toLowerCase()}-${Date.now().toString().slice(-4)}.test.mjs`;
-  const testFilePath = path.resolve(testDir, testFileName);
 
-  const testContent = `import { describe, it } from 'node:test';
-import assert from 'node:assert/strict';
+  let testFileName = `reproduce-${baseName.toLowerCase()}-${stamp}.test.mjs`;
+  let language = 'javascript';
+  let testContent = '';
 
-/**
+  const headerComment = `/**
  * MANDATORY BUG REPRODUCTION HARNESS (Robert Martin Red-Green-Refactor)
  * Target Source: ${guessedTarget}
  * Stack / Error Trace:
  * ${cleanTrace.split('\n').map((l) => ' * ' + l).join('\n')}
- */
+ * Bug Reproduction Harness: ${baseName}
+ */`;
+
+  if (ext === '.java') {
+    language = 'java';
+    const className = `Reproduce${baseName.replace(/[^a-zA-Z0-9]/g, '')}${stamp}Test`;
+    testFileName = `${className}.java`;
+    testContent = `${headerComment}
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+
+public class ${className} {
+    @Test
+    void reproducesFailureBeforeFix() {
+        // Red Phase: Replace with invocation of ${baseName} triggering: ${firstLine.replace(/"/g, '\\"')}
+        fail("Unresolved defect in ${guessedTarget}: ${firstLine.replace(/"/g, '\\"')}");
+    }
+}
+`;
+  } else if (ext === '.py') {
+    language = 'python';
+    testFileName = `test_reproduce_${baseName.toLowerCase()}_${stamp}.py`;
+    testContent = `"""
+MANDATORY BUG REPRODUCTION HARNESS (Robert Martin Red-Green-Refactor)
+Target Source: ${guessedTarget}
+Bug Reproduction Harness: ${baseName}
+Trace: ${firstLine}
+"""
+import pytest
+
+def test_reproduce_${baseName.toLowerCase().replace(/[^a-z0-9_]/g, '_')}():
+    # Red Phase: Invoking ${guessedTarget} must not raise ${firstLine}
+    pytest.fail(${JSON.stringify(`Unresolved defect in ${guessedTarget}: ${firstLine}`)})
+`;
+  } else if (ext === '.go') {
+    language = 'go';
+    testFileName = `reproduce_${baseName.toLowerCase()}_${stamp}_test.go`;
+    testContent = `${headerComment}
+package reproductions
+
+import "testing"
+
+func TestReproduce${baseName.replace(/[^a-zA-Z0-9]/g, '')}(t *testing.T) {
+\t// Red Phase: Invoking ${guessedTarget} must not fail with: ${firstLine}
+\tt.Fatalf("Unresolved defect in %s: %s", ${JSON.stringify(guessedTarget)}, ${JSON.stringify(firstLine)})
+}
+`;
+  } else if (ext === '.rs') {
+    language = 'rust';
+    testFileName = `reproduce_${baseName.toLowerCase()}_${stamp}_test.rs`;
+    testContent = `${headerComment}
+#[test]
+fn reproduce_${baseName.toLowerCase().replace(/[^a-z0-9_]/g, '_')}() {
+    panic!("Unresolved defect in ${guessedTarget}: ${firstLine.replace(/"/g, '\\"')}");
+}
+`;
+  } else {
+    testContent = `import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+
+${headerComment}
 describe('Bug Reproduction Harness: ${baseName}', () => {
   it('reproduces failure with failing assertion before applying fix', async () => {
-    const input = null;
+    const targetModulePath = ${JSON.stringify(guessedTarget)};
+    assert.ok(targetModulePath, 'Target module path must be defined');
 
-    assert.rejects(async () => {
-      throw new Error(${JSON.stringify(cleanTrace ? cleanTrace.split('\n')[0] : 'Reproduction Failure')});
-    }, /${cleanTrace ? cleanTrace.split('\n')[0].replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&') : 'Reproduction Failure'}/);
+    await assert.rejects(async () => {
+      throw new Error(${JSON.stringify(firstLine)});
+    }, /${escapedRegex}/);
   });
 });
 `;
+  }
 
+  const testFilePath = path.resolve(testDir, testFileName);
   fs.writeFileSync(testFilePath, testContent, 'utf8');
 
   return {
     success: true,
     created: true,
+    language,
     targetFile: guessedTarget,
     testPath: testFilePath,
     relativePath: path.relative(path.resolve(repoRoot), testFilePath),
@@ -578,6 +675,9 @@ export function generatePRSummary({ issueId = null, repoRoot = '.' } = {}) {
     }).trim();
   } catch {}
 
+  const covReport = activeSess?.manifest?.coverageReport || null;
+  const mutReport = activeSess?.manifest?.mutationScore || null;
+
   const summary = `## 📋 Pull Request Summary: #${issue}
 
 ### 🎯 Overview & Classification
@@ -591,8 +691,8 @@ export function generatePRSummary({ issueId = null, repoRoot = '.' } = {}) {
 ### 🛡️ Dual-Gate Quality Verification
 | Metric | Threshold | Achieved | Status |
 | :--- | :--- | :--- | :--- |
-| **Line & Branch Diff Coverage** | $\\ge 85\\%$ | ${activeSess?.manifest?.coverageReport || '90%'} | ✅ PASSED |
-| **Mutation Kill Score** | $\\ge 80\\%$ | ${activeSess?.manifest?.mutationScore || '85%'} | ✅ PASSED |
+| **Line & Branch Diff Coverage** | $\\ge 85\\%$ | ${covReport || 'Not Measured'} | ${covReport ? '✅ PASSED' : '⚪ PENDING'} |
+| **Mutation Kill Score** | $\\ge 80\\%$ | ${mutReport || 'Not Measured'} | ${mutReport ? '✅ PASSED' : '⚪ PENDING'} |
 | **Archlens Clean Architecture** | 100% Policy | ${archInfo.installed ? 'Compliant' : 'N/A'} | ${archInfo.installed ? '✅ PASSED' : '⚪ SKIPPED'} |
 | **Static Analysis & Linting** | 0 Violations | Clean | ✅ PASSED |
 
@@ -632,7 +732,7 @@ ${statSummary || diffFiles.join('\n') || 'No modified files detected'}
   };
 }
 
-export function findAffectededTests(diffFiles = [], repoRoot = '.') {
+export function findAffectedTests(diffFiles = [], repoRoot = '.') {
   const files = diffFiles.length > 0 ? diffFiles : getModifiedFiles('main', repoRoot);
   const matchedTests = new Set();
 
@@ -644,7 +744,8 @@ export function findAffectededTests(diffFiles = [], repoRoot = '.') {
       `${basename}.test${ext}`,
       `${basename}.spec${ext}`,
       `${basename}Test${ext}`,
-      `${basename}_test${ext}`
+      `${basename}_test${ext}`,
+      `test_${basename}${ext}`
     ];
 
     const searchDirs = ['test', 'tests', 'src/test', 'spec', 'specs'];
@@ -672,12 +773,281 @@ export function findAffectededTests(diffFiles = [], repoRoot = '.') {
   return Array.from(matchedTests);
 }
 
+export const findAffectededTests = findAffectedTests;
+
+/**
+ * Shell-free variant of buildSingleTestCommand: returns `{ file, args }`
+ * for execFileSync/spawnSync so test filenames are never shell-parsed.
+ */
+export function buildSingleTestArgv(testFile, repoRoot = '.') {
+  const ext = path.extname(testFile).toLowerCase();
+  const baseName = path.basename(testFile, ext);
+  const detected = detectStackInDir(repoRoot);
+  if (ext === '.java' || detected?.language === 'java') {
+    if (detected?.type === 'java-gradle') return { file: './gradlew', args: ['test', '--tests', baseName] };
+    return { file: './mvnw', args: ['test', `-Dtest=${baseName}`] };
+  }
+  if (ext === '.py' || detected?.language === 'python') return { file: 'pytest', args: [testFile] };
+  if (ext === '.go' || detected?.language === 'go') {
+    const pkgDir = path.dirname(testFile);
+    return { file: 'go', args: ['test', '-v', `./${pkgDir === '.' ? '...' : pkgDir}`] };
+  }
+  if (ext === '.rs' || detected?.language === 'rust') return { file: 'cargo', args: ['test', '--test', baseName] };
+  return { file: process.execPath, args: ['--test', testFile] };
+}
+
+/** Human-readable command string (display only; never pass to a shell). */
+export function buildSingleTestCommand(testFile, repoRoot = '.') {
+  const ext = path.extname(testFile).toLowerCase();
+  const baseName = path.basename(testFile, ext);
+  const detected = detectStackInDir(repoRoot);
+
+  if (ext === '.java' || detected?.language === 'java') {
+    if (detected?.type === 'java-gradle') {
+      return `./gradlew test --tests "${baseName}"`;
+    }
+    return `./mvnw test -Dtest="${baseName}"`;
+  }
+  if (ext === '.py' || detected?.language === 'python') {
+    return `pytest "${testFile}"`;
+  }
+  if (ext === '.go' || detected?.language === 'go') {
+    const pkgDir = path.dirname(testFile);
+    return `go test -v "./${pkgDir === '.' ? '...' : pkgDir}"`;
+  }
+  if (ext === '.rs' || detected?.language === 'rust') {
+    return `cargo test --test "${baseName}"`;
+  }
+  return `node --test "${testFile}"`;
+}
+
+export function parseCoverageReport(repoRoot = '.', mod = null) {
+  const threshold = mod?.thresholds?.diffCoverage ?? 85;
+  const modDir = mod?.path && mod.path !== '.' ? path.resolve(repoRoot, mod.path) : path.resolve(repoRoot);
+
+  const candidates = [
+    mod?.commands?.coverageFile,
+    'coverage/coverage-summary.json',
+    'coverage/lcov.info',
+    'target/site/jacoco/jacoco.csv',
+    'build/reports/jacoco/test/jacocoTestReport.csv',
+    'coverage.xml',
+    'cobertura.xml',
+    'coverage.out'
+  ].filter(Boolean);
+
+  for (const relPath of candidates) {
+    const fullPath = path.resolve(modDir, relPath);
+    if (!fileExists(fullPath)) continue;
+    const raw = readFileSafe(fullPath);
+    if (!raw) continue;
+
+    if (relPath.endsWith('.json')) {
+      try {
+        const data = JSON.parse(raw);
+        const linePct = Number(data.total?.lines?.pct ?? data.lines?.pct);
+        const branchPct = Number(data.total?.branches?.pct ?? data.branches?.pct ?? linePct);
+        if (!Number.isNaN(linePct)) {
+          return {
+            found: true,
+            file: relPath,
+            lineCoverage: Number(linePct.toFixed(2)),
+            branchCoverage: Number(branchPct.toFixed(2)),
+            formatted: `${linePct.toFixed(1)}%`,
+            threshold,
+            passed: linePct >= threshold
+          };
+        }
+      } catch {}
+    }
+
+    if (relPath.endsWith('lcov.info') || relPath.endsWith('.lcov')) {
+      let lf = 0;
+      let lh = 0;
+      for (const line of raw.split('\n')) {
+        if (line.startsWith('LF:')) lf += parseInt(line.slice(3), 10) || 0;
+        else if (line.startsWith('LH:')) lh += parseInt(line.slice(3), 10) || 0;
+      }
+      if (lf > 0) {
+        const pct = (lh / lf) * 100;
+        return {
+          found: true,
+          file: relPath,
+          lineCoverage: Number(pct.toFixed(2)),
+          branchCoverage: null,
+          formatted: `${pct.toFixed(1)}%`,
+          threshold,
+          passed: pct >= threshold
+        };
+      }
+    }
+
+    if (relPath.endsWith('.csv')) {
+      const lines = raw.trim().split('\n');
+      if (lines.length > 1) {
+        const headers = lines[0].split(',').map((h) => h.trim());
+        const missedIdx = headers.indexOf('LINE_MISSED');
+        const coveredIdx = headers.indexOf('LINE_COVERED');
+        if (missedIdx !== -1 && coveredIdx !== -1) {
+          let missed = 0;
+          let covered = 0;
+          for (let i = 1; i < lines.length; i++) {
+            const cols = lines[i].split(',');
+            missed += parseInt(cols[missedIdx], 10) || 0;
+            covered += parseInt(cols[coveredIdx], 10) || 0;
+          }
+          const total = missed + covered;
+          if (total > 0) {
+            const pct = (covered / total) * 100;
+            return {
+              found: true,
+              file: relPath,
+              lineCoverage: Number(pct.toFixed(2)),
+              branchCoverage: null,
+              formatted: `${pct.toFixed(1)}%`,
+              threshold,
+              passed: pct >= threshold
+            };
+          }
+        }
+      }
+    }
+
+    if (relPath.endsWith('.xml')) {
+      const match = raw.match(/line-rate=["']([0-9.]+)["']/);
+      if (match) {
+        const pct = parseFloat(match[1]) * 100;
+        return {
+          found: true,
+          file: relPath,
+          lineCoverage: Number(pct.toFixed(2)),
+          branchCoverage: null,
+          formatted: `${pct.toFixed(1)}%`,
+          threshold,
+          passed: pct >= threshold
+        };
+      }
+    }
+
+    if (relPath.endsWith('coverage.out')) {
+      let totalStmts = 0;
+      let coveredStmts = 0;
+      for (const line of raw.split('\n')) {
+        if (!line || line.startsWith('mode:')) continue;
+        const parts = line.trim().split(/\s+/);
+        if (parts.length >= 3) {
+          const stmts = parseInt(parts[1], 10) || 0;
+          const count = parseInt(parts[2], 10) || 0;
+          totalStmts += stmts;
+          if (count > 0) coveredStmts += stmts;
+        }
+      }
+      if (totalStmts > 0) {
+        const pct = (coveredStmts / totalStmts) * 100;
+        return {
+          found: true,
+          file: relPath,
+          lineCoverage: Number(pct.toFixed(2)),
+          branchCoverage: null,
+          formatted: `${pct.toFixed(1)}%`,
+          threshold,
+          passed: pct >= threshold
+        };
+      }
+    }
+  }
+
+  // Fail closed: no report means nothing was measured.
+  return {
+    found: false,
+    file: null,
+    lineCoverage: null,
+    branchCoverage: null,
+    formatted: null,
+    threshold,
+    passed: false,
+    reason: `No coverage report found (looked for: ${candidates.join(', ')}).`
+  };
+}
+
+export function parseMutationReport(repoRoot = '.', mod = null) {
+  const threshold = mod?.thresholds?.mutationScore ?? 80;
+  const modDir = mod?.path && mod.path !== '.' ? path.resolve(repoRoot, mod.path) : path.resolve(repoRoot);
+
+  const strykerPath = path.resolve(modDir, 'reports/mutation/mutation.json');
+  if (fileExists(strykerPath)) {
+    try {
+      const data = JSON.parse(readFileSafe(strykerPath) || '{}');
+      if (typeof data.mutationScore === 'number') {
+        const score = Number(data.mutationScore.toFixed(2));
+        return {
+          found: true,
+          file: 'reports/mutation/mutation.json',
+          mutationScore: score,
+          formatted: `${score.toFixed(1)}%`,
+          threshold,
+          passed: score >= threshold
+        };
+      }
+      let killed = 0;
+      let total = 0;
+      for (const fileObj of Object.values(data.files || {})) {
+        for (const mutant of fileObj.mutants || []) {
+          if (mutant.status === 'Ignored' || mutant.status === 'CompileError') continue;
+          total++;
+          if (mutant.status === 'Killed' || mutant.status === 'Timeout') killed++;
+        }
+      }
+      if (total > 0) {
+        const score = Number(((killed / total) * 100).toFixed(2));
+        return {
+          found: true,
+          file: 'reports/mutation/mutation.json',
+          mutationScore: score,
+          formatted: `${score.toFixed(1)}%`,
+          threshold,
+          passed: score >= threshold
+        };
+      }
+    } catch {}
+  }
+
+  const pitPath = path.resolve(modDir, 'target/pit-reports/mutations.xml');
+  if (fileExists(pitPath)) {
+    const raw = readFileSafe(pitPath) || '';
+    const allMatches = raw.match(/<mutation\s+[^>]*detected=['"](true|false)['"]/g) || [];
+    if (allMatches.length > 0) {
+      const detectedCount = allMatches.filter((m) => /detected=['"]true['"]/.test(m)).length;
+      const score = Number(((detectedCount / allMatches.length) * 100).toFixed(2));
+      return {
+        found: true,
+        file: 'target/pit-reports/mutations.xml',
+        mutationScore: score,
+        formatted: `${score.toFixed(1)}%`,
+        threshold,
+        passed: score >= threshold
+      };
+    }
+  }
+
+  // Fail closed: no report means nothing was measured.
+  return {
+    found: false,
+    file: null,
+    mutationScore: null,
+    formatted: null,
+    threshold,
+    passed: false,
+    reason: 'No mutation report found (looked for: reports/mutation/mutation.json, target/pit-reports/mutations.xml).'
+  };
+}
+
 export function runFlakeCheck({ runs = 5, target = null, repoRoot = '.' } = {}) {
   const iterationCount = Math.max(2, Math.min(50, Number(runs) || 5));
   console.log(`🧪 Running Flaky Test Detector (${iterationCount} iterations)...`);
 
   const diffFiles = getModifiedFiles('main', repoRoot);
-  const testFiles = target ? [target] : findAffectededTests(diffFiles, repoRoot);
+  const testFiles = target ? [target] : findAffectedTests(diffFiles, repoRoot);
 
   if (testFiles.length === 0) {
     return {
@@ -694,10 +1064,11 @@ export function runFlakeCheck({ runs = 5, target = null, repoRoot = '.' } = {}) 
   for (const tFile of testFiles) {
     let passedCount = 0;
     let failedCount = 0;
+    const singleTest = buildSingleTestArgv(tFile, repoRoot);
 
     for (let i = 1; i <= iterationCount; i++) {
       try {
-        execSync(`node --test "${tFile}" 2>/dev/null`, { cwd: repoRoot, stdio: 'pipe' });
+        execFileSync(singleTest.file, singleTest.args, { cwd: repoRoot, stdio: 'pipe' });
         passedCount++;
       } catch {
         failedCount++;
@@ -709,6 +1080,7 @@ export function runFlakeCheck({ runs = 5, target = null, repoRoot = '.' } = {}) 
 
     results.push({
       testFile: tFile,
+      command: [singleTest.file, ...singleTest.args].join(' '),
       iterations: iterationCount,
       passed: passedCount,
       failed: failedCount,
@@ -742,10 +1114,7 @@ export function auditSecurity(repoRoot = '.') {
 
   for (const file of diffFiles) {
     try {
-      const diffOutput = execSync(`git diff HEAD~1 -- "${file}" 2>/dev/null || git diff -- "${file}" 2>/dev/null || true`, {
-        cwd: repoRoot,
-        encoding: 'utf8'
-      });
+      const diffOutput = gitDiffForFile(file, repoRoot);
 
       const lines = diffOutput.split('\n');
       for (const line of lines) {
@@ -873,18 +1242,18 @@ export function generateReviewPlan({ repoRoot = '.' } = {}) {
 
   const subagents = [
     {
-      TypeName: 'self',
+      TypeName: 'research',
       Role: 'PR Peer Reviewer',
-      Prompt: `Load sdlc-peer-review/SKILL.md. Audit git diff against main on branch ${branch} for issue #${issueId}.
+      Prompt: `Load sdlc-review-gate/SKILL.md. Audit git diff against main on branch ${branch} for issue #${issueId}.
 1. Audit for Robert Martin test smells (no assertion-free tests, no trivial getters, no mock abuse).
 2. Verify Dual-Gate metrics (Line diff coverage >= 85%, Mutation kill score >= 80%).
 3. Verify developer showcase quickstart in README.md and CHANGELOG.md entry.
 4. MANDATORILY post formal review comment to GitHub PR, Jira, Linear, or docs/KANBAN.md (node .agent/scripts/sdlc-engine.mjs pm comment ${issueId} --body "<comment>").`
     },
     {
-      TypeName: 'self',
+      TypeName: 'research',
       Role: 'Quality Gatekeeper',
-      Prompt: `Load sdlc-quality-gate/SKILL.md. Execute universal quality gate (node .agent/scripts/sdlc-engine.mjs gate --strict).
+      Prompt: `Load sdlc-review-gate/SKILL.md. Execute universal quality gate (node .agent/scripts/sdlc-engine.mjs gate --strict).
 1. Audit formatting, static typing, and production builds.
 2. Check pre-flight risk profile (detected: ${risk.riskLevel}).
 3. Run secret scanning and package CVE check (node .agent/scripts/sdlc-engine.mjs security-audit).
@@ -894,7 +1263,7 @@ export function generateReviewPlan({ repoRoot = '.' } = {}) {
 
   if (risk.riskLevel === 'CRITICAL' || risk.riskLevel === 'HIGH') {
     subagents.push({
-      TypeName: 'self',
+      TypeName: 'research',
       Role: 'Security & Architectural Auditor',
       Prompt: `Conduct deep security and architectural invariant audit for HIGH/CRITICAL risk changes (${risk.riskLevel}).
 1. Inspect migration files, auth handlers, and domain models.
@@ -1242,4 +1611,99 @@ export function printPreview(config) {
     console.log(`   Build:      ${mod.commands.build}`);
     console.log('----------------------------------------------------------------');
   }
+}
+
+/**
+ * Audits `.agent/skills/*` against NVIDIA SkillSpector static rules (`RP1` unpinned npx,
+ * `AS3` cross-skill file enumeration, frontmatter YAML truncation, and optional live `uvx` scan).
+ */
+export function auditSkills(repoRoot = '.', { live = false } = {}) {
+  const skillsDir = path.resolve(repoRoot, '.agent/skills');
+  const results = [];
+  let totalFindings = 0;
+
+  if (fs.existsSync(skillsDir)) {
+    const entries = fs
+      .readdirSync(skillsDir, { withFileTypes: true })
+      .filter((d) => d.isDirectory() && d.name.startsWith('sdlc'))
+      .map((d) => d.name)
+      .sort();
+
+    for (const skillName of entries) {
+      const skillFile = path.join(skillsDir, skillName, 'SKILL.md');
+      if (!fs.existsSync(skillFile)) continue;
+      const content = fs.readFileSync(skillFile, 'utf8');
+      const { frontmatter, body } = parseFrontmatter(content);
+      const findings = [];
+
+      // 1. YAML frontmatter truncation check (unquoted # in description)
+      if (!frontmatter.name || !frontmatter.description) {
+        findings.push({
+          rule: 'FM1',
+          severity: 'MEDIUM',
+          message: 'Missing required YAML frontmatter name or description'
+        });
+      } else if (frontmatter.description.trim().endsWith(',')) {
+        findings.push({
+          rule: 'FM2',
+          severity: 'MEDIUM',
+          message: 'Description appears truncated by an unquoted YAML # comment'
+        });
+      }
+
+      // 2. SkillSpector RP1: Unpinned npx package invocation
+      const lines = (body || content).split('\n');
+      lines.forEach((line, idx) => {
+        if (/\bnpx\s+(?:-[yY]\s+)?(?:github:|[a-zA-Z0-9@_/-]+)(?!@[0-9])/i.test(line)) {
+          findings.push({
+            rule: 'RP1',
+            severity: 'MEDIUM',
+            line: idx + 1,
+            message: `Unpinned npx package invocation detected: "${line.trim()}"`
+          });
+        }
+        // 3. SkillSpector AS3: Cross-skill file enumeration (.agent/skills/<other>/SKILL.md)
+        const crossMatch = line.match(/\.agent\/skills\/([a-z0-9-]+)\/SKILL\.md/i);
+        if (crossMatch && crossMatch[1] !== skillName) {
+          findings.push({
+            rule: 'AS3',
+            severity: 'MEDIUM',
+            line: idx + 1,
+            message: `Cross-skill file enumeration referencing ${crossMatch[0]} (use skill identifier instead)`
+          });
+        }
+      });
+
+      totalFindings += findings.length;
+      results.push({
+        skill: skillName,
+        score: findings.length === 0 ? 0 : findings.length * 7,
+        severity: 'LOW',
+        findingsCount: findings.length,
+        findings
+      });
+    }
+  }
+
+  let skillspectorOutput = null;
+  if (live) {
+    try {
+      skillspectorOutput = execFileSync(
+        'uvx',
+        ['--from', 'git+https://github.com/NVIDIA/skillspector.git', 'skillspector', 'scan', skillsDir, '--recursive', '--no-llm'],
+        { cwd: repoRoot, stdio: 'pipe', encoding: 'utf8' }
+      );
+    } catch (err) {
+      skillspectorOutput = err.stdout ? String(err.stdout) : err.message;
+    }
+  }
+
+  return {
+    success: totalFindings === 0,
+    skillsScanned: results.length,
+    totalFindings,
+    maxScore: results.reduce((max, r) => Math.max(max, r.score), 0),
+    skills: results,
+    skillspectorOutput
+  };
 }

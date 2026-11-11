@@ -1,7 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { execSync } from 'node:child_process';
-import { fileExists, readFileSafe, getModifiedFiles } from './core.mjs';
+import { fileExists, readFileSafe, getModifiedFiles, gitOutput } from './core.mjs';
 import { appendDecisionEvent, syncDecisionMapMarkdown } from './decision-graph.mjs';
 import { appendAuditRecord } from './audit-chain.mjs';
 
@@ -232,6 +231,188 @@ export function decideADR({
   };
 }
 
+function extractDecisionSummary(adr) {
+  const raw = String(adr?.content || '');
+  const sectionMatch = raw.match(/##\s*(?:2\.\s*)?Decision\s*\n+([\s\S]*?)(?=\n##\s|$)/i);
+  if (sectionMatch && sectionMatch[1]) {
+    const firstLine = sectionMatch[1]
+      .split('\n')
+      .map((l) => l.trim())
+      .find(Boolean);
+    if (firstLine) {
+      return firstLine.replace(/\|/g, '/');
+    }
+  }
+  return String(adr?.title || '').replace(/\|/g, '/');
+}
+
+/**
+ * First-Class ADR Lifecycle Compaction (`adr compact` & Release Compaction):
+ * Consolidates accepted in-flight `docs/adr/ADR-*.md` files into `docs/SRS.md`
+ * (`## Compacted Architectural Decisions`), resets the ADR index in `PRODUCT.md`,
+ * deletes the individual ADR files, prunes `.agent/decision-graph.jsonl`, and
+ * records an immutable `ADR_BATCH_COMPACTED` event in `docs/AUDIT_CHAIN.jsonl`.
+ */
+export function compactADRs({ releaseVersion = 'baseline', dryRun = false, repoRoot = '.' } = {}) {
+  const adrs = listADRs(repoRoot);
+  if (adrs.length === 0) {
+    return {
+      success: true,
+      dryRun: Boolean(dryRun),
+      releaseVersion,
+      compactedCount: 0,
+      compactedAdrIds: [],
+      srsPath: 'docs/SRS.md',
+      message: 'No ADRs present in docs/adr/ to compact.'
+    };
+  }
+
+  const pending = adrs.filter((a) => a.status === 'pending_approval');
+  if (pending.length > 0) {
+    throw new Error(
+      `Cannot compact ADRs while pending_approval exists: ${pending.map((a) => a.id).join(', ')}. Approve or reject pending ADRs first.`
+    );
+  }
+
+  const compactedAdrIds = adrs.map((a) => a.id);
+  if (dryRun) {
+    return {
+      success: true,
+      dryRun: true,
+      releaseVersion,
+      compactedCount: adrs.length,
+      compactedAdrIds,
+      srsPath: 'docs/SRS.md'
+    };
+  }
+
+  // 1. Append or update ## Compacted Architectural Decisions table in docs/SRS.md
+  const srsPath = path.resolve(repoRoot, 'docs/SRS.md');
+  if (fileExists(srsPath)) {
+    let srsContent = readFileSafe(srsPath) || '';
+    const rows = adrs.map((a) => {
+      const summary = extractDecisionSummary(a);
+      const ticketCell = a.ticketId ? `#${a.ticketId}` : 'N/A';
+      const supCell = (a.supersedes || []).join(', ') || 'None';
+      return `| \`${a.id}\` | ${a.title.replace(/\|/g, '/')} | \`${a.scope}\` | ${ticketCell} | ${supCell} | \`${releaseVersion}\` | ${summary} |`;
+    });
+
+    if (srsContent.includes('## Compacted Architectural Decisions')) {
+      for (const row of rows) {
+        const idMatch = row.match(/^\|\s*`(ADR-\d+)`/);
+        const existingRowRegex = idMatch ? new RegExp(`^\\|\\s*\`?${idMatch[1]}\`?\\s*\\|.*$`, 'm') : null;
+        if (existingRowRegex && existingRowRegex.test(srsContent)) {
+          srsContent = srsContent.replace(existingRowRegex, row);
+        } else {
+          srsContent = `${srsContent.trimEnd()}\n${row}\n`;
+        }
+      }
+    } else {
+      const section = [
+        '',
+        '## Compacted Architectural Decisions',
+        '',
+        '| ID | Title | Scope | Ticket | Supersedes | Compacted In Release | Decision |',
+        '| :--- | :--- | :--- | :--- | :--- | :--- | :--- |',
+        ...rows,
+        ''
+      ].join('\n');
+      srsContent = `${srsContent.trimEnd()}\n${section}`;
+    }
+    fs.writeFileSync(srsPath, srsContent, 'utf8');
+  }
+
+  // 2. Reset <!-- ADR_INDEX_START -->...<!-- ADR_INDEX_END --> in PRODUCT.md
+  const productPath = path.resolve(repoRoot, 'PRODUCT.md');
+  if (fileExists(productPath)) {
+    let productContent = readFileSafe(productPath) || '';
+    const resetBlock = [
+      '<!-- ADR_INDEX_START -->',
+      '| ADR ID | Title | Scope | Status | Ticket | Supersedes |',
+      '| :--- | :--- | :--- | :--- | :--- | :--- |',
+      `| *None* | *Compacted into SRS.md (${releaseVersion})* | - | - | - | - |`,
+      '<!-- ADR_INDEX_END -->'
+    ].join('\n');
+    if (/<!-- ADR_INDEX_START -->[\s\S]*?<!-- ADR_INDEX_END -->/.test(productContent)) {
+      productContent = productContent.replace(/<!-- ADR_INDEX_START -->[\s\S]*?<!-- ADR_INDEX_END -->/, resetBlock);
+      fs.writeFileSync(productPath, productContent, 'utf8');
+    }
+  }
+
+  // 3. Delete compacted docs/adr/ADR-*.md files from disk (preserving docs/adr/.gitkeep)
+  const adrDir = path.resolve(repoRoot, 'docs/adr');
+  for (const adr of adrs) {
+    try {
+      if (fileExists(adr.fullPath)) {
+        fs.unlinkSync(adr.fullPath);
+      }
+    } catch {}
+  }
+  if (fileExists(adrDir)) {
+    try {
+      fs.writeFileSync(path.join(adrDir, '.gitkeep'), '', 'utf8');
+    } catch {}
+  }
+
+  // 4. Prune compacted ADR_CREATED and ADR_DECIDED events from .agent/decision-graph.jsonl
+  const graphPath = path.resolve(repoRoot, '.agent/decision-graph.jsonl');
+  if (fileExists(graphPath)) {
+    const compactedSet = new Set(compactedAdrIds);
+    const lines = (readFileSafe(graphPath) || '').split('\n').filter(Boolean);
+    const kept = lines.filter((line) => {
+      try {
+        const evt = JSON.parse(line);
+        if ((evt.type === 'ADR_CREATED' || evt.type === 'ADR_DECIDED') && compactedSet.has(evt.id)) {
+          return false;
+        }
+      } catch {}
+      return true;
+    });
+    fs.writeFileSync(graphPath, kept.length > 0 ? kept.join('\n') + '\n' : '', 'utf8');
+  }
+
+  // 5. Append single ADR_BATCH_COMPACTED event to decision graph & audit chain
+  const supLinks = Array.from(new Set(adrs.flatMap((a) => a.supersedes || [])));
+  appendDecisionEvent({
+    type: 'ADR_BATCH_COMPACTED',
+    id: `ADR-COMPACT-${String(releaseVersion).replace(/[^A-Za-z0-9_.-]/g, '-')}`,
+    label: `Compacted ${adrs.length} ADR(s) into SRS.md (${releaseVersion})`,
+    category: 'ARCH',
+    status: 'compacted',
+    ticketId: null,
+    linksTo: supLinks,
+    metadata: {
+      releaseVersion,
+      compactedAdrIds,
+      compactedCount: adrs.length,
+      srsPath: 'docs/SRS.md'
+    },
+    repoRoot
+  });
+
+  appendAuditRecord({
+    event: 'ADR_BATCH_COMPACTED',
+    metadata: {
+      releaseVersion,
+      compactedAdrIds,
+      compactedCount: adrs.length,
+      srsPath: 'docs/SRS.md'
+    },
+    repoRoot
+  });
+
+  syncDecisionMapMarkdown(repoRoot);
+
+  return {
+    success: true,
+    dryRun: false,
+    releaseVersion,
+    compactedCount: adrs.length,
+    compactedAdrIds,
+    srsPath: 'docs/SRS.md'
+  };
+}
+
 /**
  * Dual-Enforced Spec-Drift Sentinel:
  * Inspects git diff for structural changes (manifest dependencies, API contracts,
@@ -269,6 +450,8 @@ export function checkSpecDrift({
       triggers.push({ file, category: 'DB_SCHEMA_MIGRATION', reason: 'Database DDL migration introduced or altered' });
     } else if (lower.endsWith('.mmd') || lower.includes('docs/architecture/') || lower.includes('.archlens/policy.json')) {
       triggers.push({ file, category: 'C4_ARCHITECTURE_BOUNDARY_SHIFT', reason: 'Architecture diagram or concentric layer policy modified' });
+    } else if (lower === 'docs/prd.md' || lower.endsWith('/docs/prd.md') || lower === 'docs/srs.md' || lower.endsWith('/docs/srs.md')) {
+      triggers.push({ file, category: 'PRD_SRS_CONTRACT_MUTATION', reason: 'Macro PRD or IEEE 29148 SRS specification modified' });
     }
   }
 
@@ -291,16 +474,33 @@ export function checkSpecDrift({
     return isAccepted && (matchesTicket || diffHasAdr);
   });
 
-  const passed = matchingAdrs.length > 0;
+  // Also allow ADR Compaction diffs (where docs/adr/ADR-*.md files were compacted into docs/SRS.md and recorded in AUDIT_CHAIN.jsonl)
+  let isAdrCompaction = false;
+  if (matchingAdrs.length === 0) {
+    const auditChainPath = path.resolve(repoRoot, 'docs/AUDIT_CHAIN.jsonl');
+    const auditRaw = fileExists(auditChainPath) ? readFileSafe(auditChainPath) || '' : '';
+    const hasCompactedAuditRecord = auditRaw.includes('"event":"ADR_BATCH_COMPACTED"');
+    const diffDeletesAdr = files.some(
+      (f) => f.includes('docs/adr/ADR-') && f.endsWith('.md') && !fileExists(path.resolve(repoRoot, f))
+    );
+    const srsPath = path.resolve(repoRoot, 'docs/SRS.md');
+    const srsHasCompactedTable = fileExists(srsPath) && (readFileSafe(srsPath) || '').includes('## Compacted Architectural Decisions');
+    if (hasCompactedAuditRecord && (diffDeletesAdr || srsHasCompactedTable)) {
+      isAdrCompaction = true;
+    }
+  }
+
+  const passed = matchingAdrs.length > 0 || isAdrCompaction;
+  const linkedIds = matchingAdrs.length > 0 ? matchingAdrs.map((a) => a.id) : isAdrCompaction ? ['ADR_BATCH_COMPACTED'] : [];
 
   return {
     passed,
     hasUndeclaredDrift: !passed,
     triggers,
-    linkedADRs: matchingAdrs.map((a) => a.id),
+    linkedADRs: linkedIds,
     remediationCommand: `node .agent/scripts/sdlc-engine.mjs adr create --title "<decision>" --scope <technical|product> --ticket ${ticketId || '<id>'} --supersedes CAP-01`,
     message: passed
-      ? `Spec drift verified and governed by ${matchingAdrs.map((a) => a.id).join(', ')}.`
+      ? `Spec drift verified and governed by ${linkedIds.join(', ')}.`
       : `UNDECLARED_SPEC_DRIFT: ${triggers.length} structural mutation(s) detected without a linked accepted ADR in docs/adr/.`
   };
 }
@@ -333,13 +533,10 @@ export function auditContractDrift({ diffFiles = [], baseBranch = 'main', repoRo
     const fullPath = path.resolve(repoRoot, relPath);
     let oldContent = '';
     try {
-      oldContent = execSync(
-        `git show origin/${baseBranch}:${relPath} 2>/dev/null || git show HEAD~1:${relPath} 2>/dev/null || true`,
-        {
-          cwd: repoRoot,
-          encoding: 'utf8',
-          stdio: 'pipe'
-        }
+      oldContent = (
+        gitOutput(['show', `origin/${baseBranch}:${relPath}`], repoRoot) ??
+        gitOutput(['show', `HEAD~1:${relPath}`], repoRoot) ??
+        ''
       ).trim();
     } catch {}
 

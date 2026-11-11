@@ -22,6 +22,7 @@ With **Quarkus Quinoa**, the SvelteKit 5 SPA (`@sveltejs/adapter-static`) is com
 ### 2.1 High-Level Component Architecture
 
 ```mermaid
+%%{init: {'theme': 'neutral'}}%%
 flowchart TB
     subgraph Browser["Browser — Nomad Concierge Studio (http://localhost:8080)"]
         UI_Header["Header: WS/SSE Toggle, Live Health Pill + Popover,<br/>Ollama Model Selector & Memory Controls"]
@@ -82,6 +83,7 @@ flowchart TB
 Every concierge turn streams through `@ApplicationScoped @RegisterAiService NomadConciergeAiService` + `@McpToolBox("nomad")` and `AgUiQuarkusLangChain4jBridge`, enforces **Zero Assumed Defaults** (conversational slot elicitation when destination, duration, budget/currency, or travel focus is missing), and emits canonical AG-UI events carrying Tri-Protocol `rawEvent` metadata with **strict upstream error surfacing** (zero silent fake fallbacks):
 
 ```mermaid
+%%{init: {'theme': 'neutral'}}%%
 sequenceDiagram
     autonumber
     actor Traveler as Traveler (:8080 UI)
@@ -142,7 +144,10 @@ examples/quarkus-svelte-skeleton/
 │       ├── TripDossierStore.java                 # Synchronizes MCP resources & tool executions into RFC 6902 STATE_DELTA patches
 │       ├── AgentWebSocketEndpoint.java           # @WebSocket(path = "/api/agent/ws") delegating to reusable AgUiWebSocketHandler
 │       ├── AgentResource.java                    # REST + SSE endpoints (/api/agent/run, /chat, /catalog, /health, /params, /reset)
-│       └── A2aGatewayClient.java                 # Official A2A 1.5.0.Final client (AgUiA2aClient + A2ACardResolver + VertxA2AHttpClient)
+│       ├── A2aGatewayClient.java                 # Official A2A 1.5.0.Final client (AgUiA2aClient + A2ACardResolver + VertxA2AHttpClient)
+│       ├── NomadChatMemoryStore.java             # Sliding 16-message thread memory store
+│       ├── TravelSafetyInputGuardrail.java       # OWASP-LLM01 prompt-injection input guardrail
+│       └── TravelHonestyOutputGuardrail.java     # Grounded completion output guardrail
 └── frontend/                        # SvelteKit 5 (Runes) SPA packaged via Quarkus Quinoa
     ├── svelte.config.js             # @sveltejs/adapter-static (fallback: 'index.html' for Quinoa SPA routing)
     ├── src/lib/
@@ -150,13 +155,19 @@ examples/quarkus-svelte-skeleton/
     │   ├── markdown.js              # Sanitized Markdown-to-HTML renderer with tabular-nums cost tables
     │   └── components/
     │       ├── AgentChatContainer.svelte  # Top-level 3-pane studio, Top-Bar Health Pill + Popover, WebSocket lifecycle
-    │       ├── TripDossierPanel.svelte    # Left pane: Zero-default Trip Dossier, FX toggle, -/+ nights stepper, Profile
+    │       ├── TripDossierPanel.svelte    # Left pane: Zero-default Trip Dossier, Complete Trip Dossier Report, FX toggle, -/+ nights stepper
     │       ├── MessageHistory.svelte      # Center pane: Scrollable editorial conversation stream
     │       ├── InputBar.svelte            # Prompt composer with /, ⌘K, and MCP @CompletePrompt suggestions
     │       ├── StreamRenderer.svelte      # Streaming turn dispatcher across AG-UI message lifecycle
     │       ├── ProtocolInspector.svelte   # Right pane: Live Wire Telemetry with red ERROR badges on failed calls
-    │       └── agui/                      # Reusable Svelte 5 AG-UI Component Kit
-    │           ├── AssistantTurn.svelte           # Container-query (@container > 820px) 2-column editorial split
+    │       └── agui/                      # Reusable Svelte 5 AG-UI Component & ACTIVITY_SNAPSHOT Surface Kit (ADR-008)
+    │           ├── AgUiActivityRenderer.svelte    # Polymorphic ACTIVITY_SNAPSHOT dispatcher over AGUI_ACTIVITY_TYPES
+    │           ├── AgUiWeatherCard.svelte         # Open-Meteo live conditions & forecast activity card (agui:weather)
+    │           ├── AgUiLocationMapCard.svelte     # Deep-linked Google/Apple/OSM/Wikipedia map card & lazy OSM preview (agui:map-places)
+    │           ├── AgUiSecurityAdvisoryCard.svelte # REST Countries v5 travel & entry advisory card (agui:security-advisory)
+    │           ├── AgUiFxBudgetCard.svelte        # Frankfurter / ISO 4217 FX & per-diem budget audit card (agui:fx-budget)
+    │           ├── AgUiCultureAudioCard.svelte    # Wikipedia landmark + 30s Apple iTunes audio preview card (agui:culture-audio)
+    │           ├── AssistantTurn.svelte           # Container-query (@container > 820px) 2-column editorial split + inline activity surfaces
     │           ├── ExecutionTimeline.svelte       # 2-column collapsible Bento spine with Service Error surfacing
     │           ├── ProtocolCallBadge.svelte       # Semantic badges for all typed callType categories
     │           ├── ReasoningAccordion.svelte      # Collapsible reasoning & synthesis duration header

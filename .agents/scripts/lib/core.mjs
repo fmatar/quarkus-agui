@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { execSync, exec } from 'node:child_process';
+import { execSync, execFileSync, exec } from 'node:child_process';
 import { promisify } from 'node:util';
 
 const execPromise = promisify(exec);
@@ -134,8 +134,42 @@ export function inspectArchlens(repoRoot = '.') {
 export function detectPMProvider(repoRoot = '.') {
   loadEnv(repoRoot);
 
+  const explicitEnv = (process.env.SDLC_PM_PROVIDER || '').toLowerCase().trim();
+  if (explicitEnv === 'jira') {
+    return { provider: 'jira', configured: true, key: process.env.JIRA_PROJECT_KEY || 'SDLC' };
+  }
+  if (explicitEnv === 'linear') {
+    return { provider: 'linear', configured: true, key: process.env.LINEAR_TEAM_KEY || 'DEV' };
+  }
+  if (explicitEnv === 'github') {
+    return { provider: 'github', configured: true };
+  }
+  if (explicitEnv === 'local') {
+    return { provider: 'local', configured: true, file: 'docs/KANBAN.md' };
+  }
+
   const hasJira = !!(process.env.JIRA_API_TOKEN && process.env.JIRA_BASE_URL);
   const hasLinear = !!process.env.LINEAR_API_KEY;
+
+  if (hasJira) return { provider: 'jira', configured: true, key: process.env.JIRA_PROJECT_KEY || 'SDLC' };
+  if (hasLinear) return { provider: 'linear', configured: true, key: process.env.LINEAR_TEAM_KEY || 'DEV' };
+
+  const cfgPath = path.resolve(repoRoot, '.agent/sdlc-config.json');
+  if (fs.existsSync(cfgPath)) {
+    try {
+      const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
+      const cfgProvider = (cfg?.projectManagement?.provider || '').toLowerCase().trim();
+      const cfgKey = cfg?.projectManagement?.projectKey || cfg?.projectManagement?.key || 'SDLC';
+      if (cfgProvider === 'jira') return { provider: 'jira', configured: true, key: process.env.JIRA_PROJECT_KEY || cfgKey };
+      if (cfgProvider === 'linear') return { provider: 'linear', configured: true, key: process.env.LINEAR_TEAM_KEY || cfgKey };
+      if (cfgProvider === 'github') return { provider: 'github', configured: true, key: cfgKey };
+      if (cfgProvider === 'local') return { provider: 'local', configured: true, file: 'docs/KANBAN.md' };
+    } catch {}
+  }
+
+  if (hasGitHubRemote(repoRoot)) {
+    return { provider: 'github', configured: true };
+  }
 
   let hasGhCliAuth = false;
   try {
@@ -144,9 +178,6 @@ export function detectPMProvider(repoRoot = '.') {
   } catch {}
 
   const hasGitHub = !!(process.env.GITHUB_TOKEN || process.env.GH_TOKEN || hasGhCliAuth);
-
-  if (hasJira) return { provider: 'jira', configured: true, key: process.env.JIRA_PROJECT_KEY || 'SDLC' };
-  if (hasLinear) return { provider: 'linear', configured: true, key: process.env.LINEAR_TEAM_KEY || 'DEV' };
   if (hasGitHub) return { provider: 'github', configured: true };
 
   return { provider: 'local', configured: true, file: 'docs/KANBAN.md' };
@@ -198,14 +229,56 @@ export function diagnoseEnvironment(repoRoot = '.') {
   };
 }
 
-export function getModifiedFiles(baseBranch = 'main', repoRoot = '.') {
+/**
+ * Runs `git` with an argv array (never through a shell) and returns stdout,
+ * or null when git exits non-zero. Filenames and refs are passed verbatim,
+ * so values like `$(cmd).js` can never be interpreted by a shell.
+ */
+export function gitOutput(args, repoRoot = '.') {
   try {
-    const output = execSync(
-      `git diff --name-only origin/${baseBranch}...HEAD 2>/dev/null || git diff --name-only ${baseBranch}...HEAD 2>/dev/null || git diff --name-only HEAD~1 2>/dev/null`,
-      { cwd: repoRoot, encoding: 'utf8', stdio: 'pipe' }
-    );
-    return output.split('\n').map((s) => s.trim()).filter(Boolean);
+    return execFileSync('git', args, { cwd: repoRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
   } catch {
-    return [];
+    return null;
   }
+}
+
+export function hasGitHubRemote(repoRoot = '.') {
+  if (process.env.GH_HOST === 'invalid.localhost') return false;
+  const originUrl = gitOutput(['config', '--get', 'remote.origin.url'], repoRoot) || '';
+  return /github\.com/i.test(originUrl.trim());
+}
+
+/**
+ * Returns a unified diff for one file: last commit first, then working tree,
+ * and for untracked files a synthetic all-added diff of its content.
+ */
+export function gitDiffForFile(file, repoRoot = '.') {
+  const lastCommit = gitOutput(['diff', 'HEAD~1', '--', file], repoRoot);
+  if (lastCommit) return lastCommit;
+  const working = gitOutput(['diff', '--', file], repoRoot);
+  if (working) return working;
+  const tracked = gitOutput(['ls-files', '--error-unmatch', '--', file], repoRoot);
+  if (tracked === null) {
+    try {
+      const abs = path.resolve(repoRoot, file);
+      if (fs.statSync(abs).isFile()) {
+        const body = fs.readFileSync(abs, 'utf8');
+        return `+++ b/${file}\n` + body.split('\n').map((l) => `+${l}`).join('\n');
+      }
+    } catch {}
+  }
+  return '';
+}
+
+export function getModifiedFiles(baseBranch = 'main', repoRoot = '.') {
+  const lines = (out) => (out || '').split('\n').map((s) => s.trim()).filter(Boolean);
+  const branchOut =
+    gitOutput(['diff', '--name-only', `origin/${baseBranch}...HEAD`], repoRoot) ??
+    gitOutput(['diff', '--name-only', `${baseBranch}...HEAD`], repoRoot) ??
+    gitOutput(['diff', '--name-only', 'HEAD~1'], repoRoot);
+  const workingFiles = [
+    ...lines(gitOutput(['diff', '--name-only', 'HEAD'], repoRoot)),
+    ...lines(gitOutput(['ls-files', '--others', '--exclude-standard'], repoRoot))
+  ];
+  return Array.from(new Set([...lines(branchOut), ...workingFiles]));
 }

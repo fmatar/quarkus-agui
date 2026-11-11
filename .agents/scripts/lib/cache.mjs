@@ -23,7 +23,7 @@ export function computeTreeHash(repoRoot = '.', modulePath = '.') {
   let gitAvailable = false;
   try {
     const headSha = execSync('git rev-parse HEAD 2>/dev/null', { cwd: absRoot, encoding: 'utf8', stdio: 'pipe' }).trim();
-    const rawStatusOut = execSync(`git status --porcelain -- "${modulePath}" 2>/dev/null`, {
+    const rawStatusOut = execFileSync('git', ['status', '--porcelain', '--', modulePath], {
       cwd: absRoot,
       encoding: 'utf8',
       stdio: 'pipe'
@@ -32,11 +32,10 @@ export function computeTreeHash(repoRoot = '.', modulePath = '.') {
       .split('\n')
       .filter((line) => !line.includes('.agent/') && !line.endsWith('.agent'))
       .join('\n');
-    const diffOut = execSync(`git diff HEAD -- "${modulePath}" 2>/dev/null || true`, {
-      cwd: absRoot,
-      encoding: 'utf8',
-      stdio: 'pipe'
-    });
+    let diffOut = '';
+    try {
+      diffOut = execFileSync('git', ['diff', 'HEAD', '--', modulePath], { cwd: absRoot, encoding: 'utf8', stdio: 'pipe' });
+    } catch {}
 
     hash.update(`head:${headSha}\nstatus:${statusOut}\ndiff:${diffOut}\n`);
 
