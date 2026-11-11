@@ -1,96 +1,87 @@
 ---
 name: sdlc-product
-description: End-to-end spec-driven Product Autopilot orchestrator. Synthesizes raw specs into a canonical PRODUCT.md constitution (CAP-XX, INV-XX, SPEC-XX), provisions Genesis Ticket #1, plans and dispatches topological DAG waves across parallel git worktrees, enforces Spec-Drift & ADR governance, and synchronizes the Causal Decision Lineage Graph.
-version: 0.0.1
-license: Apache 2.0
-allowed-tools: run_command, view_file, write_to_file, replace_file_content, invoke_subagent, manage_subagents, send_message, ask_question
+description: End-to-end spec-driven Product Autopilot and Feature Specification architect. Synthesizes raw specs into PRODUCT.md (CAP-XX, INV-XX, SPEC-XX), authors PRDs/SRS/C4/ADRs in docs/specs/, provisions templated tickets, and orchestrates topological DAG execution waves.
+tools: read_file, write_file, edit_file, run_command, invoke_subagent
 ---
 
-# SDLC End-to-End Product Autopilot (`sdlc-product`)
+# 🏛️ Spec-Driven Product Autopilot & Feature Architect (`sdlc-product`)
 
-Use this skill when the user hands over full specifications, PRDs, or an existing `PRODUCT.md` to build or evolve a project end-to-end. `sdlc-product` acts as the **Macro-Orchestrator** above [`sdlc-flow`](../sdlc-flow/SKILL.md), guaranteeing 100% traceability from `PRODUCT.md` capabilities through specs, tickets, Spec-Drift ADRs, and Stage 7 Merkle Gate Receipts.
+## 1. Purpose & Scope
+
+`sdlc-product` combines product-level constitutional governance (`PRODUCT.md`) with formal feature specification (`docs/specs/`, C4 diagrams, ADRs, and templated issue creation):
+1. **Full Product Handover**: Synthesizes raw requirements into a canonical `PRODUCT.md` constitution (`INV-XX`, `CAP-XX`, `ADR-XXX`), creates functional specs in `docs/specs/`, and schedules topological execution waves.
+2. **Single Feature Specification**: Authors PRDs, SRS contracts, C4 Mermaid diagrams, and ADRs for individual features and provisions linked tickets.
 
 ---
 
-## 🌐 Macro-to-Micro Product Factory Lifecycle
+## 2. Constitutional Product Lifecycle
 
 ```mermaid
 flowchart TD
-    Handover["Raw Specs / PRD / Idea Handover"] --> Genesis["Phase 0: Genesis Ticket #1\n• Checkout feature/issue-#1-product-genesis\n• Synthesize PRODUCT.md (CAP-XX, INV-XX, SPEC-XX)\n• Merge PR #1 with Merkle Gate Receipt"]
-    Genesis --> PlanDAG["Phase 1: Topological DAG Planning\n(sdlc-engine product plan --provision)\n• Group CAP-XX into Execution Waves"]
-    PlanDAG --> NextWave{"Phase 2: Next Ready Wave?"}
-    NextWave -->|Parallelizable Wave| WorktreeDispatch["Dispatch Parallel Subagents in Git Worktrees\n+ Context-Compressed Ticket Dossiers (.agent/dossiers/)"]
-    NextWave -->|Sequential Ticket| SingleFlow["Execute 8-Stage sdlc-flow"]
-    WorktreeDispatch --> DriftSentinel{"Phase 3: Spec-Drift Sentinel\n(sdlc-engine drift check)"}
-    SingleFlow --> DriftSentinel
-    DriftSentinel -->|Drift Detected| MintADR["Phase 4: ADR Mutation Protocol\n• Technical ADR: Auto-accept & patch PRODUCT.md\n• Product ADR: Pause for UI/CLI approval"]
-    MintADR --> DriftSentinel
-    DriftSentinel -->|Clean / Governed| MergeWave["Phase 5: Stage 7 Gate Receipt & PR Merge\n• Sign SHA-256 Merkle Receipt\n• Sync docs/DECISION_MAP.md"]
-    MergeWave --> NextWave
-    NextWave -->|All CAP-XX Delivered| Complete["🎉 Product Realized & Decision Lineage Verified"]
+    Raw["📝 Raw Spec / Feature Request"] --> Init["🏛️ PRODUCT.md Constitution\n(INV-XX, CAP-XX, SPEC-XX)"]
+    Init --> Specs["📐 Functional Specs & C4 Diagrams\n(docs/specs/cap-XX-*.md)"]
+    Specs --> Plan["🌊 Topological DAG Waves\n(sdlc-engine product plan --provision)"]
+    Plan --> WaveExec["⚡ Execute Wave Tickets\n(sdlc-flow: stage begin -> pre-pr -> complete)"]
+    WaveExec --> Drift{"Spec Drift?"}
+    Drift -->|Technical Scope| TechADR["⚡ Auto-Accept Technical ADR\n(docs/adr/ADR-00X.md)"]
+    Drift -->|Product / Contract Scope| ProdADR["🛑 Pending Approval ADR"]
+    TechADR --> Map["🗺️ Sync Causal Decision Graph\n(docs/DECISION_MAP.md)"]
 ```
 
----
+### Step 1: Initialize or Update Two-Tier Product Specifications (`PRODUCT.md`, `docs/PRD.md`, `docs/SRS.md`, `README.md` & `docs/specs/`)
+- **Macro Product Bootstrap (`PRODUCT.md` + `docs/PRD.md` + `docs/SRS.md` + `README.md`)**:
+  Initialize `PRODUCT.md`, macro Product Requirements (`docs/PRD.md`), IEEE 29148 Software Requirements (`docs/SRS.md`), initial capability specs, and the 10–30–90 Developer Landing Page (`README.md`, `docs/logo-*.svg`, `llms.txt` from `docs/templates/README_TEMPLATE.md`) if not present:
+  ```bash
+  node .agent/scripts/sdlc-engine.mjs product init --title "<Product Title>" --vision "<Vision>"
+  node .agent/scripts/sdlc-engine.mjs readme init --archetype <auto|cli|sdk|platform> --title "<Product Title>" --hook "<One-sentence positioning hook>"
+  ```
+- **Per-Capability Specification (`docs/specs/cap-XX-<slug>.md`)**:
+  For each new or updated capability (`CAP-XX`), scaffold or refine its unified specification file combining **PRD Slice** (Problem, Scope/Non-Goals, UX flows), **IEEE 29148 SRS Slice** (`Inputs`, `Processing`, `Outputs`, NFRs), and **C4 Mermaid Diagram**, while automatically syncing `PRODUCT.md`, `docs/PRD.md`, and `docs/SRS.md`:
+  ```bash
+  node .agent/scripts/sdlc-engine.mjs product spec \
+    --cap CAP-XX \
+    --title "<Capability Title>" \
+    --problem "<User Problem & Value>" \
+    --inputs "<Validated Inputs>" \
+    --processing "<Domain Processing>" \
+    --outputs "<Outputs & Artifacts>" \
+    --depends-on "<CAP-YY,CAP-ZZ>"
+  ```
 
-## 🛠️ Step-by-Step Execution Protocol
-
-### Phase 0: Genesis Ticket `#1` & `PRODUCT.md` Constitution Synthesis
-1. **No Direct Commits to `main`**: Even the initial `PRODUCT.md` constitution and project scaffold must enter via **Ticket `#1`** (`feature/issue-#1-product-genesis`).
-2. **Synthesize `PRODUCT.md`**:
-   ```bash
-   node .agent/scripts/sdlc-engine.mjs product init --title "<Product Name>" --vision "<Product Vision>"
-   ```
-   Populate `PRODUCT.md` with canonical IDs:
-   - `INV-01`, `INV-02`: Hard Domain & System Invariants.
-   - `CAP-01`, `CAP-02`: Product Capabilities mapped to `docs/specs/cap-xx.md` (`SPEC-XX`) and explicit topological dependencies (`Depends On`).
-
-### Phase 1: Topological Milestone & Ticket DAG Planning
-Compute the dependency waves and provision tickets:
+### Step 2: Plan Topological Execution Waves & Provision Tickets
+Compute the dependency DAG across capabilities and provision tickets in your PM provider (GitHub Issues, Jira, Linear, or `docs/KANBAN.md`):
 ```bash
 node .agent/scripts/sdlc-engine.mjs product plan --provision
 ```
-- **Wave 1**: Foundation & Ring 0 Core Domain entities (no dependencies).
-- **Wave 2+**: Independent Ring 1/2/3 adapters, APIs, and UI views scheduled in parallel waves.
-
-### Phase 2: Context-Compressed Dossiers & Parallel Worktree Execution
-Before launching a subagent or starting Stage 3 TDD for Ticket `#<id>`, generate its compact context dossier:
+Or create an individual templated feature/bug ticket directly:
 ```bash
-node .agent/scripts/sdlc-engine.mjs dossier generate --issue <id> --cap CAP-01 <target-files...>
+node .agent/scripts/sdlc-engine.mjs ticket create --title "<Title>" --type <feat|fix> --problem "<Problem>" --solution "<Solution>"
 ```
-- Subagents read `.agent/dossiers/issue-<id>.md` (~80% token reduction) instead of scanning the entire repository.
-- When a wave has multiple independent capabilities (`parallelizable: true`), isolate each ticket in its own Git worktree and invoke parallel subagents via `invoke_subagent`.
 
-### Phase 3: First-Class Spec Drift & ADR Lifecycle
-When implementation reveals technical friction or the user pivots requirements:
-1. **Mint an ADR**:
+### Step 3: Context-Compressed Subagent Dossiers
+Before dispatching parallel wave tickets, generate a compact (~500-token) context dossier containing only the linked `CAP-XX` spec, active `INV-XX` invariants, accepted ADRs, and exported file signatures:
+```bash
+node .agent/scripts/sdlc-engine.mjs dossier generate --issue <id> --cap <CAP-XX> <target_files...>
+```
+
+### Step 4: Spec-Drift Sentinel & Dual-Tier ADR Governance
+Whenever `PRODUCT.md`, `docs/specs/*.md`, dependency manifests, or API contracts change:
+1. Mint an Architectural Decision Record (`ADR-00X`):
    ```bash
    node .agent/scripts/sdlc-engine.mjs adr create \
      --title "<Decision Title>" \
-     --scope <technical|product> \
+     --scope <technical|architectural|product|contract> \
      --ticket <id> \
-     --supersedes CAP-01 \
-     --context "<Original spec assumption & friction encountered>" \
-     --decision "<New architectural or contract decision>" \
-     --consequences "<Downstream impact on specs and tickets>"
+     --supersedes "<CAP-XX>" \
+     --context "<Triggering reason>" \
+     --decision "<Chosen architecture>" \
+     --consequences "<Downstream impact>"
    ```
-2. **Blast-Radius Routing**:
-   - **`technical` scope**: Automatically accepted (`status: accepted`), patches `PRODUCT.md` and `docs/DECISION_MAP.md`, and unblocks the Spec-Drift Sentinel.
-   - **`product` scope**: Enters `status: pending_approval`. Pause and prompt the user via `ask_question` (or let them approve in the SvelteKit Workbench UI at `http://localhost:4120`), then execute:
-     ```bash
-     node .agent/scripts/sdlc-engine.mjs adr decide ADR-00X approve
-     ```
-
-### Phase 4: 4-Layer Git Guard & Stage 7 Cryptographic Gate Receipt
-Before any branch merges into `main`:
-1. Verify zero undeclared spec drift:
+2. Verify zero undeclared drift, refresh `docs/DECISION_MAP.md`, and generate the interactive Architecture & Decision Lineage UI snapshot:
    ```bash
    node .agent/scripts/sdlc-engine.mjs drift check
-   ```
-2. Issue the Stage 7 Cryptographic Gate Receipt after Peer Review & Quality Gate pass:
-   ```bash
-   node .agent/scripts/sdlc-engine.mjs guard receipt
-   ```
-3. Synchronize the Causal Decision Graph & `docs/DECISION_MAP.md`:
-   ```bash
    node .agent/scripts/sdlc-engine.mjs decision-graph sync
+   node .agent/scripts/sdlc-engine.mjs ui-snapshot
    ```
+3. **Antigravity Inline UI Presentation**:
+   Write `.agent/workbench/index.html` to `<artifactDir>/sdlc-architecture-diff.html` (`UserFacing: true`) and render it inline in your chat response via `<agent-embed src="file:///<artifactDir>/sdlc-architecture-diff.html"></agent-embed>`.

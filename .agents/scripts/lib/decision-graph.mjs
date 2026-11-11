@@ -113,7 +113,7 @@ export function buildDecisionGraph(repoRoot = '.') {
 
         if (depsCell && depsCell !== 'None' && depsCell !== '-') {
           for (const dep of depsCell.split(',').map((s) => s.trim()).filter(Boolean)) {
-            addEdge(dep, capId, 'depends_on');
+            addEdge(capId, dep, 'depends_on');
           }
         }
       }
@@ -204,7 +204,14 @@ export function buildDecisionGraph(repoRoot = '.') {
         });
 
         for (const target of evt.linksTo || []) {
-          addEdge(target, evt.id, evt.type === 'ADR_CREATED' ? 'amended_by_adr' : 'realized_by');
+          if (evt.type === 'CAPABILITY_SPEC_SCAFFOLDED' || evt.type === 'CAPABILITY_REGISTERED') {
+            addEdge(evt.id, target, 'depends_on');
+          } else if (evt.type === 'ADR_CREATED' || evt.type === 'ADR_DECIDED') {
+            if (String(target).startsWith('#')) continue;
+            addEdge(target, evt.id, 'amended_by_adr');
+          } else {
+            addEdge(target, evt.id, 'realized_by');
+          }
         }
       } catch {}
     }

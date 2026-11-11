@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { execSync } from 'node:child_process';
+import { execSync, execFileSync } from 'node:child_process';
 import { fileExists, readFileSafe } from './core.mjs';
 import { verifyGateReceipt } from './audit-chain.mjs';
 import { checkSpecDrift } from './adr-drift.mjs';
@@ -176,7 +176,7 @@ export function verifyPushGuard({ remoteBranch = null, repoRoot = '.' } = {}) {
 }
 
 export function installHooks({ repoRoot = '.' } = {}) {
-  console.log('🪝 Configuring 4-Layer Zero-Bypass Git Hooks for Agentic SDLC...');
+  console.log('🪝 Configuring 4-Layer Git Hooks (client-side; bypassable with --no-verify, pair with server-side branch protection) for Agentic SDLC...');
   const gitDir = path.resolve(repoRoot, '.git');
   if (!fs.existsSync(gitDir)) {
     throw new Error('Not a git repository. Cannot install git hooks.');
@@ -195,19 +195,18 @@ fi
 
 if [ -f ".agent/scripts/sdlc-engine.mjs" ]; then
   node .agent/scripts/sdlc-engine.mjs guard pre-commit
-  node .agent/scripts/sdlc-engine.mjs test --affected-only 2>/dev/null || true
+  # Advisory only: affected tests never block a commit (the pre-push gate does).
+  node .agent/scripts/sdlc-engine.mjs test --affected-only >/dev/null 2>&1 || true
 fi
-exit 0
 `;
 
   const preMergeCommitHook = `#!/usr/bin/env bash
-# Agentic SDLC Framework: Layer 3 Pre-Merge-Commit Cryptographic Gate Receipt Guard
+# Agentic SDLC Framework: Layer 3 Pre-Merge-Commit Signed Gate Receipt Guard
 set -e
 
 if [ -f ".agent/scripts/sdlc-engine.mjs" ]; then
   node .agent/scripts/sdlc-engine.mjs guard pre-merge
 fi
-exit 0
 `;
 
   const prePushHook = `#!/usr/bin/env bash
@@ -229,7 +228,6 @@ if [ -f ".agent/scripts/sdlc-engine.mjs" ]; then
   node .agent/scripts/sdlc-engine.mjs guard pre-push
   node .agent/scripts/sdlc-engine.mjs gate
 fi
-exit 0
 `;
 
   const preCommitPath = path.resolve(hooksDir, 'pre-commit');
@@ -253,7 +251,7 @@ exit 0
 
   return {
     success: true,
-    installed: ['pre-commit', 'pre-push'],
+    installed: ['pre-commit', 'pre-merge-commit', 'pre-push'],
     allHooksInstalled: ['pre-commit', 'pre-merge-commit', 'pre-push'],
     hooksDir
   };
@@ -278,15 +276,18 @@ export function applyBranchProtection({
 
   for (const b of branches) {
     try {
-      execSync(
-        `gh api --method PUT repos/:owner/:repo/branches/${b}/protection \
-        -H "Accept: application/vnd.github+json" \
-        -F "required_status_checks=null" \
-        -F "enforce_admins=false" \
-        -F "required_pull_request_reviews[dismiss_stale_reviews]=true" \
-        -F "required_pull_request_reviews[require_code_owner_reviews]=false" \
-        -F "required_pull_request_reviews[required_approving_review_count]=0" \
-        -F "restrictions=null" 2>/dev/null`,
+      execFileSync(
+        'gh',
+        [
+          'api', '--method', 'PUT', `repos/:owner/:repo/branches/${encodeURIComponent(b)}/protection`,
+          '-H', 'Accept: application/vnd.github+json',
+          '-F', 'required_status_checks=null',
+          '-F', 'enforce_admins=false',
+          '-F', 'required_pull_request_reviews[dismiss_stale_reviews]=true',
+          '-F', 'required_pull_request_reviews[require_code_owner_reviews]=false',
+          '-F', 'required_pull_request_reviews[required_approving_review_count]=0',
+          '-F', 'restrictions=null'
+        ],
         {
           cwd: repoRoot,
           stdio: 'pipe'

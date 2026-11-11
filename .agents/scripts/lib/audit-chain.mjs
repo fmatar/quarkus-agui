@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { execSync } from 'node:child_process';
+import { execSync, execFileSync } from 'node:child_process';
 
 export const AUDIT_LEDGER_FILE = 'docs/AUDIT_CHAIN.jsonl';
 export const GENESIS_HASH = '0000000000000000000000000000000000000000000000000000000000000000';
@@ -61,6 +61,7 @@ export function verifyAuditChain(repoRoot = '.') {
     return {
       valid: true,
       recordsCount: 0,
+      chainHead: GENESIS_HASH,
       merkleRoot: GENESIS_HASH,
       records: [],
       message: 'No audit records present (chain empty).'
@@ -72,6 +73,7 @@ export function verifyAuditChain(repoRoot = '.') {
     return {
       valid: true,
       recordsCount: 0,
+      chainHead: GENESIS_HASH,
       merkleRoot: GENESIS_HASH,
       records: [],
       message: 'Audit chain is empty.'
@@ -137,32 +139,100 @@ export function verifyAuditChain(repoRoot = '.') {
   return {
     valid: true,
     recordsCount: records.length,
+    chainHead: expectedPrevHash,
+    // Deprecated alias: this is a linear hash chain, not a Merkle tree.
     merkleRoot: expectedPrevHash,
     records,
     message: `Audit chain verified successfully (${records.length} immutable records).`
   };
 }
 
+export const RECEIPT_KEY_FILE = '.agent/.receipt-key';
+
 /**
- * Signs a Stage 7 Cryptographic Gate Receipt into the Merkle Audit Ledger.
- * Required by Layer 3 & Layer 4 before any branch can be merged into main/develop.
+ * Loads the HMAC key used to sign gate receipts.
+ * Order: SDLC_RECEIPT_KEY env var (e.g. a CI secret), then `.agent/.receipt-key`
+ * (gitignored, mode 0600). With `create: true` a random 256-bit key is generated.
+ * Returns null when no key exists and none may be created.
  */
+export function loadReceiptKey(repoRoot = '.', { create = false } = {}) {
+  if (process.env.SDLC_RECEIPT_KEY) return Buffer.from(process.env.SDLC_RECEIPT_KEY, 'utf8');
+  const keyPath = path.resolve(repoRoot, RECEIPT_KEY_FILE);
+  if (fs.existsSync(keyPath)) {
+    const raw = fs.readFileSync(keyPath, 'utf8').trim();
+    if (raw) return Buffer.from(raw, 'utf8');
+  }
+  if (!create) return null;
+  const key = crypto.randomBytes(32).toString('hex');
+  fs.mkdirSync(path.dirname(keyPath), { recursive: true });
+  fs.writeFileSync(keyPath, key + '\n', { encoding: 'utf8', mode: 0o600 });
+  return Buffer.from(key, 'utf8');
+}
+
+function canonicalJSON(value) {
+  if (Array.isArray(value)) return `[${value.map(canonicalJSON).join(',')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value)
+      .sort()
+      .map((k) => `${JSON.stringify(k)}:${canonicalJSON(value[k])}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+export function signReceiptPayload(payload, key) {
+  return crypto.createHmac('sha256', key).update(canonicalJSON(payload)).digest('hex');
+}
+
+export function verifyReceiptSignature(receipt, key) {
+  if (!receipt || !receipt.signature || !key) return false;
+  const { signature, ...payload } = receipt;
+  if (signature.alg !== 'HMAC-SHA256' || typeof signature.value !== 'string') return false;
+  const expected = signReceiptPayload(payload, key);
+  const a = Buffer.from(expected, 'hex');
+  const b = Buffer.from(signature.value, 'hex');
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
 export function issueGateReceipt({
   issueId,
   branch,
   headSha = null,
-  coveragePct = 85,
-  mutationPct = 80,
-  peerReviewApproved = true,
-  driftCheckPassed = true,
+  coveragePct,
+  coverage,
+  mutationPct,
+  mutationScore,
+  docsOnly,
+  peerReviewApproved,
+  reviewer = null,
+  driftCheckPassed,
   repoRoot = '.'
 } = {}) {
+  const rawCov = coveragePct !== undefined ? coveragePct : coverage;
+  const rawMut = mutationPct !== undefined ? mutationPct : mutationScore;
+  const resolvedDocsOnly = docsOnly !== undefined ? Boolean(docsOnly) : rawCov === null && rawMut === null;
+  const resolvedCoverage = resolvedDocsOnly && rawCov === undefined ? null : rawCov;
+  const resolvedMutation = resolvedDocsOnly && rawMut === undefined ? null : rawMut;
+
+  const missing = [];
+  if (!resolvedDocsOnly && !Number.isFinite(resolvedCoverage)) missing.push('coveragePct');
+  if (!resolvedDocsOnly && resolvedMutation !== null && !Number.isFinite(resolvedMutation)) missing.push('mutationPct');
+  if (typeof peerReviewApproved !== 'boolean') missing.push('peerReviewApproved');
+  if (typeof driftCheckPassed !== 'boolean') missing.push('driftCheckPassed');
+  if (missing.length > 0) {
+    return {
+      success: false,
+      missing,
+      reason: `Refusing to issue gate receipt: unmeasured value(s): ${missing.join(', ')}. Run 'coverage', 'mutation' and 'review record' first.`
+    };
+  }
+
   let resolvedSha = headSha;
   if (!resolvedSha) {
     try {
-      resolvedSha = execSync('git rev-parse HEAD 2>/dev/null', { cwd: repoRoot, encoding: 'utf8', stdio: 'pipe' }).trim();
+      resolvedSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repoRoot, encoding: 'utf8', stdio: 'pipe' }).trim();
     } catch {
-      resolvedSha = crypto.createHash('sha256').update(`${issueId}:${branch}:${Date.now()}`).digest('hex').slice(0, 40);
+      return { success: false, missing: ['headSha'], reason: 'Refusing to issue gate receipt: cannot resolve HEAD commit.' };
     }
   }
 
@@ -171,18 +241,30 @@ export function issueGateReceipt({
     ? crypto.createHash('sha256').update(fs.readFileSync(productMdPath, 'utf8')).digest('hex')
     : null;
 
-  const receipt = {
+  const key = loadReceiptKey(repoRoot, { create: true });
+  const payload = {
     receiptId: `GATE-RECEIPT-#${issueId}-${resolvedSha.slice(0, 8)}`,
     issueId: Number(issueId) || issueId,
     branch: branch || 'feature/unknown',
     headSha: resolvedSha,
     productMdHash,
     stage: 7,
-    coveragePct,
-    mutationPct,
-    peerReviewApproved: !!peerReviewApproved,
-    driftCheckPassed: !!driftCheckPassed,
+    coveragePct: resolvedCoverage,
+    mutationPct: resolvedMutation,
+    docsOnly: resolvedDocsOnly,
+    mutationStatus: resolvedDocsOnly ? 'docs-only' : resolvedMutation === null ? 'not-configured' : 'measured',
+    peerReviewApproved,
+    reviewer,
+    driftCheckPassed,
     issuedAt: new Date().toISOString()
+  };
+  const receipt = {
+    ...payload,
+    signature: {
+      alg: 'HMAC-SHA256',
+      keyId: crypto.createHash('sha256').update(key).digest('hex').slice(0, 16),
+      value: signReceiptPayload(payload, key)
+    }
   };
 
   const auditRes = appendAuditRecord({
@@ -195,7 +277,7 @@ export function issueGateReceipt({
     success: true,
     receipt: {
       ...receipt,
-      merkleHash: auditRes.record.currentHash
+      chainHash: auditRes.record.currentHash
     },
     auditRecord: auditRes.record
   };
@@ -203,26 +285,32 @@ export function issueGateReceipt({
 
 /**
  * Verifies that a valid, untampered Stage 7 Cryptographic Gate Receipt exists
- * in the Merkle Audit Chain for the given commit SHA or branch.
+ * in the hash-chained audit ledger for the given commit SHA or branch,
+ * with a valid HMAC signature under the local receipt key.
  */
 export function verifyGateReceipt({ headSha = null, branch = null, repoRoot = '.' } = {}) {
   const chain = verifyAuditChain(repoRoot);
   if (!chain.valid) {
     return {
       valid: false,
-      reason: `Merkle audit chain corrupted: ${chain.error}`
+      reason: `Audit hash chain corrupted: ${chain.error}`
     };
   }
 
   let targetSha = headSha;
   if (!targetSha && branch) {
     try {
-      targetSha = execSync(`git rev-parse "${branch}" 2>/dev/null`, {
+      targetSha = execFileSync('git', ['rev-parse', '--verify', '-q', '--end-of-options', branch], {
         cwd: repoRoot,
         encoding: 'utf8',
         stdio: 'pipe'
       }).trim();
     } catch {}
+  }
+
+  const key = loadReceiptKey(repoRoot);
+  if (!key) {
+    return { valid: false, targetSha, branch, reason: `No receipt signing key (${RECEIPT_KEY_FILE} or SDLC_RECEIPT_KEY); cannot verify receipts.` };
   }
 
   const receipts = (chain.records || [])
@@ -233,7 +321,7 @@ export function verifyGateReceipt({ headSha = null, branch = null, repoRoot = '.
     const m = r.metadata;
     const shaMatch = targetSha ? m.headSha === targetSha : true;
     const branchMatch = branch ? m.branch === branch : true;
-    return shaMatch && branchMatch && m.peerReviewApproved && m.driftCheckPassed;
+    return shaMatch && branchMatch && m.peerReviewApproved === true && m.driftCheckPassed === true && verifyReceiptSignature(m, key);
   });
 
   if (!matched) {
@@ -241,14 +329,14 @@ export function verifyGateReceipt({ headSha = null, branch = null, repoRoot = '.
       valid: false,
       targetSha,
       branch,
-      reason: `No valid Stage 7 Cryptographic Gate Receipt found for ${targetSha || branch || 'HEAD'}.`
+      reason: `No valid signed Stage 7 gate receipt found for ${targetSha || branch || 'HEAD'}.`
     };
   }
 
   return {
     valid: true,
     receipt: matched.metadata,
-    merkleHash: matched.currentHash,
-    merkleRoot: chain.merkleRoot
+    chainHash: matched.currentHash,
+    chainHead: chain.chainHead
   };
 }

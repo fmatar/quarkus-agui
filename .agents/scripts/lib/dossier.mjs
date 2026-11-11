@@ -98,6 +98,9 @@ export function generateTicketDossier({
 ## 🛡️ Hard Invariants
 ${(product.invariants || []).map((inv) => `- **${inv.id}**: ${inv.text}`).join('\n') || '- Standard SDLC Dual-Gate Invariants'}
 
+## 📋 Capability Spec & IEEE 29148 SRS Excerpt
+${specExcerpt ? specExcerpt.trim() : '_No capability spec excerpt found._'}
+
 ## 📄 Target File Export Signatures
 ${fileSignatures.map((f) => `- \`${f.file}\` (${f.linesCount} lines): exports \`[${f.exports.join(', ')}]\``).join('\n') || '- No target files pre-scanned'}
 `;

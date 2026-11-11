@@ -1,8 +1,15 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { execSync } from 'node:child_process';
+import { execSync, execFileSync } from 'node:child_process';
 import { fileExists, readFileSafe } from './core.mjs';
-import { transitionPMState } from './pm-provider.mjs';
+import { createPMIssue, transitionPMState, syncKanbanBoard, ensurePullRequest } from './pm-provider.mjs';
+import { checkSpecDrift } from './adr-drift.mjs';
+import { syncDecisionMapMarkdown } from './decision-graph.mjs';
+import { recordArchTrace } from './arch-trace.mjs';
+import { issueGateReceipt } from './audit-chain.mjs';
+import { generatePRSummary } from './quality-gate.mjs';
+import { generateArchitectureWidget, ensureWorkbenchRunning } from './workbench-server.mjs';
+import { auditWiki } from './wiki-sync.mjs';
 
 const SESSION_FILE = '.sdlc-session.json';
 
@@ -306,7 +313,9 @@ export function releaseSession(repoRoot = '.', issueId = null) {
     if (targetSession.worktree && fileExists(path.resolve(repoRoot, targetSession.worktree))) {
       try {
         console.log(`🌲 Pruning Git worktree: ${targetSession.worktree}...`);
-        execSync(`git worktree remove --force "${targetSession.worktree}" 2>/dev/null || true`, { cwd: repoRoot });
+        try {
+          execFileSync('git', ['worktree', 'remove', '--force', '--', targetSession.worktree], { cwd: repoRoot, stdio: 'pipe' });
+        } catch {}
       } catch {}
     }
 
@@ -413,4 +422,252 @@ export function calculateSessionStats(repoRoot = '.') {
     currentStage: activeSess ? `${activeSess.stage}/8 (${activeSess.stageName})` : 'Idle',
     activeBranch: activeSess ? activeSess.branch : 'main'
   };
+}
+
+function parsePct(value) {
+  if (value === null || value === undefined || value === '') return undefined;
+  const n = Number.parseFloat(String(value).replace('%', ''));
+  return Number.isFinite(n) ? n : undefined;
+}
+
+/**
+ * Builds gate-receipt inputs strictly from what was measured and recorded in
+ * the session manifest by `coverage`, `mutation` and `review record`.
+ * Anything not measured is left undefined so issueGateReceipt refuses.
+ * Mutation is reported as `null` (not configured) only when every module's
+ * `thresholds.mutationScore` is explicitly null in .agent/sdlc-config.json.
+ */
+export function receiptInputsFromSession(session, { driftCheckPassed, repoRoot = '.' } = {}) {
+  const manifest = session?.manifest || {};
+  const isDocsOnly = Boolean(manifest.docsOnly);
+  const coveragePct = isDocsOnly
+    ? null
+    : parsePct(manifest.coverageReport ?? manifest.coveragePct ?? manifest.coverage);
+  let mutationPct = isDocsOnly
+    ? null
+    : parsePct(manifest.mutationScore ?? manifest.mutationPct ?? manifest.mutation);
+  if (mutationPct === undefined && !isDocsOnly) {
+    try {
+      const cfg = JSON.parse(readFileSafe(path.resolve(repoRoot, '.agent/sdlc-config.json')) || '{}');
+      const mods = Array.isArray(cfg.modules) ? cfg.modules : [];
+      if (mods.length > 0 && mods.every((m) => m?.thresholds && m.thresholds.mutationScore === null)) mutationPct = null;
+    } catch {}
+  }
+  const review = manifest.peerReview;
+  return {
+    coveragePct,
+    mutationPct,
+    docsOnly: isDocsOnly ? true : undefined,
+    peerReviewApproved: review && review.verdict ? review.verdict === 'approve' : undefined,
+    reviewer: review?.reviewer || null,
+    driftCheckPassed
+  };
+}
+
+/**
+ * Composite Stage Orchestrator (CAP-01)
+ * Collapses ~15 granular bookkeeping calls into 3 deterministic lifecycle transitions:
+ * - begin: provisions/links ticket, starts Stage 2 session, checks out feature branch, transitions PM -> in-progress
+ * - pre-pr: advances to Stage 6, runs Spec-Drift check, syncs DECISION_MAP.md, records ArchTrace, issues signed gate receipt from measured values, builds PR summary
+ * - complete: advances to Stage 8, transitions PM -> done, syncs KANBAN.md, and releases session lock
+ */
+export function executeCompositeStage({
+  action = 'begin',
+  issueId = null,
+  title = null,
+  type = 'feat',
+  branch = null,
+  worktree = null,
+  prNumber = null,
+  summary = null,
+  checkoutBranch = false,
+  repoRoot = '.'
+} = {}) {
+  const normalizedAction = String(action || 'begin').toLowerCase();
+
+  if (normalizedAction === 'begin') {
+    let resolvedIssueId = issueId ? String(issueId).replace(/^#/, '') : null;
+    if (!resolvedIssueId) {
+      const created = createPMIssue({
+        title: title || 'Automated SDLC Task',
+        type,
+        body: summary || title || 'Provisioned via sdlc-engine stage begin',
+        repoRoot
+      });
+      resolvedIssueId = String(created.issueId || '1').replace(/^#/, '');
+    }
+
+    const slug = (title || 'sdlc-task')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '')
+      .slice(0, 40);
+    const prefix = type === 'hotfix' ? 'hotfix' : 'feature';
+    const targetBranch =
+      branch || (title ? `${prefix}/issue-#${resolvedIssueId}-${slug}` : `${prefix}/issue-#${resolvedIssueId}`);
+
+    const started = startSession({
+      issueId: resolvedIssueId,
+      branch: targetBranch,
+      stage: 2,
+      stageName: 'Architecture & Branch Creation',
+      type,
+      worktree,
+      repoRoot,
+      force: true
+    });
+
+    if (checkoutBranch && fileExists(path.resolve(repoRoot, '.git'))) {
+      try {
+        execFileSync('git', ['checkout', '-B', targetBranch], { cwd: repoRoot, stdio: 'pipe' });
+      } catch {}
+    }
+
+    try {
+      transitionPMState({ issueId: resolvedIssueId, state: 'in-progress', repoRoot });
+    } catch {}
+
+    const wb = ensureWorkbenchRunning({ repoRoot });
+    const uiWidget = generateArchitectureWidget({ repoRoot });
+
+    return {
+      success: true,
+      action: 'begin',
+      issueId: resolvedIssueId,
+      branch: targetBranch,
+      stage: 2,
+      session: started.session,
+      workbenchUrl: wb.url,
+      widgetPath: uiWidget.widgetPath
+    };
+  }
+
+  if (normalizedAction === 'pre-pr') {
+    const current = getSessionStatus(repoRoot);
+    const resolvedIssueId = issueId
+      ? String(issueId).replace(/^#/, '')
+      : current.session?.issueId
+        ? String(current.session.issueId)
+        : null;
+
+    if (!current.active && resolvedIssueId) {
+      startSession({
+        issueId: resolvedIssueId,
+        stage: 5,
+        stageName: 'Docs & Showcase',
+        repoRoot,
+        force: true
+      });
+    }
+
+    updateSession({
+      stage: 5,
+      stageName: 'Docs & Showcase',
+      repoRoot
+    });
+
+    const updated = updateSession({
+      stage: 6,
+      stageName: 'Pull Request & CI',
+      repoRoot
+    });
+
+    const drift = checkSpecDrift({ repoRoot });
+    const wikiAudit = auditWiki(repoRoot);
+    const decisionMap = syncDecisionMapMarkdown(repoRoot);
+    const trace = recordArchTrace({
+      reason: summary || `Pre-PR verification for ticket #${updated.session.issueId}`,
+      ticket: updated.session.issueId,
+      repoRoot
+    });
+
+    const prePrPassed = Boolean(drift.passed && wikiAudit.passed);
+    let receipt = null;
+    let receiptError = null;
+    if (prePrPassed) {
+      const inputs = receiptInputsFromSession(updated.session, { driftCheckPassed: drift.passed, repoRoot });
+      const issued = issueGateReceipt({
+        issueId: updated.session.issueId,
+        branch: updated.session.branch || 'feature/branch',
+        ...inputs,
+        repoRoot
+      });
+      if (issued.success) receipt = issued.receipt;
+      else receiptError = issued.reason;
+    } else {
+      receiptError = 'Spec-drift or wiki audit failed; no receipt issued.';
+    }
+
+    const prSummary = generatePRSummary({ issueId: updated.session.issueId, repoRoot });
+    const prRes = ensurePullRequest({
+      issueId: updated.session.issueId,
+      branch: updated.session.branch,
+      title: summary
+        ? `${updated.session.type || 'feat'}(#${updated.session.issueId}): ${summary}`
+        : `${updated.session.type || 'feat'}(#${updated.session.issueId}): ${updated.session.branch || 'SDLC Delivery'}`,
+      body: prSummary.markdown,
+      repoRoot
+    });
+    const wb = ensureWorkbenchRunning({ repoRoot });
+    const uiWidget = generateArchitectureWidget({ repoRoot });
+
+    return {
+      success: Boolean(prePrPassed),
+      action: 'pre-pr',
+      receiptError,
+      issueId: updated.session.issueId,
+      prNumber: prRes.prNumber || updated.session.manifest?.prNumber || null,
+      prUrl: prRes.prUrl || updated.session.manifest?.prUrl || null,
+      prCreated: Boolean(prRes.created),
+      stage: 6,
+      drift,
+      wikiAudit,
+      decisionMapPath: decisionMap.path || decisionMap.markdownPath || decisionMap.outputPath,
+      traceEntry: trace.entry,
+      receipt,
+      prSummary,
+      workbenchUrl: wb.url,
+      widgetPath: uiWidget.widgetPath
+    };
+  }
+
+  if (normalizedAction === 'complete') {
+    const current = getSessionStatus(repoRoot);
+    const resolvedIssueId = issueId
+      ? String(issueId).replace(/^#/, '')
+      : current.session?.issueId
+        ? String(current.session.issueId)
+        : null;
+
+    if (current.active) {
+      updateSession({
+        stage: 8,
+        stageName: 'Release & Retrospective',
+        manifestUpdate: prNumber ? { prNumber } : {},
+        repoRoot
+      });
+    }
+
+    if (resolvedIssueId) {
+      try {
+        transitionPMState({ issueId: resolvedIssueId, state: 'done', repoRoot });
+      } catch {}
+    }
+
+    try {
+      syncKanbanBoard(repoRoot);
+    } catch {}
+
+    const released = releaseSession(repoRoot, resolvedIssueId);
+
+    return {
+      success: true,
+      action: 'complete',
+      issueId: resolvedIssueId,
+      stage: 8,
+      released: released.released
+    };
+  }
+
+  throw new Error(`Unknown composite stage action '${action}'. Valid actions: begin, pre-pr, complete.`);
 }
