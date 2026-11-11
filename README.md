@@ -7,55 +7,64 @@
 
 # Quarkus AG-UI
 
-**Orthogonal Java 17 Quarkus, LangChain4j & A2A (`1.5.0.Final`) adapters plus a headless Svelte 5 Runes SDK for the AG-UI protocol.**
+**Bring real-time, stateful AI agents to Quarkus, LangChain4j, and Svelte 5 using open protocols (`AG-UI` + `MCP` + `A2A`).**
 
 [![CI Quality Gate](https://img.shields.io/badge/CI-Dual--Gate_Quality-16a34a.svg)](.github/workflows/sdlc-quality-gate.yml)
 [![Version 0.2.0](https://img.shields.io/badge/Version-0.2.0-4f46e5.svg)](./CHANGELOG.md)
 [![License: Apache-2.0 OR MIT](https://img.shields.io/badge/License-Apache--2.0_OR_MIT-0284c7.svg)](./LICENSE)
 [![Docs: Wiki](https://img.shields.io/badge/Docs-Wiki_%26_Specs-0d9488.svg)](./wiki/Home.md)
 
-[Quickstart](#quickstart) · [Why Quarkus AG-UI?](#why-quarkus-ag-ui) · [How It Works](#how-it-works) · [Docs](#documentation--roadmap) · [Contributing](#contributing--license)
+[Why Quarkus AG-UI?](#why-quarkus-ag-ui) · [How It Works](#how-it-works) · [Modules](#module-overview) · [Quickstart](#quickstart) · [Docs](#documentation--roadmap) · [Contributing](#contributing--license)
 
 </div>
 
-```java
-import com.agui.community.core.agent.RunAgentInput;
-import io.smallrye.mutiny.Multi;
-import jakarta.inject.Inject;
-import jakarta.ws.rs.*;
-import jakarta.ws.rs.core.MediaType;
-import org.agui.langchain4j.adapters.AgUiRunOptions;
-import org.agui.quarkus.langchain4j.adapters.AgUiQuarkusLangChain4jBridge;
-
-@Path("/api/agent")
-public class ConciergeResource {
-    @Inject AgUiQuarkusLangChain4jBridge bridge;
-    @Inject ConciergeAiService ai; // @RegisterAiService returning Multi<ChatEvent>
-
-    @POST @Path("/run") @Produces(MediaType.SERVER_SENT_EVENTS)
-    public Multi<String> stream(RunAgentInput input) {
-        return bridge.adaptToSse(input.threadId(), ai.chat(input.threadId(), lastUserPrompt(input)),
-            AgUiRunOptions.builder().runId(input.runId()).build());
-    }
-}
-```
-
 ## Why Quarkus AG-UI?
 
-Building interactive AI agent frontends on the JVM usually forces teams to hand-roll custom SSE/WebSocket JSON envelopes, duplicate upstream protocol POJOs, or lock HTTP transport directly into a single LLM framework. **Quarkus AG-UI** provides focused, `--release 17` adapters directly on top of the official [`com.ag-ui.community`](https://github.com/ag-ui-protocol/ag-ui) Java SDK (`0.1.1`) and [`@ag-ui/client`](https://www.npmjs.com/package/@ag-ui/client) (`^1.0.4`), paired with a Java 25 + Quarkus `3.40.1.1` **Tri-Protocol (`AG-UI + MCP + A2A`)** reference stack.
+Modern AI agents do far more than stream plain chat text—they call external tools, delegate work to specialist agents, synchronize live application state, render rich UI cards, and pause for human approval. On the JVM, teams usually end up hand-rolling custom SSE or WebSocket JSON envelopes, duplicating protocol DTOs, or coupling HTTP transport directly to a single LLM library.
 
-- ⚡ **Sub-10ms Streaming & GraalVM 25 Native** — Auto-configured Jackson MixIns (`@ag-ui/core` Zod-compatible), SmallRye Mutiny SSE, full-duplex Quarkus WebSockets Next (`AgUiWebSocketHandler`), and a 57-type GraalVM `reflect-config.json` (`< 50MB` native RSS) with zero `-deployment` build-time overhead.
-- 🔒 **Orthogonal Clean Architecture (`INV-03`, `INV-07`)** — Pull only the modules you need (`ag-ui-quarkus`, `ag-ui-langchain4j`, `ag-ui-quarkus-langchain4j`, `ag-ui-a2a`) governed by inward-pointing Archlens concentric rings (`adapters -> application -> domain`) and zero duplicate event POJOs.
-- 🧩 **Tri-Protocol (`AG-UI + MCP + A2A`) & Svelte 5 Runes** — Bridges `@McpToolBox` tools, official A2A `1.5.0.Final` `AgentCard` / JSON-RPC delegation (`AgUiA2aClient`), RFC 6902 `STATE_DELTA` JSON Patches, `ACTIVITY_SNAPSHOT` UI surfaces, and native HITL `Interrupt` resume into headless `@agui/svelte`.
+**Quarkus AG-UI** eliminates that custom streaming glue. It provides focused, modular **Java 17** adapters built directly on the official [AG-UI Java SDK](https://github.com/ag-ui-protocol/ag-ui) (`com.ag-ui.community`) alongside a headless **Svelte 5 Runes** SDK (`@agui/svelte`) built on [`@ag-ui/client`](https://www.npmjs.com/package/@ag-ui/client), uniting agent-to-user streaming, tool access, and multi-agent delegation into one cohesive stack:
+
+- ⚡ **Sub-10ms Reactive Streaming & GraalVM Native** — Streams canonical AG-UI events over SmallRye Mutiny SSE or full-duplex Quarkus WebSockets Next, backed by auto-configured Jackson MixIns and a 57-type GraalVM reflection config (`< 50MB` native RSS) with zero custom Quarkus `-deployment` build-time overhead.
+- 🧩 **Three Open Protocols, Clear Boundaries** — Combines **AG-UI** (agent-to-user interaction), **MCP** (Model Context Protocol tools & resources), and **A2A `1.5.0.Final`** (agent-to-agent discovery & task delegation) without proprietary wire formats.
+- 🎨 **Stateful Generative UI & Human-in-the-Loop** — Synchronizes live client state via RFC 6902 JSON Patch (`STATE_DELTA`), projects typed interactive UI surfaces (`ACTIVITY_SNAPSHOT`), and pauses/resumes sensitive actions via native HITL `Interrupt` flows.
+- 🔒 **Orthogonal Clean Architecture** — Pull in only the adapters your service needs (`Quarkus`, plain `LangChain4j`, `Quarkus LangChain4j`, `A2A`, or `@agui/svelte`), governed by strict inward-pointing package boundaries and zero duplicated upstream POJOs.
+
+## How It Works
+
+In a Tri-Protocol application, each open specification handles one distinct boundary of an agent turn while **Quarkus AG-UI** translates everything into a single reactive event stream for the user interface:
+
+```mermaid
+%%{init: {'theme': 'neutral'}}%%
+flowchart LR
+    UI["Svelte 5 Client (@agui/svelte)"] <-->|"AG-UI WS (/api/agent/ws) & SSE (/api/agent/run)"| Q["Quarkus Orchestrator (:8080)\nag-ui-quarkus + ag-ui-quarkus-langchain4j"]
+    Q <-->|"MCP Streamable HTTP"| MCP["Quarkus MCP Server (:8081)\n@Tool + @ResourceTemplate"]
+    Q -->|"A2A 1.5.0.Final JSON-RPC\n(AgUiA2aClient)"| A2A["A2A Specialist (:8082)\n/.well-known/agent-card.json"]
+```
+
+1. **Agent <-> User (`AG-UI`)**: The browser sends a canonical `RunAgentInput` turn (or HITL resume payload) over WebSockets or HTTP POST and receives live token deltas, reasoning steps, `ACTIVITY_SNAPSHOT` cards, and RFC 6902 `STATE_DELTA` patches.
+2. **Agent <-> Tools & Resources (`MCP`)**: The orchestrator invokes domain `@Tool` endpoints and URI `@ResourceTemplate`s over MCP Streamable HTTP, surfacing tool arguments, results, and provenance directly on the AG-UI timeline.
+3. **Agent <-> Specialist Agents (`A2A`)**: `AgUiA2aClient` resolves remote `AgentCard` metadata (`/.well-known/agent-card.json`), delegates structured tasks over JSON-RPC 2.0 / SSE, and maps remote artifacts into AG-UI `STEP_*` and activity events.
+
+### Module Overview
+
+| Module | Target | When to Use It |
+| :--- | :--- | :--- |
+| [`ag-ui-bom`](ag-ui-bom/pom.xml) | Maven BOM | Aligns versions across `org.agui:0.2.0`, `com.ag-ui.community:0.1.1` & `a2a-java-sdk-bom:1.5.0.Final` |
+| [`ag-ui-quarkus`](ag-ui-quarkus/pom.xml) | Java 17 | Exposing AG-UI over Quarkus Mutiny SSE (`AgUiQuarkusBridge`) or WebSockets (`AgUiWebSocketHandler`) + GraalVM native |
+| [`ag-ui-langchain4j`](ag-ui-langchain4j/pom.xml) | Java 17 | Adapting standard `dev.langchain4j` `TokenStream`s, RFC 6902 state patches, activities & HITL interrupts on any JVM |
+| [`ag-ui-quarkus-langchain4j`](ag-ui-quarkus-langchain4j/pom.xml) | Java 17 | Bridging Quarkiverse `@RegisterAiService` (`Multi<ChatEvent>`) directly into AG-UI event streams |
+| [`ag-ui-a2a`](ag-ui-a2a/pom.xml) | Java 17 | Delegating tasks to official A2A `1.5.0.Final` specialist agents and mapping `Task`/`Artifact` updates to AG-UI |
+| [`packages/agui-svelte`](packages/agui-svelte/package.json) | Svelte 5 / JS | Connecting a Svelte 5 Runes or JS frontend via `WebSocketAgent`, `HttpAgent`, `createAgUiStore` & activity registries |
+| [`examples/quarkus-svelte-skeleton`](examples/quarkus-svelte-skeleton/README.md) | Java 25 + SPA | Exploring the full 3-service **Nomad Concierge** Tri-Protocol reference app (`:8080`, `:8081`, `:8082`) |
 
 ## Quickstart
 
 > [!TIP]
-> Launch the full 3-service **Nomad Tri-Protocol Showcase** (`:8080` Quinoa Svelte 5 Studio + Orchestrator, `:8081` MCP Server, `:8082` A2A Specialist) in one command with `./examples/quarkus-svelte-skeleton/run-showcase.sh --docker`, or wire the libraries directly into your own app below.
+> **Want to explore a working app before writing code?** Run `./examples/quarkus-svelte-skeleton/run-showcase.sh --docker` to launch the complete 3-service **Nomad Cultural & Architectural Concierge** on `http://localhost:8080` (see the [Showcase Guide](./examples/quarkus-svelte-skeleton/README.md)), or follow the three steps below to add Quarkus AG-UI to your own project.
 
-### 1. Install
+### 1. Install Dependencies
 
-Add `org.agui:ag-ui-bom` to your Maven `<dependencyManagement>` (Java 17+) and install `@agui/svelte` in your Svelte 5 / JS client:
+Import `org.agui:ag-ui-bom` in your Maven `pom.xml` (Java 17+) and add `@agui/svelte` to your frontend workspace:
 
 ```xml
 <dependencyManagement>
@@ -81,9 +90,35 @@ Add `org.agui:ag-ui-bom` to your Maven `<dependencyManagement>` (Java 17+) and i
 pnpm add @agui/svelte @ag-ui/client @ag-ui/core
 ```
 
-### 2. Minimal Working Example
+### 2. Stream an Agent from Quarkus
 
-Connect a Svelte 5 client over full-duplex WebSockets (or `HttpAgent` over SSE) using `@agui/svelte`:
+Inject `AgUiQuarkusLangChain4jBridge` to adapt a reactive `@RegisterAiService` (`Multi<ChatEvent>`) into canonical AG-UI Server-Sent Events (or pair an `Agent` with `AgUiWebSocketHandler` for full-duplex WebSockets):
+
+```java
+import com.agui.community.core.agent.RunAgentInput;
+import io.smallrye.mutiny.Multi;
+import jakarta.inject.Inject;
+import jakarta.ws.rs.*;
+import jakarta.ws.rs.core.MediaType;
+import org.agui.langchain4j.adapters.AgUiRunOptions;
+import org.agui.quarkus.langchain4j.adapters.AgUiQuarkusLangChain4jBridge;
+
+@Path("/api/agent")
+public class ConciergeResource {
+    @Inject AgUiQuarkusLangChain4jBridge bridge;
+    @Inject ConciergeAiService ai; // @RegisterAiService returning Multi<ChatEvent>
+
+    @POST @Path("/run") @Produces(MediaType.SERVER_SENT_EVENTS)
+    public Multi<String> stream(RunAgentInput input) {
+        return bridge.adaptToSse(input.threadId(), ai.chat(input.threadId(), extractUserPrompt(input)),
+            AgUiRunOptions.builder().runId(input.runId()).build());
+    }
+}
+```
+
+### 3. Connect a Svelte 5 Client
+
+Create a reactive AG-UI store over WebSockets (or `HttpAgent` over SSE) and trigger a streaming turn:
 
 ```javascript
 import { WebSocketAgent, AGUI_ACTIVITY_TYPES, createAgUiStore, createActivityRegistry } from '@agui/svelte';
@@ -97,7 +132,7 @@ await store.runAgent('Plan a 4-night architecture and tea trip in Kyoto with a $
 });
 ```
 
-Expected output (canonical AG-UI wire frames on `/api/agent/ws` or `POST /api/agent/run`):
+Expected canonical AG-UI wire frames streamed back to the client:
 
 ```text
 data: {"type":"RUN_STARTED","threadId":"thread-1","runId":"run-demo-1"}
@@ -107,26 +142,6 @@ data: {"type":"STATE_DELTA","delta":[{"op":"replace","path":"/activeCity","value
 data: {"type":"TEXT_MESSAGE_CONTENT","messageId":"msg-1","delta":"Here is your 4-night Kyoto architectural itinerary..."}
 data: {"type":"RUN_FINISHED","threadId":"thread-1","runId":"run-demo-1","outcome":"success"}
 ```
-
-## How It Works
-
-```mermaid
-%%{init: {'theme': 'neutral'}}%%
-flowchart LR
-    UI["Svelte 5 Client (@agui/svelte)"] <-->|"AG-UI WS (/api/agent/ws) & SSE (/api/agent/run)"| Q["Quarkus Orchestrator (:8080)\nag-ui-quarkus + ag-ui-quarkus-langchain4j"]
-    Q <-->|"MCP Streamable HTTP"| MCP["Quarkus MCP Server (:8081)\n@Tool + @ResourceTemplate"]
-    Q -->|"A2A 1.5.0.Final JSON-RPC\n(AgUiA2aClient)"| A2A["A2A Specialist (:8082)\n/.well-known/agent-card.json"]
-```
-
-| Module | Target | Role & Key Capabilities |
-| :--- | :--- | :--- |
-| [`ag-ui-bom`](ag-ui-bom/pom.xml) | Maven BOM | Unified versions for `org.agui:0.2.0`, `com.ag-ui.community:0.1.1` & `a2a-java-sdk-bom:1.5.0.Final` |
-| [`ag-ui-quarkus`](ag-ui-quarkus/pom.xml) | Java 17 | CDI Jackson MixIns, `AgUiQuarkusBridge` (Mutiny SSE), `AgUiWebSocketHandler` & 57-type GraalVM reflection |
-| [`ag-ui-langchain4j`](ag-ui-langchain4j/pom.xml) | Java 17 | Framework-agnostic `TokenStream` & `Agent` adapter, RFC 6902 `AgUiStatePatch`, `ACTIVITY_SNAPSHOT` & HITL `Interrupt` |
-| [`ag-ui-quarkus-langchain4j`](ag-ui-quarkus-langchain4j/pom.xml) | Java 17 | Quarkiverse `@RegisterAiService` (`Multi<ChatEvent>`) reactive bridge (`AgUiQuarkusLangChain4jBridge`) |
-| [`ag-ui-a2a`](ag-ui-a2a/pom.xml) | Java 17 | Official A2A `1.5.0.Final` `AgUiA2aClient`, `A2aDelegationResult` & `AgUiA2aBridge` (`Step*` / `ActivitySnapshot`) |
-| [`packages/agui-svelte`](packages/agui-svelte/package.json) | Svelte 5 / JS | Headless `HttpAgent`, `WebSocketAgent`, `createAgUiStore`, CWE-1321-safe `applyJsonPatch` & activity registry |
-| [`examples/quarkus-svelte-skeleton`](examples/quarkus-svelte-skeleton/README.md) | Java 25 + SPA | Nomad Concierge 3-service showcase (`mcp-server :8081`, `a2a-server :8082`, `backend + Quinoa SPA :8080`) |
 
 <details>
 <summary><strong>Tri-Protocol Showcase CLI Recipes, Native Builds & Runtime Configuration</strong></summary>
