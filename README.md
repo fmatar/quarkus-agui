@@ -83,14 +83,14 @@ pnpm add @agui/svelte @ag-ui/client @ag-ui/core
 
 ### 2. Minimal Working Example
 
-Connect a Svelte 5 client over full-duplex WebSockets (with automatic SSE fallback) using `@agui/svelte`:
+Connect a Svelte 5 client over full-duplex WebSockets (or `HttpAgent` over SSE) using `@agui/svelte`:
 
 ```javascript
-import { WebSocketAgent, createAgUiStore, createActivityRegistry } from '@agui/svelte';
+import { WebSocketAgent, AGUI_ACTIVITY_TYPES, createAgUiStore, createActivityRegistry } from '@agui/svelte';
 
 const agent = new WebSocketAgent({ url: 'ws://localhost:8080/api/agent/ws', threadId: 'thread-1' });
-const activities = createActivityRegistry();
-const store = createAgUiStore({ agent, activityRegistry: activities });
+const store = createAgUiStore({ agent, threadId: 'thread-1' });
+const activities = createActivityRegistry().register(AGUI_ACTIVITY_TYPES.WEATHER, 'WeatherCard');
 
 await store.runAgent('Plan a 4-night architecture and tea trip in Kyoto with a $2,400 USD budget', {
     forwardedProps: { llmMode: 'ollama:llama3.2:latest' }

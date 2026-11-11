@@ -12,7 +12,7 @@
 | :--- | :--- | :--- |
 | `AgUiTransportType` | Domain (L0) | Enum (`SSE`, `WEBSOCKET`) identifying active AG-UI transport mode |
 | `AgUiTransportSession` | Application (L1) | Port interface (`sessionId()`, `transportType()`, `isOpen()`, `sendJson(String)`) |
-| `AgUiSessionRegistry` | Application (L1) | Thread-safe `@ApplicationScoped` registry (`register`, `unregister`, `find`, `activeSessions`, `broadcastJson`) |
+| `AgUiSessionRegistry` | Application (L1) | Thread-safe `@ApplicationScoped` registry (`register`, `unregister`, `find`, `activeCount`, `broadcastJson`) |
 | `AgUiQuarkusBridge` | Adapter (L2) | `run(Agent, RunAgentInput)`, `runAsSse(...)`, `runAsJsonPayloads(...)`, `toSseFrames(Multi<Event>)`, `toMulti(Flow.Publisher)`, `unwrapSseData(String)` |
 | `AgUiWebSocketHandler` | Adapter (L2) | `onOpen`, `onClose`, `onError`, `runAndSend(Agent, String, WebSocketConnection)`, `cancelRun`, `handleControlFrame`, `setStreamIdleTimeout` (`60s` default) |
 | `AgUiJacksonSerializer` | Adapter (L2) | Upstream `Serializer` implementation backed by Jackson + `AgUiJacksonMixins` |
@@ -21,13 +21,13 @@
 ### 1.2 `org.agui:ag-ui-langchain4j`
 | Class / Record | Ring | Key Methods & Responsibility |
 | :--- | :--- | :--- |
-| `AgUiStatePatch` | Domain (L0) | RFC 6902 JSON Patch builder (`add`, `replace`, `remove`, `escapePointerSegment`, `toStateDeltaEvent`) |
-| `McpToolMetadata` | Domain (L0) | Metadata record (`serverName`, `toolName`, `callType`, `resourceUri`) for MCP provenance |
+| `AgUiStatePatch` | Domain (L0) | RFC 6901/6902 JSON Patch builder (`toPointer`, `add`, `replace`, `remove`, `upsertRootFields`) |
+| `McpToolMetadata` | Domain (L0) | Metadata record (`serverName`, `toolName`, `transport`) for MCP tool provenance |
 | `AgUiLangChain4jBridge` | Adapter (L2) | `adapt(threadId, TokenStream, AgUiRunOptions)`, `asAgent(streamFactory, optionsFactory)`, `newSession(...)` |
 | `AgUiLangChain4jRunSession` | Adapter (L2) | Per-run state machine translating thinking, RAG retrieval, tool calls, `ACTIVITY_SNAPSHOT`s, patches, tokens, and HITL interrupts |
 | `AgUiRunOptions` | Adapter (L2) | Builder configuring `runId`, `llmMode`, `initialStateSnapshot`, `toolClassifier`, `postToolStatePatchProvider`, `postRunStatePatchProvider`, `postToolActivityProvider`, `postRunActivityProvider`, `interruptSupplier`, `runResultSupplier` |
 | `AgUiMcpBridge` | Adapter (L2) | Builds canonical MCP tool-call and resource provenance payloads for `Event.rawEvent()` |
-| `AgUiToolClassifier` | Adapter (L2) | Classifies executed tools into Tri-Protocol `callType` categories (`mcp:tool`, `mcp:sampling`, `a2a:task`, `agui:surface`, `agui:hitl`) |
+| `AgUiToolClassifier` | Adapter (L2) | Classifies executed tools into Tri-Protocol `callType` categories (`mcp:tool`, `mcp:sampling`, `a2a:task`, `tool:ui`, `hitl:approval`) |
 
 ### 1.3 `org.agui:ag-ui-quarkus-langchain4j`
 | Class | Ring | Key Methods & Responsibility |
@@ -53,7 +53,7 @@
 - **RFC 6902 JSON Patch** (`packages/agui-svelte/src/json-patch.js`):
   - `applyJsonPatch(state, operations)`, `applyJsonPatchOperation(state, op)`, `unescapeJsonPointerToken(token)` — Immutable updates rejecting `__proto__`, `constructor`, and `prototype` (CWE-1321)
 - **Canonical `ACTIVITY_SNAPSHOT` Registry** (`packages/agui-svelte/src/activities.js`, `ADR-008`):
-  - `AGUI_ACTIVITY_TYPES` (`WEATHER`, `LOCATION_MAP`, `SECURITY_ADVISORY`, `FX_BUDGET`, `CULTURE_AUDIO`), `createActivityRegistry`, `upsertActivityList`, `buildPlaceMapLinks`, `sanitizeExternalUrl`, `formatCoordinatesLabel`
+  - `AGUI_ACTIVITY_TYPES` (`WEATHER`, `MAP_PLACES`, `SECURITY_ADVISORY`, `FX_BUDGET`, `CULTURE_AUDIO`), `createActivityRegistry`, `upsertActivityList`, `buildPlaceMapLinks`, `sanitizeExternalUrl`, `formatCoordinatesLabel`
 - **Tri-Protocol Wire Taxonomy** (`packages/agui-svelte/src/taxonomy.js`):
   - `PROTOCOL_CALL_TAXONOMY`, `resolveProtocolCallMeta`, `resolveEventProtocolMeta`, `filterInspectorEvents`, `recordClientOutboundEvent`
 

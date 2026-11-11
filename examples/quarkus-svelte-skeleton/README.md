@@ -163,7 +163,7 @@ examples/quarkus-svelte-skeleton/
     │       └── agui/                      # Reusable Svelte 5 AG-UI Component & ACTIVITY_SNAPSHOT Surface Kit (ADR-008)
     │           ├── AgUiActivityRenderer.svelte    # Polymorphic ACTIVITY_SNAPSHOT dispatcher over AGUI_ACTIVITY_TYPES
     │           ├── AgUiWeatherCard.svelte         # Open-Meteo live conditions & forecast activity card (agui:weather)
-    │           ├── AgUiLocationMapCard.svelte     # Deep-linked Google/Apple/OSM/Wikipedia map card & lazy OSM preview (agui:location-map)
+    │           ├── AgUiLocationMapCard.svelte     # Deep-linked Google/Apple/OSM/Wikipedia map card & lazy OSM preview (agui:map-places)
     │           ├── AgUiSecurityAdvisoryCard.svelte # REST Countries v5 travel & entry advisory card (agui:security-advisory)
     │           ├── AgUiFxBudgetCard.svelte        # Frankfurter / ISO 4217 FX & per-diem budget audit card (agui:fx-budget)
     │           ├── AgUiCultureAudioCard.svelte    # Wikipedia landmark + 30s Apple iTunes audio preview card (agui:culture-audio)

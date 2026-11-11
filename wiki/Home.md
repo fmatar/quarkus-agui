@@ -115,7 +115,7 @@ public class AgentWsEndpoint {
 ```javascript
 import {
     WebSocketAgent,
-    HttpAgent,
+    AGUI_ACTIVITY_TYPES,
     createAgUiStore,
     createActivityRegistry
 } from '@agui/svelte';
@@ -124,13 +124,10 @@ const wsAgent = new WebSocketAgent({
     url: 'ws://localhost:8080/api/agent/ws',
     threadId: 'thread-nomad-1'
 });
-const fallbackSseAgent = new HttpAgent({
-    url: 'http://localhost:8080/api/agent/run',
-    threadId: 'thread-nomad-1'
-});
 
-const activities = createActivityRegistry();
-const store = createAgUiStore({ agent: wsAgent, fallbackAgent: fallbackSseAgent, activityRegistry: activities });
+// Or pass `endpoint: 'http://localhost:8080/api/agent/run'` for SSE transport via HttpAgent
+const store = createAgUiStore({ agent: wsAgent, threadId: 'thread-nomad-1' });
+const activities = createActivityRegistry().register(AGUI_ACTIVITY_TYPES.MAP_PLACES, 'LocationMapCard');
 
 // Trigger a streaming agent turn
 await store.runAgent('Plan a 4-night architecture and tea trip in Kyoto with a $2,400 USD budget', {
@@ -138,7 +135,7 @@ await store.runAgent('Plan a 4-night architecture and tea trip in Kyoto with a $
 });
 
 // Resume a Human-in-the-Loop (HITL) Interrupt (e.g., sanctuary reservation > $1,500 USD)
-// await store.resumeInterrupt(interruptId, { approved: true });
+// await store.resumeInterrupt(interruptId, 'resolved', { approved: true });
 ```
 
 ---
