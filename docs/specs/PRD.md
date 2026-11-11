@@ -17,11 +17,11 @@ The **AG-UI (Agent–User Interaction Protocol)** standardizes real-time, bidire
 
 1. **Java 17 Orthogonal Library Modules (`org.agui` managed by `ag-ui-bom`)**:
    - `ag-ui-quarkus`: Quarkus CDI `AgUiObjectMapperCustomizer` (Jackson MixIns matching `@ag-ui/core` Zod schemas), `AgUiQuarkusBridge` (Mutiny `Multi` SSE), reusable `AgUiWebSocketHandler` + `AgUiSessionRegistry`, and 57-type GraalVM `reflect-config.json` with zero LangChain4j/A2A lock-in.
-   - `ag-ui-langchain4j`: Framework-agnostic `dev.langchain4j` `TokenStream` & `Agent` bridge (`AgUiLangChain4jBridge`, per-run `AgUiLangChain4jRunSession`, RFC 6902 `AgUiStatePatch`, `AgUiMcpBridge`, and native HITL `InterruptOutcome`).
+   - `ag-ui-langchain4j`: Framework-agnostic `dev.langchain4j` `TokenStream` & `Agent` bridge (`AgUiLangChain4jBridge`, per-run `AgUiLangChain4jRunSession`, `AgUiRunOptions` `postToolActivityProvider` & `postRunActivityProvider` `ActivitySnapshotEvent` hooks, RFC 6902 `AgUiStatePatch`, `AgUiMcpBridge`, and native HITL `InterruptOutcome`).
    - `ag-ui-quarkus-langchain4j`: Reactive Quarkiverse `Multi<ChatEvent>` adapter (`AgUiQuarkusLangChain4jBridge`).
    - `ag-ui-a2a`: Official `org.a2aproject.sdk` `1.4.0.Final` adapter (`AgUiA2aBridge` emitting canonical `StepStartedEvent`, `ActivitySnapshotEvent`, and `StepFinishedEvent`).
 2. **Headless Svelte 5 SDK (`packages/agui-svelte` / `@agui/svelte`)**:
-   - Wraps `@ag-ui/client` (`HttpAgent`, `AbstractAgent`) and `@ag-ui/core` with full-duplex `WebSocketAgent`, immutable RFC 6902 `applyJsonPatch` (with CWE-1321 prototype-pollution guards), `rawEvent` Tri-Protocol taxonomy extraction, and `createAgUiStore` / `useAgUiAgent`.
+   - Wraps `@ag-ui/client` (`HttpAgent`, `AbstractAgent`) and `@ag-ui/core` with full-duplex `WebSocketAgent`, immutable RFC 6902 `applyJsonPatch` (with CWE-1321 prototype-pollution guards), `rawEvent` Tri-Protocol taxonomy extraction, canonical activity surface helpers (`AGUI_ACTIVITY_TYPES`, `createActivityRegistry`, `sanitizeExternalUrl`, `buildPlaceMapLinks`), and `createAgUiStore` / `useAgUiAgent`.
 3. **Nomad Tri-Protocol Reference Showcase (`examples/quarkus-svelte-skeleton`)**:
    - `mcp-server` (`:8081`), `a2a-server` (`:8082`), and `backend` (`:8080`, bundling the SvelteKit 5 + Skeleton v4 + Tailwind v4 SPA via **Quarkus Quinoa** and packaging daemonless **Jib** containers).
 
@@ -61,5 +61,5 @@ The **AG-UI (Agent–User Interaction Protocol)** standardizes real-time, bidire
 ### US-007 (`CAP-07`, #8, #74, #81): Standard CDI Discovery & GraalVM 25 Reflection Metadata
 - [x] Standard `META-INF/beans.xml` + `AgUiObjectMapperCustomizer` + 57-type `reflect-config.json` verified under `Mandrel-25.0.5.0-Final`.
 
-### US-008 (`CAP-08`, #9, #85, #87): Full Showcase Cutover, E2E Wire Validation & `v0.1.0` Release
-- [x] Live 3-service E2E stack verified against `@ag-ui/client` Zod wire schemas; Dual-Gate coverage (`>= 85%`) and mutation kill scores (`81%–97%`) verified across all modules.
+### US-008 (`CAP-08`, #9, #85, #87, #93, #95): Full Showcase Cutover, `local-quarkus-agui` CI & `v0.2.0` Release
+- [x] Live 3-service E2E stack verified against `@ag-ui/client` Zod wire schemas and 5 canonical `ACTIVITY_SNAPSHOT` surfaces; self-hosted `local-quarkus-agui` GitHub Actions CI, Dual-Gate coverage (`>= 85%`), and mutation kill scores (`85%–97%`) verified across all modules for `v0.2.0`.

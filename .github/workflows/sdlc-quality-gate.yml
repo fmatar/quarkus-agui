@@ -11,9 +11,13 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   quality-gate:
     name: Tri-Protocol Quality Gate (local-quarkus-agui)
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: local-quarkus-agui
     timeout-minutes: 25
 
@@ -110,13 +114,17 @@ jobs:
 
       - name: Run Changed-Module PITest Mutation Defense
         shell: bash
+        env:
+          GH_EVENT_NAME: ${{ github.event_name }}
+          GH_BASE_REF: ${{ github.base_ref }}
+          GH_BEFORE_SHA: ${{ github.event.before }}
         run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            BASE_REF="${{ github.base_ref || 'develop' }}"
+          if [ "$GH_EVENT_NAME" = "pull_request" ]; then
+            BASE_REF="${GH_BASE_REF:-develop}"
             DIFF_LABEL="origin/$BASE_REF...HEAD"
             CHANGED_FILES=$(git diff --name-only "origin/$BASE_REF"...HEAD 2>/dev/null || git diff --name-only HEAD~1 2>/dev/null || true)
           else
-            BEFORE_SHA="${{ github.event.before }}"
+            BEFORE_SHA="$GH_BEFORE_SHA"
             if [ -n "$BEFORE_SHA" ] && [ "$BEFORE_SHA" != "0000000000000000000000000000000000000000" ] && git cat-file -e "${BEFORE_SHA}^{commit}" 2>/dev/null; then
               DIFF_LABEL="${BEFORE_SHA}..HEAD"
               CHANGED_FILES=$(git diff --name-only "${BEFORE_SHA}..HEAD" 2>/dev/null || git diff --name-only HEAD~1 2>/dev/null || true)

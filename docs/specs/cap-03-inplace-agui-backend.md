@@ -2,14 +2,14 @@
 
 - **Linked Capability**: `CAP-03`
 - **Depends On**: `CAP-02`
-- **Tickets**: `#4`, `#51`, `#85`
+- **Tickets**: `#4`, `#51`, `#85`, `#93`
 - **Module**: `examples/quarkus-svelte-skeleton/backend`
-- **Status**: `IMPLEMENTED (Amended by ADR-007)`
+- **Status**: `AMENDED (ADR-008)`
 
 ## 1. Problem Statement & Technical Scope
 Streams the canonical **AG-UI Protocol** (`com.ag-ui.community:java-core:0.1.1`) over `POST /api/agent/run` (`text/event-stream`) and `/api/agent/ws` (`WebSockets Next`):
 - Accepts canonical `RunAgentInput` (`threadId`, `runId`, `state`, `messages`, `tools`, `context`, `forwardedProps`, `resume`).
-- Emits `RUN_STARTED`, `REASONING_*`, `STEP_STARTED`/`STEP_FINISHED`, `ACTIVITY_SNAPSHOT`, `TOOL_CALL_*`, `STATE_SNAPSHOT`, RFC 6902 `STATE_DELTA` (`List<JsonPatchOperation>`), `TEXT_MESSAGE_*`, and `RUN_FINISHED` / `RUN_ERROR`.
+- Emits `RUN_STARTED`, `REASONING_*`, `STEP_STARTED`/`STEP_FINISHED`, `TOOL_CALL_*`, `ACTIVITY_SNAPSHOT` (`postToolActivityProvider` & `postRunActivityProvider`), `STATE_SNAPSHOT`, RFC 6902 `STATE_DELTA` (`List<JsonPatchOperation>`, syncing 5-section `reportSections`), `TEXT_MESSAGE_*`, and `RUN_FINISHED` / `RUN_ERROR`.
 - Attaches Tri-Protocol provenance (`AG-UI`, `MCP`, `A2A`) in `Event.rawEvent()`.
 - Emits native AG-UI `InterruptOutcome(List<Interrupt>)` for high-budget (`>= $1,500 USD`) sanctuary reservations and resumes via `RunAgentInput.resume()`.
 
