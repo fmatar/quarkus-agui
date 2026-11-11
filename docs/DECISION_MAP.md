@@ -57,6 +57,7 @@ flowchart TD
   _87["Ticket #87 (chore/issue-#87-release-v0.1.0)"]
   _90["Ticket #90 (fix/issue-#90-cold-start-readiness-timeout)"]
   _95["Ticket #95 (chore/issue-#95-release-v0.2.0)"]
+  _102["Ticket #102 (feature/issue-#102-sync-docs-and-sdlc-wiki)"]
   CAP_01 -->|specified_by| SPEC_01
   CAP_02 -->|specified_by| SPEC_02
   CAP_02 -->|depends_on| CAP_01
