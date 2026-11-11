@@ -1570,6 +1570,54 @@ class NomadConciergeOrchestratorServiceTest {
         assertEquals("Malta", A2aGatewayClient.resolveCountryForCity("Valletta, Malta"));
         assertEquals("France", A2aGatewayClient.resolveCountryForCity("Bordeaux,"));
         assertEquals("Valletta", A2aGatewayClient.resolveCountryForCity("Valletta"));
+        A2aGatewayClient.registerCityCountry("Valletta", "Malta");
+        assertEquals("Malta", A2aGatewayClient.resolveCountryForCity("Valletta"));
+        assertEquals("Malta", A2aGatewayClient.resolveCountryForCity("Valletta,"));
+        assertEquals("USD", A2aGatewayClient.resolveCurrencyForCountry(null));
+        assertEquals("USD", A2aGatewayClient.resolveCurrencyForCountry("   "));
+        assertEquals("EUR", A2aGatewayClient.resolveCurrencyForCountry("France"));
+
+        // Exercise A2aGatewayClient.getAgentCard() UP + UNAVAILABLE fallback + delegateTask edge cases
+        Map<String, Object> upCard = a2aClient.getAgentCard();
+        assertEquals("Nomad-A2A-Specialist", upCard.get("name"));
+        assertEquals("Specialist A2A Travel Advisor Agent", upCard.get("description"));
+        assertEquals(baseUrl, upCard.get("endpoint"));
+        assertEquals("1.5.0", upCard.get("version"));
+        assertEquals("JSONRPC", upCard.get("protocol"));
+        assertEquals(true, upCard.get("streaming"));
+        assertEquals("UP", upCard.get("status"));
+        List<Map<String, String>> upSkills = (List<Map<String, String>>) upCard.get("skills");
+        assertEquals(3, upSkills.size());
+        assertEquals("convert-and-audit-budget", upSkills.get(0).get("id"));
+        assertEquals("FX Audit", upSkills.get(0).get("name"));
+        assertEquals("FX", upSkills.get(0).get("description"));
+
+        assertThrows(IllegalArgumentException.class,
+                () -> a2aClient.delegateTask("t-bad", "unknown-skill", "test", Map.of()));
+        Map<String, Object> defaultSkillOk = a2aClient.delegateTask(null, "  ", null, null);
+        assertEquals("task-1", defaultSkillOk.get("taskId"));
+        assertEquals("convert-and-audit-budget", defaultSkillOk.get("skillId"));
+        assertEquals("COMPLETED", defaultSkillOk.get("status"));
+        assertEquals(false, defaultSkillOk.get("isError"));
+        assertEquals("", defaultSkillOk.get("prompt"));
+
+        a2aClient.a2aBaseUrl = "http://127.0.0.1:1";
+        try {
+            Map<String, Object> downCard = a2aClient.getAgentCard();
+            assertEquals("UNAVAILABLE", downCard.get("status"));
+            assertEquals(false, downCard.get("streaming"));
+            assertEquals(3, ((List<?>) downCard.get("skills")).size());
+
+            Map<String, Object> downExec = a2aClient.delegateTask(null, "verify-travel-advisory", "  ", Map.of("city", "Paris"));
+            assertEquals("task-err", downExec.get("taskId"));
+            assertEquals("Nomad-A2A-Specialist", downExec.get("agentName"));
+            assertEquals("ERROR", downExec.get("status"));
+            assertEquals(true, downExec.get("isError"));
+            assertNotNull(downExec.get("error"));
+        } finally {
+            a2aClient.a2aBaseUrl = baseUrl;
+            a2aClient.close();
+        }
 
         assertEquals("EUR", TripDossierStore.normalizeCurrencyToken("euro"));
         assertEquals("EUR", TripDossierStore.normalizeCurrencyToken("euros"));

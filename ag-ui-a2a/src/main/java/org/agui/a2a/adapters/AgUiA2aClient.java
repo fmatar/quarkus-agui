@@ -2,18 +2,24 @@ package org.agui.a2a.adapters;
 
 import com.agui.community.core.event.Event;
 import java.net.URI;
+import java.net.http.HttpClient;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import org.a2aproject.sdk.client.Client;
@@ -24,7 +30,7 @@ import org.a2aproject.sdk.client.TaskUpdateEvent;
 import org.a2aproject.sdk.client.config.ClientConfig;
 import org.a2aproject.sdk.client.http.A2ACardResolver;
 import org.a2aproject.sdk.client.http.A2AHttpClient;
-import org.a2aproject.sdk.client.http.A2AHttpClientFactory;
+import org.a2aproject.sdk.client.http.JdkA2AHttpClient;
 import org.a2aproject.sdk.client.transport.jsonrpc.JSONRPCTransport;
 import org.a2aproject.sdk.client.transport.jsonrpc.JSONRPCTransportConfigBuilder;
 import org.a2aproject.sdk.client.transport.spi.interceptors.ClientCallContext;
@@ -49,31 +55,54 @@ public final class AgUiA2aClient implements AutoCloseable {
 
     private static final List<String> DEFAULT_OUTPUT_MODES =
             List.of("text/plain", "application/json", "text");
+    private static final AtomicInteger THREAD_SEQ = new AtomicInteger(1);
+
+    private record Session(AgentCard card, Client client) {}
 
     private final String baseUrl;
     private final boolean streaming;
+    private final Duration connectTimeout;
     private final Duration requestTimeout;
     private final A2AHttpClient httpClient;
     private final boolean ownsHttpClient;
     private final Map<String, String> authHeaders;
     private final AgUiA2aBridge bridge;
+    private final ExecutorService ioExecutor;
 
     private final Object lock = new Object();
-    private volatile AgentCard cachedCard;
-    private volatile Client cachedClient;
+    private volatile Session cachedSession;
 
     private AgUiA2aClient(Builder builder) {
         this.baseUrl = normalizeBaseUrl(builder.baseUrl);
         this.streaming = builder.streaming;
+        this.connectTimeout = builder.connectTimeout;
         this.requestTimeout = builder.requestTimeout;
-        this.ownsHttpClient = builder.httpClient == null;
-        this.httpClient = builder.httpClient != null ? builder.httpClient : A2AHttpClientFactory.create();
+        this.ownsHttpClient = builder.httpClient == null || builder.closeHttpClientOnShutdown;
+        this.httpClient = builder.httpClient != null
+                ? builder.httpClient
+                : new JdkA2AHttpClient(HttpClient.newBuilder()
+                        .connectTimeout(this.connectTimeout)
+                        .followRedirects(HttpClient.Redirect.NEVER)
+                        .build());
         this.authHeaders = Map.copyOf(builder.authHeaders);
         this.bridge = builder.bridge != null ? builder.bridge : new AgUiA2aBridge();
+        this.ioExecutor = Executors.newCachedThreadPool(runnable -> {
+            Thread t = new Thread(runnable, "agui-a2a-io-" + THREAD_SEQ.getAndIncrement());
+            t.setDaemon(true);
+            return t;
+        });
     }
 
     public static Builder builder(String baseUrl) {
         return new Builder(baseUrl);
+    }
+
+    public Duration connectTimeout() {
+        return connectTimeout;
+    }
+
+    public Duration requestTimeout() {
+        return requestTimeout;
     }
 
     public record DelegationExecution(
@@ -89,35 +118,24 @@ public final class AgUiA2aClient implements AutoCloseable {
 
     /**
      * Resolves (and caches) the remote {@link AgentCard} from {@code /.well-known/agent-card.json}
-     * via the official {@link A2ACardResolver}, rebinding container/proxy advertised URLs to {@code baseUrl}.
+     * via the official {@link A2ACardResolver}, bounded by {@code requestTimeout}, and rebinds
+     * container/proxy advertised URLs onto {@code baseUrl}.
      */
     public AgentCard resolveAgentCard() throws A2AClientError, A2AClientException {
-        AgentCard existing = cachedCard;
-        if (existing != null) {
-            return existing;
-        }
-        synchronized (lock) {
-            if (cachedCard == null) {
-                AgentCard rawCard = A2ACardResolver.builder()
-                        .baseUrl(baseUrl)
-                        .httpClient(httpClient)
-                        .authHeaders(authHeaders)
-                        .build()
-                        .getAgentCard();
-                AgentCard rebound = rebindCardEndpoints(rawCard, baseUrl);
-                ClientConfig clientConfig = ClientConfig.builder()
-                        .setStreaming(streaming)
-                        .setAcceptedOutputModes(DEFAULT_OUTPUT_MODES)
-                        .build();
-                cachedClient = Client.builder(rebound)
-                        .clientConfig(clientConfig)
-                        .withTransport(
-                                JSONRPCTransport.class,
-                                new JSONRPCTransportConfigBuilder().httpClient(httpClient))
-                        .build();
-                cachedCard = rebound;
+        try {
+            return resolveSessionBounded().card();
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+            throw new A2AClientException("AgentCard resolution interrupted", ie);
+        } catch (TimeoutException te) {
+            throw new A2AClientException(
+                    "AgentCard resolution timed out after " + requestTimeout.toMillis() + "ms", te);
+        } catch (ExecutionException ee) {
+            Throwable cause = ee.getCause() != null ? ee.getCause() : ee;
+            if (cause instanceof RuntimeException re) {
+                throw re;
             }
-            return cachedCard;
+            throw new A2AClientException("AgentCard resolution failed: " + cause.getMessage(), cause);
         }
     }
 
@@ -138,10 +156,17 @@ public final class AgUiA2aClient implements AutoCloseable {
                 ? UUID.randomUUID().toString()
                 : requestId;
 
+        if (Thread.currentThread().isInterrupted()) {
+            return fromFailure(null, effectiveId, skillId, "A2A delegation interrupted");
+        }
+
         AgentCard card = null;
+        CompletableFuture<?> dispatchFuture = null;
         try {
-            card = resolveAgentCard();
-            Client client = cachedClient;
+            long deadlineNanos = System.nanoTime() + requestTimeout.toNanos();
+            Session session = resolveSessionBounded();
+            card = session.card();
+            Client client = session.client();
             boolean effectiveStreaming = streaming
                     && card.capabilities() != null
                     && Boolean.TRUE.equals(card.capabilities().streaming());
@@ -188,20 +213,38 @@ public final class AgUiA2aClient implements AutoCloseable {
             };
             Consumer<Throwable> errorHandler = outcomeFuture::completeExceptionally;
 
-            client.sendMessage(userMessage, List.of(eventConsumer), errorHandler, callContext);
+            if (effectiveStreaming) {
+                client.sendMessage(userMessage, List.of(eventConsumer), errorHandler, callContext);
+            } else {
+                dispatchFuture = CompletableFuture.runAsync(() -> {
+                    try {
+                        client.sendMessage(userMessage, List.of(eventConsumer), errorHandler, callContext);
+                    } catch (Throwable t) {
+                        outcomeFuture.completeExceptionally(t);
+                    }
+                }, ioExecutor);
+            }
 
-            Object settled = outcomeFuture.get(requestTimeout.toMillis(), TimeUnit.MILLISECONDS);
+            long remainingMs = Math.max(1L, TimeUnit.NANOSECONDS.toMillis(deadlineNanos - System.nanoTime()));
+            Object settled = outcomeFuture.get(remainingMs, TimeUnit.MILLISECONDS);
             if (settled instanceof Message replyMsg) {
                 return fromDirectMessage(card, effectiveId, skillId, replyMsg);
             }
             return fromCompletedTask(card, skillId, (Task) settled);
         } catch (InterruptedException ie) {
+            cancelFutureQuietly(dispatchFuture);
             Thread.currentThread().interrupt();
             return fromFailure(card, effectiveId, skillId, "A2A delegation interrupted: " + ie.getMessage());
         } catch (TimeoutException te) {
-            return fromFailure(card, effectiveId, skillId, "A2A delegation timed out after " + requestTimeout.toMillis() + "ms");
+            cancelFutureQuietly(dispatchFuture);
+            return fromFailure(
+                    card,
+                    effectiveId,
+                    skillId,
+                    "A2A delegation timed out after " + requestTimeout.toMillis() + "ms");
         } catch (ExecutionException ee) {
             Throwable cause = ee.getCause() != null ? ee.getCause() : ee;
+            invalidate();
             return fromFailure(card, effectiveId, skillId, "A2A delegation failed: " + cause.getMessage());
         } catch (RuntimeException ex) {
             invalidate();
@@ -210,26 +253,87 @@ public final class AgUiA2aClient implements AutoCloseable {
     }
 
     public boolean isCached() {
-        return cachedCard != null;
+        return cachedSession != null;
     }
 
     public void invalidate() {
+        Session previous;
         synchronized (lock) {
-            closeClientQuietly(cachedClient);
-            cachedClient = null;
-            cachedCard = null;
+            previous = cachedSession;
+            cachedSession = null;
+        }
+        if (previous != null) {
+            previous.client().close();
         }
     }
 
     @Override
     public void close() {
         invalidate();
+        ioExecutor.shutdownNow();
         if (ownsHttpClient && httpClient instanceof AutoCloseable closeableHttp) {
             try {
                 closeableHttp.close();
             } catch (Exception ignored) {
                 // Best-effort resource cleanup
             }
+        }
+    }
+
+    private Session resolveSessionBounded()
+            throws InterruptedException, ExecutionException, TimeoutException {
+        Session existing = cachedSession;
+        if (existing != null) {
+            return existing;
+        }
+        return runBounded(() -> {
+            synchronized (lock) {
+                if (cachedSession == null) {
+                    AgentCard rawCard = A2ACardResolver.builder()
+                            .baseUrl(baseUrl)
+                            .httpClient(httpClient)
+                            .authHeaders(authHeaders)
+                            .build()
+                            .getAgentCard();
+                    AgentCard rebound = rebindCardEndpoints(rawCard, baseUrl);
+                    ClientConfig clientConfig = ClientConfig.builder()
+                            .setStreaming(streaming)
+                            .setAcceptedOutputModes(DEFAULT_OUTPUT_MODES)
+                            .build();
+                    Client client = Client.builder(rebound)
+                            .clientConfig(clientConfig)
+                            .withTransport(
+                                    JSONRPCTransport.class,
+                                    new JSONRPCTransportConfigBuilder().httpClient(httpClient))
+                            .build();
+                    cachedSession = new Session(rebound, client);
+                }
+                return cachedSession;
+            }
+        });
+    }
+
+    private <T> T runBounded(Callable<T> task)
+            throws InterruptedException, ExecutionException, TimeoutException {
+        CompletableFuture<T> future = new CompletableFuture<>();
+        java.util.concurrent.Future<?> submitted = ioExecutor.submit(() -> {
+            try {
+                future.complete(task.call());
+            } catch (Throwable t) {
+                future.completeExceptionally(t);
+            }
+        });
+        try {
+            return future.get(requestTimeout.toMillis(), TimeUnit.MILLISECONDS);
+        } catch (TimeoutException | InterruptedException ex) {
+            submitted.cancel(true);
+            throw ex;
+        }
+    }
+
+    private static void cancelFutureQuietly(CompletableFuture<?> future) {
+        if (future != null) {
+            future.cancel(true);
         }
     }
 
@@ -285,14 +389,17 @@ public final class AgUiA2aClient implements AutoCloseable {
         return raw.startsWith("TASK_STATE_") ? raw.substring("TASK_STATE_".length()) : raw;
     }
 
-    static AgentCard rebindCardEndpoints(AgentCard card, String targetBaseUrl) {
-        String reboundCardUrl = rebindSingleUrl(card.url(), targetBaseUrl);
-        List<AgentInterface> interfaces = card.supportedInterfaces();
+    public static AgentCard rebindCardEndpoints(AgentCard card, String targetBaseUrl) {
+        String normalizedBase = normalizeBaseUrl(targetBaseUrl);
+        String reboundCardUrl = rebindSingleUrl(card.url(), normalizedBase);
+        List<AgentInterface> interfaces = card.supportedInterfaces() != null
+                ? card.supportedInterfaces()
+                : List.of();
         List<AgentInterface> reboundInterfaces = new ArrayList<>(interfaces.size());
         for (AgentInterface iface : interfaces) {
             reboundInterfaces.add(new AgentInterface(
                     iface.protocolBinding(),
-                    rebindSingleUrl(iface.url(), targetBaseUrl),
+                    rebindSingleUrl(iface.url(), normalizedBase),
                     iface.tenant(),
                     iface.protocolVersion()));
         }
@@ -302,41 +409,94 @@ public final class AgUiA2aClient implements AutoCloseable {
                 .build();
     }
 
-    static String rebindSingleUrl(String advertisedUrl, String targetBaseUrl) {
+    /**
+     * Safely rebinds an advertised endpoint URL onto {@code targetBaseUrl}'s origin and base path,
+     * preventing host/port prefix-confusion SSRF, credential/userInfo spoofing, non-HTTP(S) schemes,
+     * and protocol-relative {@code //authority} path injection.
+     */
+    public static String rebindSingleUrl(String advertisedUrl, String targetBaseUrl) {
         if (advertisedUrl == null || advertisedUrl.isBlank()) {
             return targetBaseUrl;
         }
-        if (advertisedUrl.startsWith(targetBaseUrl)) {
-            return advertisedUrl;
+        URI advUri;
+        try {
+            advUri = URI.create(advertisedUrl.trim());
+        } catch (IllegalArgumentException ex) {
+            return targetBaseUrl;
         }
-        String path = URI.create(advertisedUrl).getRawPath();
-        return (path == null || path.isEmpty() || "/".equals(path)) ? targetBaseUrl : targetBaseUrl + path;
+        if (!isValidHttpUri(advUri)) {
+            return targetBaseUrl;
+        }
+        String advPath = sanitizePath(advUri.getRawPath());
+        if (advPath.isEmpty()) {
+            return targetBaseUrl;
+        }
+        String basePath = sanitizePath(URI.create(targetBaseUrl).getRawPath());
+        if (!basePath.isEmpty() && (advPath.equals(basePath) || advPath.startsWith(basePath + "/"))) {
+            String suffix = advPath.substring(basePath.length());
+            return suffix.isEmpty() ? targetBaseUrl : targetBaseUrl + suffix;
+        }
+        return targetBaseUrl + advPath;
     }
 
-    static String normalizeBaseUrl(String raw) {
+    public static String normalizeBaseUrl(String raw) {
         Objects.requireNonNull(raw, "baseUrl must not be null");
         String trimmed = raw.trim();
+        while (trimmed.endsWith("/")) {
+            trimmed = trimmed.substring(0, trimmed.length() - 1);
+        }
         if (trimmed.isEmpty()) {
             throw new IllegalArgumentException("baseUrl must not be blank");
         }
-        return trimmed.endsWith("/") ? trimmed.substring(0, trimmed.length() - 1) : trimmed;
+        URI parsed = URI.create(trimmed);
+        if (!isValidHttpUri(parsed)) {
+            throw new IllegalArgumentException("baseUrl must be a valid http(s) URL without userInfo: " + raw);
+        }
+        return trimmed;
     }
 
-    private static void closeClientQuietly(Client client) {
-        if (client != null) {
-            try {
-                client.close();
-            } catch (RuntimeException ignored) {
-                // Best-effort transport close
-            }
+    private static boolean isValidHttpUri(URI uri) {
+        String scheme = uri.getScheme();
+        if (scheme == null) {
+            return false;
         }
+        String lower = scheme.toLowerCase(Locale.ROOT);
+        if (!"http".equals(lower) && !"https".equals(lower)) {
+            return false;
+        }
+        return uri.getRawUserInfo() == null && uri.getHost() != null && !uri.getHost().isBlank();
+    }
+
+    private static String sanitizePath(String rawPath) {
+        if (rawPath == null || rawPath.isEmpty() || "/".equals(rawPath)) {
+            return "";
+        }
+        int start = 0;
+        while (start < rawPath.length() && rawPath.charAt(start) == '/') {
+            start++;
+        }
+        if (start >= rawPath.length()) {
+            return "";
+        }
+        String normalized = "/" + rawPath.substring(start);
+        return normalized.endsWith("/") ? normalized.substring(0, normalized.length() - 1) : normalized;
+    }
+
+    private static Duration requirePositiveDuration(Duration value, String name) {
+        Objects.requireNonNull(value, name + " must not be null");
+        if (value.isZero() || value.isNegative()) {
+            throw new IllegalArgumentException(name + " must be positive");
+        }
+        return value;
     }
 
     public static final class Builder {
         private final String baseUrl;
         private boolean streaming;
+        private Duration connectTimeout = Duration.ofSeconds(5);
         private Duration requestTimeout = Duration.ofSeconds(15);
         private A2AHttpClient httpClient;
+        private boolean closeHttpClientOnShutdown;
         private Map<String, String> authHeaders = Map.of();
         private AgUiA2aBridge bridge;
 
@@ -349,13 +509,23 @@ public final class AgUiA2aClient implements AutoCloseable {
             return this;
         }
 
+        public Builder connectTimeout(Duration connectTimeout) {
+            this.connectTimeout = requirePositiveDuration(connectTimeout, "connectTimeout");
+            return this;
+        }
+
         public Builder requestTimeout(Duration requestTimeout) {
-            this.requestTimeout = Objects.requireNonNull(requestTimeout, "requestTimeout must not be null");
+            this.requestTimeout = requirePositiveDuration(requestTimeout, "requestTimeout");
             return this;
         }
 
         public Builder httpClient(A2AHttpClient httpClient) {
+            return httpClient(httpClient, false);
+        }
+
+        public Builder httpClient(A2AHttpClient httpClient, boolean closeOnShutdown) {
             this.httpClient = httpClient;
+            this.closeHttpClientOnShutdown = closeOnShutdown;
             return this;
         }
 

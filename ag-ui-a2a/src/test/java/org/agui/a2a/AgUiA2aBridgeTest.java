@@ -209,7 +209,7 @@ class AgUiA2aBridgeTest {
         assertThrows(NullPointerException.class, () -> bridge.fromA2aClientEvent(null, updateEvent, card));
         assertThrows(NullPointerException.class, () -> bridge.fromA2aClientEvent("s", null, card));
         assertThrows(NullPointerException.class, () -> bridge.extractTaskSummary(null));
-        assertNotNull(bridge.getClass().getClassLoader().getResourceAsStream("META-INF/beans.xml"));
+        assertNotNull(bridge.getClass().getClassLoader().getResource("META-INF/beans.xml"));
 
         Map<String, Object> taskData = bridge.extractTaskData(taskWithArtifact);
         assertEquals(95, taskData.get("score"));
@@ -338,6 +338,23 @@ class AgUiA2aBridgeTest {
                         + "data: " + toJson(new SendStreamingMessageResponse("1", artEvt)) + "\n\n"
                         + "data: " + toJson(new SendStreamingMessageResponse("1", doneEvt)) + "\n\n";
                 writeResponse(exchange, 200, "text/event-stream", ssePayload);
+            } else if (body.contains("sync-hang")) {
+                try {
+                    Thread.sleep(2000L);
+                } catch (InterruptedException ignored) {
+                    Thread.currentThread().interrupt();
+                }
+                writeResponse(exchange, 200, "application/json", "{}");
+            } else if (body.contains("direct-task-error")) {
+                Message errReply = Message.builder()
+                        .role(Message.Role.ROLE_AGENT)
+                        .messageId("msg-err-direct")
+                        .taskId("task-from-direct-msg")
+                        .parts(List.of(
+                                new TextPart("Direct semantic error"),
+                                new DataPart(Map.of("status", "ERROR", "isError", true))))
+                        .build();
+                writeResponse(exchange, 200, "application/json", toJson(new SendMessageResponse("1", errReply)));
             } else if (body.contains("direct-message")) {
                 Message reply = Message.builder()
                         .role(Message.Role.ROLE_AGENT)
@@ -370,6 +387,8 @@ class AgUiA2aBridgeTest {
                 writeResponse(exchange, 200, "application/json", toJson(new SendMessageResponse("1", completed)));
             }
         });
+        java.util.concurrent.ExecutorService serverPool = java.util.concurrent.Executors.newCachedThreadPool();
+        server.setExecutor(serverPool);
         server.start();
 
         try {
@@ -378,11 +397,14 @@ class AgUiA2aBridgeTest {
                     org.a2aproject.sdk.client.http.A2AHttpClientFactory.create();
             try (AgUiA2aClient rpcClient = AgUiA2aClient.builder(baseUrl + "/")
                     .streaming(false)
-                    .requestTimeout(Duration.ofMillis(600))
+                    .connectTimeout(Duration.ofMillis(500))
+                    .requestTimeout(Duration.ofMillis(400))
                     .httpClient(customHttp)
                     .authHeaders(Map.of("Authorization", "Bearer test-token"))
                     .bridge(new AgUiA2aBridge())
                     .build()) {
+                assertEquals(Duration.ofMillis(500), rpcClient.connectTimeout());
+                assertEquals(Duration.ofMillis(400), rpcClient.requestTimeout());
                 assertFalse(rpcClient.isCached());
                 AgentCard resolved = rpcClient.resolveAgentCard();
                 assertTrue(rpcClient.isCached());
@@ -418,12 +440,37 @@ class AgUiA2aBridgeTest {
                 assertEquals("Direct agent reply", directExec.result().summary());
                 assertEquals("direct", directExec.result().data().get("mode"));
 
+                // Direct MessageEvent with explicit taskId and semantic DataPart error
+                AgUiA2aClient.DelegationExecution directErrExec = rpcClient.delegate(
+                        "req-direct-err", "verify-travel-advisory", "direct-task-error", Map.of(), Map.of());
+                assertTrue(directErrExec.result().isError());
+                assertEquals("ERROR", directErrExec.result().status());
+                assertEquals("task-from-direct-msg", directErrExec.result().taskId());
+
                 // Terminal failed TaskState path
                 AgUiA2aClient.DelegationExecution failExec = rpcClient.delegate(
                         "req-3", "verify-travel-advisory", "fail-task", Map.of(), Map.of());
                 assertTrue(failExec.result().isError());
                 assertEquals("ERROR", failExec.result().status());
                 assertEquals("Upstream failure", failExec.result().summary());
+
+                // Synchronous JSON-RPC hang bounded by requestTimeout
+                AgUiA2aClient.DelegationExecution syncTimeoutExec = rpcClient.delegate(
+                        "req-sync-hang", "verify-travel-advisory", "sync-hang", Map.of(), Map.of());
+                assertTrue(syncTimeoutExec.result().isError());
+                assertEquals("ERROR", syncTimeoutExec.result().status());
+                assertTrue(syncTimeoutExec.result().summary().contains("timed out"));
+
+                // Interrupted thread before delegate returns ERROR cleanly
+                Thread.currentThread().interrupt();
+                try {
+                    AgUiA2aClient.DelegationExecution interruptedExec = rpcClient.delegate(
+                            "req-int", "verify-travel-advisory", "Verify Paris", Map.of(), Map.of());
+                    assertTrue(interruptedExec.result().isError());
+                    assertEquals("ERROR", interruptedExec.result().status());
+                } finally {
+                    Thread.interrupted();
+                }
 
                 rpcClient.invalidate();
                 assertFalse(rpcClient.isCached());
@@ -454,12 +501,87 @@ class AgUiA2aBridgeTest {
             }
         } finally {
             server.stop(0);
+            serverPool.shutdownNow();
         }
 
-        // 3. Unreachable endpoint + builder validation
+        // 3. Unreachable endpoint + builder validation + URL SSRF hardening + AutoCloseable ownership
         assertThrows(IllegalArgumentException.class, () -> AgUiA2aClient.builder("   ").build());
+        assertThrows(IllegalArgumentException.class, () -> AgUiA2aClient.builder("ftp://127.0.0.1:8082").build());
+        assertThrows(IllegalArgumentException.class, () -> AgUiA2aClient.builder("http://user@127.0.0.1:8082").build());
+        assertThrows(IllegalArgumentException.class, () -> AgUiA2aClient.builder("http://127.0.0.1:8082")
+                .connectTimeout(Duration.ZERO));
+        assertThrows(IllegalArgumentException.class, () -> AgUiA2aClient.builder("http://127.0.0.1:8082")
+                .requestTimeout(Duration.ofMillis(-1)));
+
+        assertEquals("http://127.0.0.1:8082", AgUiA2aClient.normalizeBaseUrl("http://127.0.0.1:8082///"));
+        assertEquals("https://a2a.internal/sub", AgUiA2aClient.normalizeBaseUrl("https://a2a.internal/sub/"));
+        assertEquals("http://127.0.0.1:8082", AgUiA2aClient.rebindSingleUrl(null, "http://127.0.0.1:8082"));
+        assertEquals("http://127.0.0.1:8082", AgUiA2aClient.rebindSingleUrl("   ", "http://127.0.0.1:8082"));
+        assertEquals("http://127.0.0.1:8082", AgUiA2aClient.rebindSingleUrl("http://[::1", "http://127.0.0.1:8082"));
+        assertEquals("http://127.0.0.1:8082", AgUiA2aClient.rebindSingleUrl("javascript:alert(1)", "http://127.0.0.1:8082"));
+        assertEquals("http://127.0.0.1:8082", AgUiA2aClient.rebindSingleUrl("http://good@evil.tld/rpc", "http://127.0.0.1:8082"));
+        assertEquals("http://127.0.0.1:8082/rpc", AgUiA2aClient.rebindSingleUrl("http://127.0.0.1:80820/rpc", "http://127.0.0.1:8082"));
+        assertEquals("https://a2a.internal/rpc", AgUiA2aClient.rebindSingleUrl("https://a2a.internal.evil.tld/rpc", "https://a2a.internal"));
+        assertEquals("http://127.0.0.1:8082/evil.com", AgUiA2aClient.rebindSingleUrl("http://a2a-server:8082///evil.com/", "http://127.0.0.1:8082"));
+        assertEquals("http://127.0.0.1:8082", AgUiA2aClient.rebindSingleUrl("http://a2a-server:8082///", "http://127.0.0.1:8082"));
+        assertEquals("http://127.0.0.1:8082/proxy/rpc",
+                AgUiA2aClient.rebindSingleUrl("http://127.0.0.1:8082/proxy/rpc", "http://127.0.0.1:8082/proxy"));
+        assertEquals("http://127.0.0.1:8082/proxy",
+                AgUiA2aClient.rebindSingleUrl("http://127.0.0.1:8082/proxy", "http://127.0.0.1:8082/proxy"));
+        assertEquals("http://127.0.0.1:8082/proxy/rpc",
+                AgUiA2aClient.rebindSingleUrl("http://a2a-server:8082/rpc", "http://127.0.0.1:8082/proxy"));
+
+        // Verify DelegationExecution compact constructor null-safe events
+        AgUiA2aClient.DelegationExecution nullEventsExec = new AgUiA2aClient.DelegationExecution(
+                advertisedCard,
+                new A2aDelegationResult("t1", "Nomad", "s1", "COMPLETED", false, "ok", Map.of()),
+                null);
+        assertTrue(nullEventsExec.agUiEvents().isEmpty());
+
+        // Verify close() closes owned AutoCloseable A2AHttpClient and leaves caller-owned A2AHttpClient open
+        class CloseTrackingHttpClient implements org.a2aproject.sdk.client.http.A2AHttpClient, AutoCloseable {
+            int closeCount;
+            final boolean throwOnClose;
+
+            CloseTrackingHttpClient(boolean throwOnClose) {
+                this.throwOnClose = throwOnClose;
+            }
+
+            @Override
+            public GetBuilder createGet() {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public PostBuilder createPost() {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public DeleteBuilder createDelete() {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public void close() {
+                closeCount++;
+                if (throwOnClose) {
+                    throw new IllegalStateException("close boom");
+                }
+            }
+        }
+
+        CloseTrackingHttpClient callerOwned = new CloseTrackingHttpClient(false);
+        AgUiA2aClient.builder("http://127.0.0.1:8082").httpClient(callerOwned).build().close();
+        assertEquals(0, callerOwned.closeCount);
+
+        CloseTrackingHttpClient clientOwned = new CloseTrackingHttpClient(true);
+        AgUiA2aClient.builder("http://127.0.0.1:8082").httpClient(clientOwned, true).build().close();
+        assertEquals(1, clientOwned.closeCount);
+
         try (AgUiA2aClient brokenClient = AgUiA2aClient.builder("http://127.0.0.1:1")
                 .streaming(false)
+                .connectTimeout(Duration.ofMillis(200))
                 .requestTimeout(Duration.ofMillis(300))
                 .build()) {
             AgUiA2aClient.DelegationExecution errExec = brokenClient.delegate(

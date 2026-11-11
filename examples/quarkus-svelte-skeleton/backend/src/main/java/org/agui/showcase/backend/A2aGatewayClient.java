@@ -100,7 +100,6 @@ public class A2aGatewayClient {
 
     private final Object clientLock = new Object();
     private String activeBaseUrl;
-    private VertxA2AHttpClient sharedVertxHttpClient;
     private AgUiA2aClient activeClient;
 
     static void registerCityCountry(String city, String country) {
@@ -183,10 +182,10 @@ public class A2aGatewayClient {
                 closeActiveLocked();
                 AgUiA2aClient.Builder builder = AgUiA2aClient.builder(a2aBaseUrl)
                         .streaming(false)
+                        .connectTimeout(Duration.ofSeconds(3))
                         .requestTimeout(Duration.ofSeconds(6));
                 if (vertxInstance != null && vertxInstance.isResolvable()) {
-                    sharedVertxHttpClient = new VertxA2AHttpClient(vertxInstance.get());
-                    builder.httpClient(sharedVertxHttpClient);
+                    builder.httpClient(new VertxA2AHttpClient(vertxInstance.get()), true);
                 }
                 activeClient = builder.build();
                 activeBaseUrl = a2aBaseUrl;
@@ -206,10 +205,6 @@ public class A2aGatewayClient {
         if (activeClient != null) {
             activeClient.close();
             activeClient = null;
-        }
-        if (sharedVertxHttpClient != null) {
-            sharedVertxHttpClient.close();
-            sharedVertxHttpClient = null;
         }
         activeBaseUrl = null;
     }
