@@ -1,10 +1,10 @@
 # Software Requirements Specification (SRS — IEEE 29148): `quarkus-agui`
 
 - **Standard:** IEEE 29148-2018
-- **Version:** `0.1.1`
+- **Version:** `0.2.0`
 - **System:** `org.agui` (`ag-ui-bom`, `ag-ui-quarkus`, `ag-ui-langchain4j`, `ag-ui-quarkus-langchain4j`, `ag-ui-a2a`, `packages/agui-svelte`, `examples/quarkus-svelte-skeleton`)
 - **Constitution Link:** [`PRODUCT.md`](../../PRODUCT.md)
-- **ADR Links:** [`ADR-001`](../adr/ADR-001-multi-module-maven-sveltekit-clean-architecture-.md), [`ADR-002`](../adr/ADR-002-example-first-tri-protocol-ag-ui-mcp-a2a-evoluti.md), [`ADR-003`](../adr/ADR-003-multi-extension-bom-and-concentric-transport-arc.md), [`ADR-004`](../adr/ADR-004-nomad-concierge-and-svelte5-agui-component-kit.md), [`ADR-005`](../adr/ADR-005-quarkus-langchain4j-mcp-and-smallrye-health.md), [`ADR-006`](../adr/ADR-006-framework-agnostic-module-topology-ag-ui-core-ag.md), [`ADR-007`](../adr/ADR-007-adopt-upstream-ag-ui-sdks-com-ag-ui-community-ag.md)
+- **ADR Links:** [`ADR-001`](../adr/ADR-001-multi-module-maven-sveltekit-clean-architecture-.md), [`ADR-002`](../adr/ADR-002-example-first-tri-protocol-ag-ui-mcp-a2a-evoluti.md), [`ADR-003`](../adr/ADR-003-multi-extension-bom-and-concentric-transport-arc.md), [`ADR-004`](../adr/ADR-004-nomad-concierge-and-svelte5-agui-component-kit.md), [`ADR-005`](../adr/ADR-005-quarkus-langchain4j-mcp-and-smallrye-health.md), [`ADR-006`](../adr/ADR-006-framework-agnostic-module-topology-ag-ui-core-ag.md), [`ADR-007`](../adr/ADR-007-adopt-upstream-ag-ui-sdks-com-ag-ui-community-ag.md), [`ADR-008`](../adr/ADR-008-canonical-ag-ui-activity-snapshot-surface-kit-co.md)
 
 ---
 
