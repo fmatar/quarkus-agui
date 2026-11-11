@@ -28,6 +28,7 @@ export {
 	buildPlaceMapLinks,
 	createActivityRegistry,
 	formatCoordinatesLabel,
+	sanitizeExternalUrl,
 	upsertActivityList
 } from './activities.js';
 

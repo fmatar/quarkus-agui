@@ -17,6 +17,30 @@ function isValidCoordinatePair(latitude, longitude) {
 	);
 }
 
+const CONTROL_CHAR_PATTERN = /[\u0000-\u001F\u007F]/;
+
+export function sanitizeExternalUrl(rawUrl, fallback = null) {
+	if (typeof rawUrl !== 'string') {
+		return fallback;
+	}
+	const trimmed = rawUrl.trim();
+	if (!trimmed || CONTROL_CHAR_PATTERN.test(trimmed)) {
+		return fallback;
+	}
+	try {
+		const parsed = new URL(trimmed);
+		if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+			return fallback;
+		}
+		if (parsed.username || parsed.password) {
+			return fallback;
+		}
+		return parsed.href;
+	} catch {
+		return fallback;
+	}
+}
+
 export function formatCoordinatesLabel(latitude, longitude) {
 	if (!isValidCoordinatePair(latitude, longitude)) {
 		return null;
@@ -74,9 +98,10 @@ export function buildPlaceMapLinks({
 		openStreetMapUrl = `https://www.openstreetmap.org/search?query=${encodedQuery}`;
 	}
 
+	const safeWikiUrl = sanitizeExternalUrl(wikiUrl);
 	let wikipediaUrl;
-	if (typeof wikiUrl === 'string' && /^https?:\/\//i.test(wikiUrl.trim())) {
-		wikipediaUrl = wikiUrl.trim();
+	if (safeWikiUrl) {
+		wikipediaUrl = safeWikiUrl;
 	} else if (placeName) {
 		wikipediaUrl = `https://en.wikipedia.org/wiki/Special:Search?search=${encodedQuery}`;
 	} else {

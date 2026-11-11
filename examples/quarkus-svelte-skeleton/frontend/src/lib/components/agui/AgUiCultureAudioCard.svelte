@@ -1,5 +1,6 @@
 <script>
 	import { AlertTriangle, ExternalLink, Music, Radio } from '@lucide/svelte';
+	import { sanitizeExternalUrl } from '$lib/agui-client.js';
 
 	let { content = {}, variant = 'turn' } = $props();
 
@@ -7,6 +8,9 @@
 		[content?.city, content?.country].filter(Boolean).join(', ') || 'Destination'
 	);
 	let soundtrack = $derived(content?.soundtrack ?? null);
+	let safeHeroImageUrl = $derived(sanitizeExternalUrl(content?.heroImageUrl));
+	let safeWikiSourceUrl = $derived(sanitizeExternalUrl(content?.wikiSourceUrl));
+	let safePreviewUrl = $derived(sanitizeExternalUrl(soundtrack?.previewUrl));
 </script>
 
 <article
@@ -14,9 +18,9 @@
 	data-variant={variant}
 	aria-label="{cityLabel} cultural notes and acoustic preview"
 >
-	{#if content?.heroImageUrl && !content?.isError}
+	{#if safeHeroImageUrl && !content?.isError}
 		<img
-			src={content.heroImageUrl}
+			src={safeHeroImageUrl}
 			alt="{cityLabel} architectural landmark"
 			width="640"
 			height="360"
@@ -31,11 +35,11 @@
 				<Music class="size-3.5 shrink-0 text-[#C84B31]" aria-hidden="true" />
 				<span>Culture & Acoustic Preview</span>
 			</h4>
-			{#if content?.wikiSourceUrl}
+			{#if safeWikiSourceUrl}
 				<a
-					href={content.wikiSourceUrl}
+					href={safeWikiSourceUrl}
 					target="_blank"
-					rel="noreferrer"
+					rel="noopener noreferrer"
 					class="inline-flex items-center gap-1 font-mono text-[10px] font-semibold text-[#3B4CCA] hover:underline"
 				>
 					<span>Wikipedia</span>
@@ -74,11 +78,11 @@
 							{soundtrack.artistName ?? 'Regional Archive'}
 						</div>
 					</div>
-					{#if soundtrack.previewUrl}
+					{#if safePreviewUrl}
 						<audio
 							controls
 							preload="none"
-							src={soundtrack.previewUrl}
+							src={safePreviewUrl}
 							aria-label="Play 30-second audio preview for {soundtrack.trackName ?? cityLabel}"
 							class="mt-1.5 h-8 w-full"
 						></audio>

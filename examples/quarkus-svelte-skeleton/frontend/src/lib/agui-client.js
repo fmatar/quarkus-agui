@@ -21,6 +21,7 @@ import {
 	recordClientOutboundEvent,
 	resolveEventProtocolMeta,
 	resolveProtocolCallMeta,
+	sanitizeExternalUrl,
 	selectTurnOption,
 	upsertActivityList,
 	useAgUiAgent as createBaseAgUiAgent
@@ -42,6 +43,7 @@ export {
 	recordClientOutboundEvent,
 	resolveEventProtocolMeta,
 	resolveProtocolCallMeta,
+	sanitizeExternalUrl,
 	selectTurnOption,
 	upsertActivityList
 };
@@ -1560,6 +1562,7 @@ function buildActivitiesMarkdownLines(activities) {
 			out.push(`## Places & Map Links (\`agui:map-places\`)`);
 			const stops = Array.isArray(c.stops) ? c.stops : [];
 			for (const stop of stops) {
+				const safeStopLabel = String(stop ?? '').replace(/[[\]()]/g, ' ').trim() || 'Stop';
 				const links = buildPlaceMapLinks({
 					name: stop,
 					city: c.city,
@@ -1569,7 +1572,7 @@ function buildActivitiesMarkdownLines(activities) {
 					wikiUrl: c.wikiSourceUrl
 				});
 				out.push(
-					`- **${stop}** — [Google Maps](${links.googleMapsUrl}) • [Apple Maps](${links.appleMapsUrl}) • [OpenStreetMap](${links.openStreetMapUrl}) • [Wikipedia](${links.wikipediaUrl})`
+					`- **${safeStopLabel}** — [Google Maps](${links.googleMapsUrl}) • [Apple Maps](${links.appleMapsUrl}) • [OpenStreetMap](${links.openStreetMapUrl}) • [Wikipedia](${links.wikipediaUrl})`
 				);
 			}
 			out.push(``);

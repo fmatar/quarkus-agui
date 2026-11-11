@@ -25,6 +25,7 @@ import {
 	reduceCanonicalAgUiEvent,
 	resolveEventProtocolMeta,
 	resolveProtocolCallMeta,
+	sanitizeExternalUrl,
 	selectTurnOption,
 	unescapeJsonPointerToken,
 	upsertActivityList,
@@ -944,6 +945,29 @@ test('AG-UI activity surface kit: taxonomy, registry, map deep-links, coordinate
 	assert.equal(formatCoordinatesLabel(-33.8688, -70.6693), '33.8688° S, 70.6693° W');
 	assert.equal(formatCoordinatesLabel(null, 135.76), null);
 	assert.equal(formatCoordinatesLabel(Number.NaN, 10), null);
+
+	// OWASP XSS URL sanitization (CWE-79)
+	assert.equal(
+		sanitizeExternalUrl('  https://en.wikipedia.org/wiki/Kyoto  '),
+		'https://en.wikipedia.org/wiki/Kyoto'
+	);
+	assert.equal(sanitizeExternalUrl('http://localhost:8080/q/health'), 'http://localhost:8080/q/health');
+	assert.equal(sanitizeExternalUrl('javascript:alert(1)'), null);
+	assert.equal(sanitizeExternalUrl('JAVASCRIPT:alert(document.domain)'), null);
+	assert.equal(sanitizeExternalUrl('data:text/html,<script>alert(1)</script>'), null);
+	assert.equal(sanitizeExternalUrl('vbscript:msgbox(1)'), null);
+	assert.equal(sanitizeExternalUrl('file:///etc/passwd'), null);
+	assert.equal(sanitizeExternalUrl('\u0001javascript:alert(1)'), null);
+	assert.equal(sanitizeExternalUrl('https://user:secret@evil.example/path'), null);
+	assert.equal(sanitizeExternalUrl('not a valid url', 'https://fallback.example/'), 'https://fallback.example/');
+	assert.equal(sanitizeExternalUrl(null), null);
+	assert.equal(sanitizeExternalUrl('   '), null);
+
+	const xssWikiLinks = buildPlaceMapLinks({
+		city: 'Kyoto',
+		wikiUrl: 'javascript:alert(1)'
+	});
+	assert.equal(xssWikiLinks.wikipediaUrl, 'https://en.wikipedia.org/wiki/Kyoto');
 
 	const cityLinks = buildPlaceMapLinks({
 		city: 'Kyoto',

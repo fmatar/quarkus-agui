@@ -73,7 +73,7 @@
 						<a
 							href="https://open-meteo.com"
 							target="_blank"
-							rel="noreferrer"
+							rel="noopener noreferrer"
 							class="inline-flex items-center gap-1 font-mono text-[10px] font-medium text-[#3B4CCA] hover:underline"
 						>
 							<span>{content?.source ?? 'api.open-meteo.com'}</span>

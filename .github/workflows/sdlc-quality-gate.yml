@@ -111,8 +111,20 @@ jobs:
       - name: Run Changed-Module PITest Mutation Defense
         shell: bash
         run: |
-          BASE_REF="${{ github.base_ref || 'develop' }}"
-          CHANGED_FILES=$(git diff --name-only "origin/$BASE_REF"...HEAD 2>/dev/null || git diff --name-only HEAD~1 2>/dev/null || true)
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE_REF="${{ github.base_ref || 'develop' }}"
+            DIFF_LABEL="origin/$BASE_REF...HEAD"
+            CHANGED_FILES=$(git diff --name-only "origin/$BASE_REF"...HEAD 2>/dev/null || git diff --name-only HEAD~1 2>/dev/null || true)
+          else
+            BEFORE_SHA="${{ github.event.before }}"
+            if [ -n "$BEFORE_SHA" ] && [ "$BEFORE_SHA" != "0000000000000000000000000000000000000000" ] && git cat-file -e "${BEFORE_SHA}^{commit}" 2>/dev/null; then
+              DIFF_LABEL="${BEFORE_SHA}..HEAD"
+              CHANGED_FILES=$(git diff --name-only "${BEFORE_SHA}..HEAD" 2>/dev/null || git diff --name-only HEAD~1 2>/dev/null || true)
+            else
+              DIFF_LABEL="HEAD~1..HEAD"
+              CHANGED_FILES=$(git diff --name-only HEAD~1 2>/dev/null || true)
+            fi
+          fi
           PIT_MODULES=()
           for mod in \
             ag-ui-a2a \
@@ -128,7 +140,7 @@ jobs:
           done
 
           if [ "${#PIT_MODULES[@]}" -eq 0 ]; then
-            echo "No Java source module changes detected against origin/$BASE_REF; skipping PITest."
+            echo "No Java source module changes detected in ${DIFF_LABEL}; skipping PITest."
           else
             MOD_CSV=$(IFS=,; echo "${PIT_MODULES[*]}")
             echo "Running PITest mutation coverage on changed modules: $MOD_CSV"

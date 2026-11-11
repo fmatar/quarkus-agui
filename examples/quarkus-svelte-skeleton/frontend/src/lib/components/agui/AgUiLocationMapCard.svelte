@@ -104,7 +104,7 @@
 					<a
 						href={stop.links.googleMapsUrl}
 						target="_blank"
-						rel="noreferrer"
+						rel="noopener noreferrer"
 						class="agui-map-link"
 					>
 						<span>Google Maps</span>
@@ -113,7 +113,7 @@
 					<a
 						href={stop.links.appleMapsUrl}
 						target="_blank"
-						rel="noreferrer"
+						rel="noopener noreferrer"
 						class="agui-map-link"
 					>
 						<span>Apple Maps</span>
@@ -122,7 +122,7 @@
 					<a
 						href={stop.links.openStreetMapUrl}
 						target="_blank"
-						rel="noreferrer"
+						rel="noopener noreferrer"
 						class="agui-map-link"
 					>
 						<span>OpenStreetMap</span>
@@ -131,7 +131,7 @@
 					<a
 						href={stop.links.wikipediaUrl}
 						target="_blank"
-						rel="noreferrer"
+						rel="noopener noreferrer"
 						class="agui-map-link"
 					>
 						<span>Wikipedia</span>
@@ -157,6 +157,7 @@
 					width="600"
 					height="220"
 					loading="lazy"
+					sandbox="allow-scripts allow-same-origin"
 					referrerpolicy="no-referrer"
 					class="agui-map-iframe"
 				></iframe>

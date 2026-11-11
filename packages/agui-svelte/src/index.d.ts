@@ -250,6 +250,11 @@ export interface AgUiActivityEntry<TContent = Record<string, any>> {
 	rawEvent: any;
 }
 
+export declare function sanitizeExternalUrl(
+	rawUrl?: unknown,
+	fallback?: string | null
+): string | null;
+
 export declare function formatCoordinatesLabel(
 	latitude?: number | null,
 	longitude?: number | null

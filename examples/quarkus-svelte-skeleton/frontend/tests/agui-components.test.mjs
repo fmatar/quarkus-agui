@@ -42,6 +42,21 @@ test('Svelte 5 AG-UI surface kit components exist and honor semantic, accessibil
 
 	const cultureSource = fs.readFileSync(path.join(aguiDir, 'AgUiCultureAudioCard.svelte'), 'utf8');
 	assert.ok(cultureSource.includes(':has(> img)'), 'Culture card must scope side-media layout with :has(> img)');
+	assert.ok(cultureSource.includes('sanitizeExternalUrl'), 'Culture card must sanitize external URLs via sanitizeExternalUrl');
+	assert.ok(cultureSource.includes('rel="noopener noreferrer"'), 'External links must carry rel="noopener noreferrer"');
+
+	const turnFooterSource = fs.readFileSync(path.join(aguiDir, 'TurnFooter.svelte'), 'utf8');
+	assert.ok(turnFooterSource.includes('sanitizeExternalUrl'), 'TurnFooter must sanitize source URLs');
+	assert.ok(
+		turnFooterSource.includes('bg-[#FBEEE9] px-2 py-0.5 text-[11px] font-semibold text-[#9E331D]'),
+		'TurnFooter error pill must use WCAG AA #9E331D contrast on #FBEEE9'
+	);
+
+	const dossierSource = fs.readFileSync(
+		path.resolve(__dirname, '../src/lib/components/TripDossierPanel.svelte'),
+		'utf8'
+	);
+	assert.ok(!dossierSource.includes('#8A867E'), 'TripDossierPanel must meet WCAG 2.1 AA small-text contrast');
 
 	const workflowPath = path.resolve(__dirname, '../../../../.github/workflows/sdlc-quality-gate.yml');
 	const workflowSource = fs.readFileSync(workflowPath, 'utf8');
@@ -50,4 +65,5 @@ test('Svelte 5 AG-UI surface kit components exist and honor semantic, accessibil
 	assert.ok(workflowSource.includes('pnpm install --frozen-lockfile'), 'CI must install pnpm workspace');
 	assert.ok(workflowSource.includes('./mvnw -B install jacoco:report'), 'CI must run Maven reactor install + JaCoCo');
 	assert.ok(workflowSource.includes('pitest-maven:mutationCoverage'), 'CI must run changed-module PITest');
+	assert.ok(workflowSource.includes('github.event.before'), 'CI push events must diff before..HEAD so post-merge develop runs execute PITest');
 });
