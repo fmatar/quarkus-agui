@@ -74,6 +74,7 @@ export interface AgUiSseParseResult {
 export interface WebSocketAgentConfig extends AgentConfig {
 	url: string;
 	protocols?: string | string[];
+	inactivityTimeoutMs?: number;
 	webSocketFactory?: (url: string, protocols?: string | string[]) => any;
 	onControlEvent?: (frame: Record<string, any>) => void;
 	onSpontaneousEvent?: (event: BaseEvent) => void;
@@ -83,6 +84,7 @@ export interface WebSocketAgentConfig extends AgentConfig {
 export declare class WebSocketAgent extends AbstractAgent {
 	url: string;
 	protocols?: string | string[];
+	inactivityTimeoutMs: number;
 	webSocketFactory: (url: string, protocols?: string | string[]) => any;
 	onControlEvent: ((frame: Record<string, any>) => void) | null;
 	onSpontaneousEvent: ((event: BaseEvent) => void) | null;
