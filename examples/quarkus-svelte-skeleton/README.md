@@ -1,7 +1,7 @@
 # 🧭 Nomad — Cultural & Architectural Concierge (`quarkus-svelte-skeleton`)
 
 > **Reference Tri-Protocol (`AG-UI + MCP + A2A`) Showcase for `quarkus-agui`**  
-> Built with **Java 25**, **Quarkus `3.40.1.1`**, **Quarkus LangChain4j (`1.15.0.CR1`)**, **Quarkus MCP Server (`2.1.0.Beta1`)**, **Official A2A Java SDK (`1.4.0.Final`)**, **Quarkus Quinoa (`2.9.3`)**, **Quarkus Container Image Jib (`3.40.1.1`)**, and a **SvelteKit 5 (Runes) + Skeleton UI v3 + GSAP** 3-Pane Workbench.
+> Built with **Java 25**, **Quarkus `3.40.1.1`**, **Quarkus LangChain4j (`1.15.0.CR1`)**, **Quarkus MCP Server (`2.1.0.Beta1`)**, **Official A2A Java SDK (`1.5.0.Final`)**, **Quarkus Quinoa (`2.9.3`)**, **Quarkus Container Image Jib (`3.40.1.1`)**, and a **SvelteKit 5 (Runes) + Skeleton UI v3 + GSAP** 3-Pane Workbench.
 
 ---
 
@@ -11,7 +11,7 @@
 
 1. **AG-UI (Agent–User Interaction Protocol — `:8080`)**: Streams canonical upstream AG-UI lifecycle, RFC 6902 JSON Patch state synchronization (`STATE_SNAPSHOT`, `STATE_DELTA`), tool execution (`TOOL_CALL_START`, `TOOL_CALL_ARGS`, `TOOL_CALL_END`, `TOOL_CALL_RESULT`), reasoning & sub-agent steps (`REASONING_MESSAGE_CONTENT`, `STEP_STARTED`, `ACTIVITY_SNAPSHOT`, `STEP_FINISHED`), native Human-in-the-Loop interrupts (`RUN_FINISHED` `InterruptOutcome` resumed via `RunAgentInput.resume` in `HitlApprovalCard`), and token deltas (`TEXT_MESSAGE_START`, `TEXT_MESSAGE_CONTENT`, `TEXT_MESSAGE_END`) between the Quarkus orchestrator (`ag-ui-quarkus` + `ag-ui-quarkus-langchain4j`) and the Svelte 5 frontend (`@agui/svelte` over `@ag-ui/client` + `@ag-ui/core`) via **Full-Duplex WebSockets (`/api/agent/ws`)** with automatic **SSE (`/api/agent/run`)** fallback.
 2. **MCP (Model Context Protocol — `:8081`)**: Provides standardized domain tools (`@Tool`), URI resources (`@Resource`), parameterized resource templates (`@ResourceTemplate`), prompt templates (`@Prompt`), slash-command argument autocompletion (`@CompletePrompt`), and server-initiated LLM sampling (`mcp:sampling`) for live destination weather, architectural landmarks, and regional 30-second acoustic masters.
-3. **A2A (Agent-to-Agent Protocol — `:8082`)**: Exposes an autonomous specialist auditor agent (`Nomad-A2A-Specialist`) discoverable via `GET /.well-known/agent-card.json` and invoked over JSON-RPC 2.0 (`POST /` with `A2A-Version: 1.0`) or companion `POST /api/a2a/audit` to perform multi-currency FX conversion (`convert-and-audit-budget`), neighborhood cadence curation (`curate-neighborhood-cadence`), and visa/safety advisory verification (`verify-travel-advisory`).
+3. **A2A (Agent-to-Agent Protocol — `:8082`)**: Exposes an autonomous specialist auditor agent (`Nomad-A2A-Specialist`) discoverable via `A2ACardResolver` (`GET /.well-known/agent-card.json`) and invoked via the official `org.a2aproject.sdk` `1.5.0.Final` `Client.builder(card)` + `JSONRPCTransport` + `VertxA2AHttpClient` (`POST /` with `A2A-Version: 1.0`) to perform multi-currency FX conversion (`convert-and-audit-budget`), neighborhood cadence curation (`curate-neighborhood-cadence`), and visa/safety advisory verification (`verify-travel-advisory`).
 
 With **Quarkus Quinoa**, the SvelteKit 5 SPA (`@sveltejs/adapter-static`) is compiled and bundled directly into the `backend` Quarkus artifact (`META-INF/webui/`), so **port `:8080` serves both the Nomad Studio UI and all AG-UI REST/WebSocket endpoints from a single JVM or Jib container**.
 
@@ -131,7 +131,7 @@ examples/quarkus-svelte-skeleton/
 │       ├── NomadA2aAgentConfiguration.java    # @Produces AgentCard (/.well-known/agent-card.json) & AgentExecutor
 │       ├── NomadTravelAdvisorService.java     # Live Frankfurter FX, cadence & authenticated REST Countries v5 (api.restcountries.com)
 │       ├── NomadA2aReadinessCheck.java        # @Readiness HealthCheck probing Frankfurter FX & REST Countries v5 (/q/health/ready)
-│       └── NomadA2aHealthResource.java        # Companion health (/api/a2a/health) & audit (/api/a2a/audit) endpoints
+│       └── NomadA2aHealthResource.java        # Companion health diagnostic (/api/a2a/health) endpoint
 ├── backend/                         # Port :8080 — Quarkus LangChain4j Orchestrator + Quinoa SPA Host + SmallRye Health
 │   └── src/main/java/org/agui/showcase/backend/
 │       ├── NomadConciergeAiService.java          # @ApplicationScoped @RegisterAiService + @McpToolBox("nomad") + @InputGuardrails
@@ -142,7 +142,7 @@ examples/quarkus-svelte-skeleton/
 │       ├── TripDossierStore.java                 # Synchronizes MCP resources & tool executions into RFC 6902 STATE_DELTA patches
 │       ├── AgentWebSocketEndpoint.java           # @WebSocket(path = "/api/agent/ws") delegating to reusable AgUiWebSocketHandler
 │       ├── AgentResource.java                    # REST + SSE endpoints (/api/agent/run, /chat, /catalog, /health, /params, /reset)
-│       └── A2aGatewayClient.java                 # Official A2A JSON-RPC client to a2a-server (:8082)
+│       └── A2aGatewayClient.java                 # Official A2A 1.5.0.Final client (AgUiA2aClient + A2ACardResolver + VertxA2AHttpClient)
 └── frontend/                        # SvelteKit 5 (Runes) SPA packaged via Quarkus Quinoa
     ├── svelte.config.js             # @sveltejs/adapter-static (fallback: 'index.html' for Quinoa SPA routing)
     ├── src/lib/
@@ -314,11 +314,12 @@ curl -s http://localhost:8081/api/mcp/tools | jq .
 curl -s http://localhost:8081/api/mcp/resources/city/Kyoto | jq .
 curl -s "http://localhost:8081/api/mcp/prompts/complete?prefix=Li" | jq .
 
-# 2. A2A Specialist Server (:8082) — Discover Official AgentCard & Delegate FX Audit Task
+# 2. A2A Specialist Server (:8082) — Discover Official 1.5.0.Final AgentCard & Delegate FX Audit Task via JSON-RPC 2.0
 curl -s http://localhost:8082/.well-known/agent-card.json | jq .
-curl -s -X POST http://localhost:8082/api/a2a/audit \
+curl -s -X POST http://localhost:8082/ \
   -H "Content-Type: application/json" \
-  -d '{"skillId":"convert-and-audit-budget","prompt":"Convert $1,840 USD for Kyoto","context":{"city":"Kyoto","budgetUsd":1840}}' | jq .
+  -H "A2A-Version: 1.0" \
+  -d '{"jsonrpc":"2.0","id":"req-1","method":"SendMessage","params":{"message":{"role":"ROLE_USER","messageId":"msg-1","parts":[{"text":"Convert $1,840 USD for Kyoto"},{"data":{"skillId":"convert-and-audit-budget","city":"Kyoto","budgetUsd":1840}}]}}}' | jq .
 
 # 3. AG-UI Orchestrator (:8080) — Stream Canonical AG-UI SSE Frames (Full 4-Slot Trip Planning)
 curl -N -X POST http://localhost:8080/api/agent/run \

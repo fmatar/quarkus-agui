@@ -62,11 +62,12 @@ curl -s http://localhost:8082/q/health/ready | jq .
 curl -s http://localhost:8081/api/mcp/tools | jq .
 curl -s http://localhost:8081/api/mcp/resources/city/Kyoto | jq .
 
-# Discover Official A2A AgentCard & Delegate Travel Specialist Audit (:8082 — Frankfurter FX & REST Countries v5)
+# Discover Official A2A 1.5.0.Final AgentCard & Delegate Travel Specialist Task (:8082 — JSON-RPC 2.0 SendMessage)
 curl -s http://localhost:8082/.well-known/agent-card.json | jq .
-curl -s -X POST http://localhost:8082/api/a2a/audit \
+curl -s -X POST http://localhost:8082/ \
   -H "Content-Type: application/json" \
-  -d '{"skillId":"verify-travel-advisory","prompt":"Verify Paris advisory","context":{"city":"Paris","country":"France"}}' | jq .
+  -H "A2A-Version: 1.0" \
+  -d '{"jsonrpc":"2.0","id":"req-1","method":"SendMessage","params":{"message":{"role":"ROLE_USER","messageId":"msg-1","parts":[{"text":"Verify Paris advisory"},{"data":{"skillId":"verify-travel-advisory","city":"Paris","country":"France"}}]}}}' | jq .
 
 # Stream canonical AG-UI SSE events from the Nomad Concierge Orchestrator (:8080)
 curl -N -X POST http://localhost:8080/api/agent/run \
@@ -107,7 +108,7 @@ To expose any `com.agui.community.core.agent.Agent`, LangChain4j `TokenStream`, 
 | **`ag-ui-quarkus`** | [`ag-ui-quarkus/`](ag-ui-quarkus/pom.xml) | Java 17 Quarkus CDI, Jackson MixIns (`@ag-ui/core` Zod-compatible), Mutiny `Multi` SSE, reusable `AgUiWebSocketHandler`, and 57-type GraalVM `reflect-config.json` | Zero LangChain4j/A2A lock-in, $< 10\text{ms}$ framing |
 | **`ag-ui-langchain4j`** | [`ag-ui-langchain4j/`](ag-ui-langchain4j/pom.xml) | Framework-agnostic Java 17 `dev.langchain4j` `TokenStream` & `Agent` adapter (`AgUiLangChain4jBridge`, `AgUiStatePatch`, `AgUiMcpBridge`, `AgUiRunOptions` with `ACTIVITY_SNAPSHOT` providers) | Works in Quarkus, Spring, Helidon, Micronaut & plain Java |
 | **`ag-ui-quarkus-langchain4j`** | [`ag-ui-quarkus-langchain4j/`](ag-ui-quarkus-langchain4j/pom.xml) | Java 17 Quarkiverse `Multi<ChatEvent>` reactive adapter (`AgUiQuarkusLangChain4jBridge`) | Decouples `quarkus-langchain4j-core` from `ag-ui-quarkus` |
-| **`ag-ui-a2a`** | [`ag-ui-a2a/`](ag-ui-a2a/pom.xml) | Framework-agnostic Java 17 A2A Protocol Bridge (`AgUiA2aBridge` over `org.a2aproject.sdk`) | Emits canonical `StepStarted`/`ActivitySnapshot`/`StepFinished` |
+| **`ag-ui-a2a`** | [`ag-ui-a2a/`](ag-ui-a2a/pom.xml) | Framework-agnostic Java 17 A2A `1.5.0.Final` Client & Protocol Bridge (`AgUiA2aClient`, `AgUiA2aBridge`, `A2aDelegationResult` over `org.a2aproject.sdk`) | Official `A2ACardResolver` + `Client.builder` + canonical `StepStarted`/`ActivitySnapshot`/`StepFinished` |
 | **`packages/agui-svelte`** | [`packages/agui-svelte/`](packages/agui-svelte/package.json) | Headless Svelte 5 Runes & JS SDK (`@agui/svelte`) over `@ag-ui/client` + `@ag-ui/core` (`^1.0.4`) | `HttpAgent`, `WebSocketAgent`, RFC 6902 `applyJsonPatch`, `ACTIVITY_SNAPSHOT` registry, map deep-link builders, & Tri-Protocol telemetry |
 | **`mcp-server` (`:8081`)** | [`examples/quarkus-svelte-skeleton/mcp-server/`](examples/quarkus-svelte-skeleton/mcp-server/pom.xml) | Java 25 Quarkus 3.40.1.1 Nomad MCP Server + SmallRye Health (`/q/health/ready`) + Jib Container (`nomad-agui-showcase/mcp-server:latest`) | `fetchCityWeather`, `discoverLocalCultureAndMedia`, `updateTripItinerary`, `saveTravelerPreferences`, `sampleAcousticMood`, `resetNomadState` |
 | **`a2a-server` (`:8082`)** | [`examples/quarkus-svelte-skeleton/a2a-server/`](examples/quarkus-svelte-skeleton/a2a-server/pom.xml) | Java 25 Quarkus 3.40.1.1 A2A Specialist Server + SmallRye Health (`/q/health/ready`) + Jib Container (`nomad-agui-showcase/a2a-server:latest`) | `convert-and-audit-budget` (Frankfurter FX), `verify-travel-advisory` (REST Countries v5 `api.restcountries.com`), `curate-neighborhood-cadence` |
@@ -124,4 +125,4 @@ To expose any `com.agui.community.core.agent.Agent`, LangChain4j `TokenStream`, 
 - **C4 Architecture**: [`docs/specs/C4_ARCHITECTURE.md`](docs/specs/C4_ARCHITECTURE.md)
 - **Living Kanban & Traceability Matrix**: [`docs/KANBAN.md`](docs/KANBAN.md)
 - **Causal Decision Lineage**: [`docs/DECISION_MAP.md`](docs/DECISION_MAP.md)
-- **Architectural Decision Records (ADRs)**: [`docs/adr/ADR-001`](docs/adr/ADR-001-multi-module-maven-sveltekit-clean-architecture-.md), [`docs/adr/ADR-002`](docs/adr/ADR-002-example-first-tri-protocol-ag-ui-mcp-a2a-evoluti.md), [`docs/adr/ADR-003`](docs/adr/ADR-003-multi-extension-bom-and-concentric-transport-arc.md), [`docs/adr/ADR-004`](docs/adr/ADR-004-nomad-concierge-and-svelte5-agui-component-kit.md), [`docs/adr/ADR-005`](docs/adr/ADR-005-quarkus-langchain4j-mcp-and-smallrye-health.md), [`docs/adr/ADR-006`](docs/adr/ADR-006-framework-agnostic-module-topology-ag-ui-core-ag.md), [`docs/adr/ADR-007`](docs/adr/ADR-007-adopt-upstream-ag-ui-sdks-com-ag-ui-community-ag.md), [`docs/adr/ADR-008`](docs/adr/ADR-008-canonical-ag-ui-activity-snapshot-surface-kit-co.md)
+- **Architectural Decision Records (ADRs)**: [`docs/adr/ADR-001`](docs/adr/ADR-001-multi-module-maven-sveltekit-clean-architecture-.md), [`docs/adr/ADR-002`](docs/adr/ADR-002-example-first-tri-protocol-ag-ui-mcp-a2a-evoluti.md), [`docs/adr/ADR-003`](docs/adr/ADR-003-multi-extension-bom-and-concentric-transport-arc.md), [`docs/adr/ADR-004`](docs/adr/ADR-004-nomad-concierge-and-svelte5-agui-component-kit.md), [`docs/adr/ADR-005`](docs/adr/ADR-005-quarkus-langchain4j-mcp-and-smallrye-health.md), [`docs/adr/ADR-006`](docs/adr/ADR-006-framework-agnostic-module-topology-ag-ui-core-ag.md), [`docs/adr/ADR-007`](docs/adr/ADR-007-adopt-upstream-ag-ui-sdks-com-ag-ui-community-ag.md), [`docs/adr/ADR-008`](docs/adr/ADR-008-canonical-ag-ui-activity-snapshot-surface-kit-co.md), [`docs/adr/ADR-009`](docs/adr/ADR-009-adopt-official-a2a-java-sdk-1-5-0-final-client-a.md)

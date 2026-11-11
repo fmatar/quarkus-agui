@@ -1,33 +1,41 @@
 package org.agui.showcase.backend;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import io.vertx.core.Vertx;
+import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
+import jakarta.enterprise.inject.Instance;
+import jakarta.inject.Inject;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import org.a2aproject.sdk.client.http.vertx.VertxA2AHttpClient;
+import org.a2aproject.sdk.spec.AgentCard;
+import org.agui.a2a.adapters.AgUiA2aClient;
+import org.agui.a2a.domain.A2aDelegationResult;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 /**
- * A2A Specialist Gateway Client (:8080 -> :8082) for {@code Nomad-A2A-Specialist}.
- * Invokes real Frankfurter FX, REST Countries v5 Travel Advisory, and Neighborhood Cadence skills
- * on {@code :8082} and surfaces upstream errors honestly without fabricating {@code "CLEAR"} verdicts.
+ * Official A2A 1.5.0.Final Specialist Gateway Client (:8080 -> :8082) for {@code Nomad-A2A-Specialist}.
+ * Discovers {@code /.well-known/agent-card.json} via {@code A2ACardResolver} and delegates
+ * Frankfurter FX, REST Countries v5 Travel Advisory, and Neighborhood Cadence tasks over
+ * official A2A JSON-RPC 2.0 via {@link AgUiA2aClient} + {@link VertxA2AHttpClient}.
  */
 @ApplicationScoped
 public class A2aGatewayClient {
 
     private static final Set<String> SUPPORTED_SKILLS = Set.of(
             "convert-and-audit-budget", "verify-travel-advisory", "curate-neighborhood-cadence");
+
+    private static final List<Map<String, String>> FALLBACK_SKILLS = List.of(
+            Map.of("id", "convert-and-audit-budget", "name", "Frankfurter Multi-Currency & Budget Audit"),
+            Map.of("id", "verify-travel-advisory", "name", "REST Countries v5 Destination & Cultural Advisory"),
+            Map.of("id", "curate-neighborhood-cadence", "name", "Neighborhood Architectural & Acoustic Cadence Curation"));
 
     private static final Map<String, String> DYNAMIC_CITY_COUNTRIES = new ConcurrentHashMap<>();
 
@@ -84,13 +92,16 @@ public class A2aGatewayClient {
             Map.entry("Peru", "PEN"), Map.entry("Chile", "CLP"), Map.entry("Argentina", "ARS"),
             Map.entry("Brazil", "BRL"));
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
-    private final HttpClient httpClient = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofMillis(1800))
-            .build();
-
     @ConfigProperty(name = "agui.a2a.base-url", defaultValue = "http://127.0.0.1:8082")
     String a2aBaseUrl = "http://127.0.0.1:8082";
+
+    @Inject
+    Instance<Vertx> vertxInstance;
+
+    private final Object clientLock = new Object();
+    private String activeBaseUrl;
+    private VertxA2AHttpClient sharedVertxHttpClient;
+    private AgUiA2aClient activeClient;
 
     static void registerCityCountry(String city, String country) {
         if (city != null && !city.isBlank() && country != null && !country.isBlank()) {
@@ -99,16 +110,36 @@ public class A2aGatewayClient {
     }
 
     public Map<String, Object> getAgentCard() {
-        return Map.of(
-                "name", "Nomad-A2A-Specialist",
-                "description", "Autonomous A2A Travel Specialist Agent for Frankfurter ECB multi-currency budget auditing, REST Countries v5 destination advisories, and architectural neighborhood cadence curation.",
-                "endpoint", a2aBaseUrl,
-                "version", "1.5.0",
-                "protocol", "A2A-1.0-JSONRPC",
-                "skills", List.of(
-                        Map.of("id", "convert-and-audit-budget", "name", "Frankfurter Multi-Currency & Budget Audit"),
-                        Map.of("id", "verify-travel-advisory", "name", "REST Countries v5 Destination & Cultural Advisory"),
-                        Map.of("id", "curate-neighborhood-cadence", "name", "Neighborhood Architectural & Acoustic Cadence Curation")));
+        try {
+            AgentCard card = client().resolveAgentCard();
+            List<Map<String, String>> skills = card.skills() == null
+                    ? List.of()
+                    : card.skills().stream()
+                            .map(s -> Map.of(
+                                    "id", s.id(),
+                                    "name", s.name(),
+                                    "description", s.description() == null ? "" : s.description()))
+                            .toList();
+            return Map.of(
+                    "name", card.name(),
+                    "description", card.description() == null ? "" : card.description(),
+                    "endpoint", a2aBaseUrl,
+                    "version", card.version(),
+                    "protocol", card.preferredTransport() != null ? card.preferredTransport() : "JSONRPC",
+                    "streaming", card.capabilities() != null && Boolean.TRUE.equals(card.capabilities().streaming()),
+                    "status", "UP",
+                    "skills", skills);
+        } catch (RuntimeException ex) {
+            return Map.of(
+                    "name", "Nomad-A2A-Specialist",
+                    "description", "Specialist A2A Travel Advisor Agent (card resolution degraded: " + ex.getMessage() + ")",
+                    "endpoint", a2aBaseUrl,
+                    "version", "1.5.0",
+                    "protocol", "JSONRPC",
+                    "streaming", false,
+                    "status", "UNAVAILABLE",
+                    "skills", FALLBACK_SKILLS);
+        }
     }
 
     public Map<String, Object> delegateTask(String taskId, String skillId, String prompt, Map<String, Object> context) {
@@ -116,76 +147,71 @@ public class A2aGatewayClient {
         if (!SUPPORTED_SKILLS.contains(resolvedSkill)) {
             throw new IllegalArgumentException("Unsupported A2A skill: " + resolvedSkill);
         }
+        String rawPrompt = prompt == null ? "" : prompt;
+        String wirePrompt = rawPrompt.isBlank() ? "Execute " + resolvedSkill : rawPrompt;
         Map<String, Object> execCtx = context == null ? Map.of() : new LinkedHashMap<>(context);
+        String requestId = (taskId == null || taskId.isBlank()) ? "task-1" : taskId;
 
-        try {
-            String reqBody = objectMapper.writeValueAsString(Map.of(
-                    "skillId", resolvedSkill,
-                    "prompt", prompt == null ? "" : prompt,
-                    "context", execCtx));
-            HttpRequest req = HttpRequest.newBuilder(URI.create(a2aBaseUrl + "/api/a2a/audit"))
-                    .timeout(Duration.ofSeconds(5))
-                    .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(reqBody))
-                    .build();
-            HttpResponse<String> res = httpClient.send(req, HttpResponse.BodyHandlers.ofString());
-            if (res.statusCode() < 200 || res.statusCode() >= 300 || res.body() == null) {
-                return buildA2aErrorEnvelope(
-                        taskId,
-                        resolvedSkill,
-                        prompt,
-                        "Nomad A2A Specialist (:8082) returned HTTP " + res.statusCode());
+        AgUiA2aClient.DelegationExecution execution = client().delegate(
+                requestId, resolvedSkill, wirePrompt, execCtx, Map.of());
+        A2aDelegationResult res = execution.result();
+        boolean isError = res.isError();
+
+        String resolvedTaskId = taskId != null ? taskId : (isError ? "task-err" : "task-1");
+        String resolvedAgentName = "A2A-Agent".equals(res.agentName()) ? "Nomad-A2A-Specialist" : res.agentName();
+
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("taskId", resolvedTaskId);
+        out.put("a2aTaskId", res.taskId());
+        out.put("agentName", resolvedAgentName);
+        out.put("protocol", "A2A-1.0-JSONRPC");
+        out.put("skillId", resolvedSkill);
+        out.put("status", isError ? "ERROR" : "COMPLETED");
+        out.put("isError", isError);
+        out.put("summary", res.summary());
+        out.put("prompt", rawPrompt);
+        out.put("report", res.data());
+        if (isError) {
+            out.put("error", res.data().getOrDefault("error", res.summary()));
+        }
+        return out;
+    }
+
+    private AgUiA2aClient client() {
+        synchronized (clientLock) {
+            if (activeClient == null || !Objects.equals(a2aBaseUrl, activeBaseUrl)) {
+                closeActiveLocked();
+                AgUiA2aClient.Builder builder = AgUiA2aClient.builder(a2aBaseUrl)
+                        .streaming(false)
+                        .requestTimeout(Duration.ofSeconds(6));
+                if (vertxInstance != null && vertxInstance.isResolvable()) {
+                    sharedVertxHttpClient = new VertxA2AHttpClient(vertxInstance.get());
+                    builder.httpClient(sharedVertxHttpClient);
+                }
+                activeClient = builder.build();
+                activeBaseUrl = a2aBaseUrl;
             }
-
-            JsonNode root = objectMapper.readTree(res.body());
-            String summary = root.path("summary").asText("");
-            Map<String, Object> data = root.has("data") && root.path("data").isObject()
-                    ? objectMapper.convertValue(root.path("data"), new TypeReference<Map<String, Object>>() {})
-                    : Map.of();
-
-            boolean isError = Boolean.TRUE.equals(data.get("isError"))
-                    || "ERROR".equalsIgnoreCase(String.valueOf(data.get("status")));
-
-            Map<String, Object> out = new LinkedHashMap<>(Map.ofEntries(
-                    Map.entry("taskId", taskId == null ? "task-1" : taskId),
-                    Map.entry("agentName", "Nomad-A2A-Specialist"),
-                    Map.entry("skillId", resolvedSkill),
-                    Map.entry("status", isError ? "ERROR" : "COMPLETED"),
-                    Map.entry("isError", isError),
-                    Map.entry("summary", summary),
-                    Map.entry("prompt", prompt == null ? "" : prompt),
-                    Map.entry("report", data)));
-            if (isError) {
-                out.put("error", data.getOrDefault("error", summary));
-            }
-            return out;
-        } catch (Exception ex) {
-            return buildA2aErrorEnvelope(
-                    taskId,
-                    resolvedSkill,
-                    prompt,
-                    "Nomad A2A Specialist (:8082) unavailable: " + ex.getMessage());
+            return activeClient;
         }
     }
 
-    private static Map<String, Object> buildA2aErrorEnvelope(
-            String taskId, String skillId, String prompt, String errorMsg) {
-        Map<String, Object> errReport = Map.of(
-                "status", "ERROR",
-                "isError", true,
-                "serviceAvailable", false,
-                "upstream", "Nomad-A2A-Specialist (:8082)",
-                "error", errorMsg);
-        return Map.ofEntries(
-                Map.entry("taskId", taskId == null ? "task-err" : taskId),
-                Map.entry("agentName", "Nomad-A2A-Specialist"),
-                Map.entry("skillId", skillId),
-                Map.entry("status", "ERROR"),
-                Map.entry("isError", true),
-                Map.entry("error", errorMsg),
-                Map.entry("summary", "⚠️ " + errorMsg),
-                Map.entry("prompt", prompt == null ? "" : prompt),
-                Map.entry("report", errReport));
+    @PreDestroy
+    void close() {
+        synchronized (clientLock) {
+            closeActiveLocked();
+        }
+    }
+
+    private void closeActiveLocked() {
+        if (activeClient != null) {
+            activeClient.close();
+            activeClient = null;
+        }
+        if (sharedVertxHttpClient != null) {
+            sharedVertxHttpClient.close();
+            sharedVertxHttpClient = null;
+        }
+        activeBaseUrl = null;
     }
 
     private static final Map<String, String> COUNTRY_ALIASES = Map.ofEntries(

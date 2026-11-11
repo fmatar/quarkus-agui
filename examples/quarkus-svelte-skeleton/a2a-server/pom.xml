@@ -45,6 +45,11 @@
             <artifactId>rest-assured</artifactId>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>org.agui</groupId>
+            <artifactId>ag-ui-a2a</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>

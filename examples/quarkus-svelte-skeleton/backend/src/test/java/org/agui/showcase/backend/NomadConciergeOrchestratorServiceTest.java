@@ -91,6 +91,7 @@ class NomadConciergeOrchestratorServiceTest {
     @BeforeAll
     static void startMockHttpServer() throws IOException {
         mockServer = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        mockServer.setExecutor(java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor());
         baseUrl = "http://127.0.0.1:" + mockServer.getAddress().getPort();
 
         mockServer.createContext("/mcp-health", exchange -> writeJson(exchange, mcpHealthHttpStatus, Map.of(
@@ -115,58 +116,141 @@ class NomadConciergeOrchestratorServiceTest {
         mockServer.createContext("/api/tags", exchange -> writeJson(
                 exchange, ollamaTagsHttpStatus, Map.of("models", List.of(Map.of("name", "llama3.2:latest")))));
 
-        mockServer.createContext("/api/a2a/audit", exchange -> {
-            JsonNode req = MAPPER.readTree(exchange.getRequestBody().readAllBytes());
-            String skillId = req.path("skillId").asText("");
-            JsonNode ctx = req.path("context");
-            String city = ctx.path("city").asText("Paris");
-            if (simulateA2aUpstreamError) {
-                writeJson(exchange, a2aAuditHttpStatus, Map.of(
-                        "artifactId", "art-err",
-                        "summary", "Travel Advisory Service Unavailable",
-                        "data", Map.of(
-                                "status", "ERROR",
-                                "isError", true,
-                                "error", "Travel Advisory Service Unavailable (api.restcountries.com): HTTP 401")));
+        org.a2aproject.sdk.spec.AgentCard mockCard = org.a2aproject.sdk.spec.AgentCard.builder()
+                .name("Nomad-A2A-Specialist")
+                .description("Specialist A2A Travel Advisor Agent")
+                .version("1.5.0")
+                .url(baseUrl)
+                .preferredTransport(org.a2aproject.sdk.spec.TransportProtocol.JSONRPC.asString())
+                .supportedInterfaces(List.of(
+                        new org.a2aproject.sdk.spec.AgentInterface(
+                                org.a2aproject.sdk.spec.TransportProtocol.JSONRPC.asString(), baseUrl)))
+                .capabilities(org.a2aproject.sdk.spec.AgentCapabilities.builder()
+                        .streaming(true)
+                        .pushNotifications(false)
+                        .build())
+                .defaultInputModes(List.of("text/plain", "application/json"))
+                .defaultOutputModes(List.of("text/plain", "application/json"))
+                .skills(List.of(
+                        org.a2aproject.sdk.spec.AgentSkill.builder().id("convert-and-audit-budget").name("FX Audit").description("FX").tags(List.of("fx")).build(),
+                        org.a2aproject.sdk.spec.AgentSkill.builder().id("verify-travel-advisory").name("Travel Advisory").description("Advisory").tags(List.of("advisory")).build(),
+                        org.a2aproject.sdk.spec.AgentSkill.builder().id("curate-neighborhood-cadence").name("Cadence").description("Cadence").tags(List.of("cadence")).build()))
+                .build();
+
+        mockServer.createContext("/.well-known/agent-card.json", exchange -> {
+            try {
+                byte[] bytes = org.a2aproject.sdk.jsonrpc.common.json.JsonUtil.toJson(mockCard).getBytes(StandardCharsets.UTF_8);
+                exchange.getResponseHeaders().add("Content-Type", "application/json");
+                exchange.sendResponseHeaders(200, bytes.length);
+                try (OutputStream os = exchange.getResponseBody()) {
+                    os.write(bytes);
+                }
+            } catch (Exception ex) {
+                throw new IOException(ex);
+            }
+        });
+
+        mockServer.createContext("/", exchange -> {
+            byte[] reqBytes = exchange.getRequestBody().readAllBytes();
+            if (a2aAuditHttpStatus < 200 || a2aAuditHttpStatus >= 300) {
+                writeJson(exchange, a2aAuditHttpStatus, Map.of("error", "HTTP " + a2aAuditHttpStatus));
                 return;
             }
-            Map<String, Object> data = switch (skillId) {
-                case "convert-and-audit-budget" -> Map.of(
-                        "status", "OK",
-                        "isError", false,
-                        "city", city,
-                        "baseCurrency", ctx.path("baseCurrency").asText("USD"),
-                        "targetCurrency", ctx.path("targetCurrency").asText("EUR"),
-                        "exchangeRate", 0.92,
-                        "convertedTotal", 1840.0);
-                case "verify-travel-advisory" -> Map.ofEntries(
-                        Map.entry("status", "OK"),
-                        Map.entry("isError", false),
-                        Map.entry("city", city),
-                        Map.entry("country", A2aGatewayClient.resolveCountryForCity(city)),
-                        Map.entry("capital", "Kyoto".equalsIgnoreCase(city) ? "Tokyo" : city),
-                        Map.entry("region", "Kyoto".equalsIgnoreCase(city) ? "Asia" : "Europe"),
-                        Map.entry("currency", A2aGatewayClient.resolveCurrencyForCountry(A2aGatewayClient.resolveCountryForCity(city))),
-                        Map.entry("timezone", "Kyoto".equalsIgnoreCase(city) ? "UTC+09:00" : "UTC+01:00"),
-                        Map.entry("advisoryLevel", "STANDARD_PRECAUTIONS"),
-                        Map.entry("advisoryStatus", "VERIFIED — Country Metadata & Timezone Confirmed"),
-                        Map.entry("emergencyNumbers", "112 / Local Municipal Dispatch"),
-                        Map.entry("safetyHighlights", List.of("Passport validity confirmed", "Local timezone verified", "HITL >= $1,500 USD hold active")),
-                        Map.entry("source", "api.restcountries.com"));
-                default -> Map.of(
-                        "status", "OK",
-                        "isError", false,
-                        "city", city,
-                        "country", A2aGatewayClient.resolveCountryForCity(city),
-                        "focus", "architecture, local craft & evening acoustics",
-                        "pace", "Unrushed (3 curated stops)",
-                        "stops", List.of("Morning: Historic Sanctuary Walk", "Afternoon: Craft Atelier", "Evening: Acoustic Salon"),
-                        "walkingCorridorKm", 4.2);
-            };
-            writeJson(exchange, a2aAuditHttpStatus, Map.of(
-                    "artifactId", "art-ok",
-                    "summary", "Verified " + skillId + " for " + city,
-                    "data", data));
+            JsonNode rpc = MAPPER.readTree(reqBytes);
+            Object rpcId = rpc.has("id") ? MAPPER.convertValue(rpc.get("id"), Object.class) : "1";
+            JsonNode parts = rpc.path("params").path("message").path("parts");
+            JsonNode ctx = MAPPER.createObjectNode();
+            if (parts.isArray()) {
+                for (JsonNode p : parts) {
+                    if (p.has("data") && p.path("data").isObject()) {
+                        ctx = p.path("data");
+                        break;
+                    }
+                }
+            }
+            String skillId = ctx.path("skillId").asText(rpc.path("params").path("message").path("metadata").path("skillId").asText(""));
+            String city = ctx.path("city").asText("Paris");
+            try {
+                if (simulateA2aUpstreamError) {
+                    org.a2aproject.sdk.spec.Artifact errArt = org.a2aproject.sdk.spec.Artifact.builder()
+                            .artifactId("art-err")
+                            .parts(List.of(
+                                    new org.a2aproject.sdk.spec.TextPart("Travel Advisory Service Unavailable"),
+                                    new org.a2aproject.sdk.spec.DataPart(Map.of(
+                                            "status", "ERROR",
+                                            "isError", true,
+                                            "error", "Travel Advisory Service Unavailable (api.restcountries.com): HTTP 401"))))
+                            .build();
+                    org.a2aproject.sdk.spec.Task errTask = org.a2aproject.sdk.spec.Task.builder()
+                            .id("task-err-1")
+                            .contextId("ctx-err-1")
+                            .status(new org.a2aproject.sdk.spec.TaskStatus(org.a2aproject.sdk.spec.TaskState.TASK_STATE_COMPLETED))
+                            .artifacts(List.of(errArt))
+                            .build();
+                    byte[] outBytes = org.a2aproject.sdk.jsonrpc.common.json.JsonUtil.toJson(
+                            new org.a2aproject.sdk.jsonrpc.common.wrappers.SendMessageResponse(rpcId, errTask)).getBytes(StandardCharsets.UTF_8);
+                    exchange.getResponseHeaders().add("Content-Type", "application/json");
+                    exchange.sendResponseHeaders(200, outBytes.length);
+                    try (OutputStream os = exchange.getResponseBody()) {
+                        os.write(outBytes);
+                    }
+                    return;
+                }
+                Map<String, Object> data = switch (skillId) {
+                    case "convert-and-audit-budget" -> Map.of(
+                            "status", "OK",
+                            "isError", false,
+                            "city", city,
+                            "baseCurrency", ctx.path("baseCurrency").asText("USD"),
+                            "targetCurrency", ctx.path("targetCurrency").asText("EUR"),
+                            "exchangeRate", 0.92,
+                            "convertedTotal", 1840.0);
+                    case "verify-travel-advisory" -> Map.ofEntries(
+                            Map.entry("status", "OK"),
+                            Map.entry("isError", false),
+                            Map.entry("city", city),
+                            Map.entry("country", A2aGatewayClient.resolveCountryForCity(city)),
+                            Map.entry("capital", "Kyoto".equalsIgnoreCase(city) ? "Tokyo" : city),
+                            Map.entry("region", "Kyoto".equalsIgnoreCase(city) ? "Asia" : "Europe"),
+                            Map.entry("currency", A2aGatewayClient.resolveCurrencyForCountry(A2aGatewayClient.resolveCountryForCity(city))),
+                            Map.entry("timezone", "Kyoto".equalsIgnoreCase(city) ? "UTC+09:00" : "UTC+01:00"),
+                            Map.entry("advisoryLevel", "STANDARD_PRECAUTIONS"),
+                            Map.entry("advisoryStatus", "VERIFIED — Country Metadata & Timezone Confirmed"),
+                            Map.entry("emergencyNumbers", "112 / Local Municipal Dispatch"),
+                            Map.entry("safetyHighlights", List.of("Passport validity confirmed", "Local timezone verified", "HITL >= $1,500 USD hold active")),
+                            Map.entry("source", "api.restcountries.com"));
+                    default -> Map.of(
+                            "status", "OK",
+                            "isError", false,
+                            "city", city,
+                            "country", A2aGatewayClient.resolveCountryForCity(city),
+                            "focus", "architecture, local craft & evening acoustics",
+                            "pace", "Unrushed (3 curated stops)",
+                            "stops", List.of("Morning: Historic Sanctuary Walk", "Afternoon: Craft Atelier", "Evening: Acoustic Salon"),
+                            "walkingCorridorKm", 4.2);
+                };
+                org.a2aproject.sdk.spec.Artifact okArt = org.a2aproject.sdk.spec.Artifact.builder()
+                        .artifactId("art-ok")
+                        .parts(List.of(
+                                new org.a2aproject.sdk.spec.TextPart("Verified " + skillId + " for " + city),
+                                new org.a2aproject.sdk.spec.DataPart(data)))
+                        .build();
+                org.a2aproject.sdk.spec.Task okTask = org.a2aproject.sdk.spec.Task.builder()
+                        .id("task-ok-1")
+                        .contextId("ctx-ok-1")
+                        .status(new org.a2aproject.sdk.spec.TaskStatus(org.a2aproject.sdk.spec.TaskState.TASK_STATE_COMPLETED))
+                        .artifacts(List.of(okArt))
+                        .build();
+                byte[] outBytes = org.a2aproject.sdk.jsonrpc.common.json.JsonUtil.toJson(
+                        new org.a2aproject.sdk.jsonrpc.common.wrappers.SendMessageResponse(rpcId, okTask)).getBytes(StandardCharsets.UTF_8);
+                exchange.getResponseHeaders().add("Content-Type", "application/json");
+                exchange.sendResponseHeaders(200, outBytes.length);
+                try (OutputStream os = exchange.getResponseBody()) {
+                    os.write(outBytes);
+                }
+            } catch (Exception ex) {
+                throw new IOException(ex);
+            }
         });
 
         mockServer.start();
@@ -219,6 +303,13 @@ class NomadConciergeOrchestratorServiceTest {
                 dossierStore,
                 readinessChecks);
         orchestrator.defaultOllamaModel = "llama3.2:latest";
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void tearDown() {
+        if (a2aClient != null) {
+            a2aClient.close();
+        }
     }
 
     private McpClient createStubMcpClient() {
@@ -525,6 +616,8 @@ class NomadConciergeOrchestratorServiceTest {
         // A2A AgentCard, null defaults, HTTP 502 error, connection failure & unsupported skill
         Map<String, Object> card = a2aClient.getAgentCard();
         assertEquals("Nomad-A2A-Specialist", card.get("name"));
+        assertEquals("1.5.0", card.get("version"));
+        assertEquals("UP", card.get("status"));
         assertEquals(baseUrl, card.get("endpoint"));
         assertEquals(3, ((List<?>) card.get("skills")).size());
 
@@ -544,9 +637,11 @@ class NomadConciergeOrchestratorServiceTest {
 
         A2aGatewayClient unreachableA2a = new A2aGatewayClient();
         unreachableA2a.a2aBaseUrl = "http://127.0.0.1:1";
+        assertEquals("UNAVAILABLE", unreachableA2a.getAgentCard().get("status"));
         Map<String, Object> netErr = unreachableA2a.delegateTask("t-net", "verify-travel-advisory", "Paris", Map.of("city", "Paris"));
         assertEquals("ERROR", netErr.get("status"));
         assertTrue(Boolean.TRUE.equals(netErr.get("isError")));
+        unreachableA2a.close();
 
         assertEquals("France", A2aGatewayClient.resolveCountryForCity("Paris"));
         assertEquals("UnknownPlace", A2aGatewayClient.resolveCountryForCity("UnknownPlace"));
@@ -1406,6 +1501,7 @@ class NomadConciergeOrchestratorServiceTest {
                 return a2aClient.delegateTask(taskId, skillId, prompt, context);
             }
         };
+        a2aClient.getAgentCard();
         parallelStore.beginTurn("th-parallel-98", exactPrompt);
         long t0 = System.nanoTime();
         Map<String, Object> enriched = parallelStore.finalizeTurnDossier("th-parallel-98", slowA2a);

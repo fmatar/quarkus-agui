@@ -1,11 +1,11 @@
 # Product Requirements Document (PRD): Java/Quarkus Implementation of the AG-UI Protocol (`quarkus-agui`)
 
 - **Author:** Agentic SDLC Product Autopilot (`sdlc-product`)
-- **Status:** `APPROVED (Amended by ADR-004, ADR-005, ADR-006, ADR-007 & ADR-008)`
+- **Status:** `APPROVED (Amended by ADR-004, ADR-005, ADR-006, ADR-007, ADR-008 & ADR-009)`
 - **Version:** `0.2.0`
 - **License:** Apache-2.0 OR MIT
 - **Constitution Link:** [`PRODUCT.md`](../../PRODUCT.md)
-- **ADR Links:** [`ADR-001`](../adr/ADR-001-multi-module-maven-sveltekit-clean-architecture-.md), [`ADR-002`](../adr/ADR-002-example-first-tri-protocol-ag-ui-mcp-a2a-evoluti.md), [`ADR-003`](../adr/ADR-003-multi-extension-bom-and-concentric-transport-arc.md), [`ADR-004`](../adr/ADR-004-nomad-concierge-and-svelte5-agui-component-kit.md), [`ADR-005`](../adr/ADR-005-quarkus-langchain4j-mcp-and-smallrye-health.md), [`ADR-006`](../adr/ADR-006-framework-agnostic-module-topology-ag-ui-core-ag.md), [`ADR-007`](../adr/ADR-007-adopt-upstream-ag-ui-sdks-com-ag-ui-community-ag.md), [`ADR-008`](../adr/ADR-008-canonical-ag-ui-activity-snapshot-surface-kit-co.md)
+- **ADR Links:** [`ADR-001`](../adr/ADR-001-multi-module-maven-sveltekit-clean-architecture-.md), [`ADR-002`](../adr/ADR-002-example-first-tri-protocol-ag-ui-mcp-a2a-evoluti.md), [`ADR-003`](../adr/ADR-003-multi-extension-bom-and-concentric-transport-arc.md), [`ADR-004`](../adr/ADR-004-nomad-concierge-and-svelte5-agui-component-kit.md), [`ADR-005`](../adr/ADR-005-quarkus-langchain4j-mcp-and-smallrye-health.md), [`ADR-006`](../adr/ADR-006-framework-agnostic-module-topology-ag-ui-core-ag.md), [`ADR-007`](../adr/ADR-007-adopt-upstream-ag-ui-sdks-com-ag-ui-community-ag.md), [`ADR-008`](../adr/ADR-008-canonical-ag-ui-activity-snapshot-surface-kit-co.md), [`ADR-009`](../adr/ADR-009-adopt-official-a2a-java-sdk-1-5-0-final-client-a.md)
 
 ---
 
@@ -19,7 +19,7 @@ The **AG-UI (Agent–User Interaction Protocol)** standardizes real-time, bidire
    - `ag-ui-quarkus`: Quarkus CDI `AgUiObjectMapperCustomizer` (Jackson MixIns matching `@ag-ui/core` Zod schemas), `AgUiQuarkusBridge` (Mutiny `Multi` SSE), reusable `AgUiWebSocketHandler` + `AgUiSessionRegistry`, and 57-type GraalVM `reflect-config.json` with zero LangChain4j/A2A lock-in.
    - `ag-ui-langchain4j`: Framework-agnostic `dev.langchain4j` `TokenStream` & `Agent` bridge (`AgUiLangChain4jBridge`, per-run `AgUiLangChain4jRunSession`, `AgUiRunOptions` `postToolActivityProvider` & `postRunActivityProvider` `ActivitySnapshotEvent` hooks, RFC 6902 `AgUiStatePatch`, `AgUiMcpBridge`, and native HITL `InterruptOutcome`).
    - `ag-ui-quarkus-langchain4j`: Reactive Quarkiverse `Multi<ChatEvent>` adapter (`AgUiQuarkusLangChain4jBridge`).
-   - `ag-ui-a2a`: Official `org.a2aproject.sdk` `1.4.0.Final` adapter (`AgUiA2aBridge` emitting canonical `StepStartedEvent`, `ActivitySnapshotEvent`, and `StepFinishedEvent`).
+   - `ag-ui-a2a`: Official `org.a2aproject.sdk` `1.5.0.Final` client & event bridge (`AgUiA2aClient` wrapping `A2ACardResolver` + `Client.builder(card)` + `JSONRPCTransport` + `A2AHttpClientFactory`, `A2aDelegationResult`, and `AgUiA2aBridge` emitting canonical `StepStartedEvent`, `ActivitySnapshotEvent`, and `StepFinishedEvent`).
 2. **Headless Svelte 5 SDK (`packages/agui-svelte` / `@agui/svelte`)**:
    - Wraps `@ag-ui/client` (`HttpAgent`, `AbstractAgent`) and `@ag-ui/core` with full-duplex `WebSocketAgent`, immutable RFC 6902 `applyJsonPatch` (with CWE-1321 prototype-pollution guards), `rawEvent` Tri-Protocol taxonomy extraction, canonical activity surface helpers (`AGUI_ACTIVITY_TYPES`, `createActivityRegistry`, `sanitizeExternalUrl`, `buildPlaceMapLinks`), and `createAgUiStore` / `useAgUiAgent`.
 3. **Nomad Tri-Protocol Reference Showcase (`examples/quarkus-svelte-skeleton`)**:
@@ -39,9 +39,9 @@ The **AG-UI (Agent–User Interaction Protocol)** standardizes real-time, bidire
 
 ## 3. User Stories & Acceptance Criteria
 
-### US-001 (`CAP-01`, #2, #32, #76, #78): Quarkus MCP Server (`:8081`) & Quarkus A2A Server (`:8082`)
+### US-001 (`CAP-01`, #2, #32, #76, #78, #100): Quarkus MCP Server (`:8081`) & Quarkus A2A Server (`:8082`)
 - [x] `mcp-server` (`:8081`) exposes 6 `@Tool` endpoints (`fetchCityWeather`, `discoverLocalCultureAndMedia`, `updateTripItinerary`, `saveTravelerPreferences`, `sampleAcousticMood`, `resetNomadState`), `@ResourceTemplate` city dossiers, and `/q/health/ready`.
-- [x] `a2a-server` (`:8082`) exposes `GET /.well-known/agent-card.json` (`Nomad-A2A-Specialist`) and JSON-RPC / REST delegation (`convert-and-audit-budget` via Frankfurter + `open.er-api.com` fallback, `verify-travel-advisory` via REST Countries v5).
+- [x] `a2a-server` (`:8082`) exposes official A2A `1.5.0.Final` `GET /.well-known/agent-card.json` (`Nomad-A2A-Specialist`) and JSON-RPC 2.0 `POST /` delegation (`convert-and-audit-budget` via Frankfurter + `open.er-api.com` fallback, `verify-travel-advisory` via REST Countries v5, and `curate-neighborhood-cadence`) with zero bespoke REST audit side-doors.
 
 ### US-002 (`CAP-02`, #3, #59, #68): Nomad Quarkus Orchestrator (`:8080`) & Quinoa SvelteKit 5 SPA
 - [x] `@RegisterAiService` (`NomadConciergeAiService`) + `@McpToolBox("nomad")` orchestrator on Java 25 Virtual Threads (`@RunOnVirtualThread`) bundling the SvelteKit 5 SPA via Quarkus Quinoa and Jib containers.
@@ -55,7 +55,7 @@ The **AG-UI (Agent–User Interaction Protocol)** standardizes real-time, bidire
 ### US-005 (`CAP-05`, #6, #81, #85): Upstream `com.ag-ui.community` Java 17 Adoption (`ADR-007`)
 - [x] Retired custom `ag-ui-core` in favor of upstream `com.ag-ui.community:{java-core,java-server,java-client}:0.1.1` managed by `ag-ui-bom`.
 
-### US-006 (`CAP-06`, #7, #74, #81): Orthogonal Java 17 Bridges (`ag-ui-quarkus`, `ag-ui-langchain4j`, `ag-ui-quarkus-langchain4j`, `ag-ui-a2a`)
+### US-006 (`CAP-06`, #7, #74, #81, #100): Orthogonal Java 17 Bridges (`ag-ui-quarkus`, `ag-ui-langchain4j`, `ag-ui-quarkus-langchain4j`, `ag-ui-a2a`)
 - [x] Four focused Java 17 (`major version: 61`) modules governed by Archlens concentric rings (`domain <- application <- adapters`).
 
 ### US-007 (`CAP-07`, #8, #74, #81): Standard CDI Discovery & GraalVM 25 Reflection Metadata

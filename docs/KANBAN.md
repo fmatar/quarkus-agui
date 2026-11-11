@@ -13,7 +13,8 @@
 
 | 📥 Backlog | 📋 Ready | ⚡ In Progress | 🔍 In Review | ✅ Done |
 | :--- | :--- | :--- | :--- | :--- |
-|  |  |  | [#98 fix(showcase,agui): prevent stuck chat streaming, normalize city+country inputs & harden budget/tool loop](https://github.com/fmatar/quarkus-agui/issues/98) | [#95 chore(release): bump manifests, sync ADR-008 specs/proofs & release v0.2.0](https://github.com/fmatar/quarkus-agui/issues/95) |
+|  |  |  | [#100 feat(a2a,showcase): adopt official A2A Java SDK 1.5.0.Final client (A2ACardResolver + ClientBuilder) & remove custom HTTP client](https://github.com/fmatar/quarkus-agui/issues/100) |  |
+|  |  |  |  | [#95 chore(release): bump manifests, sync ADR-008 specs/proofs & release v0.2.0](https://github.com/fmatar/quarkus-agui/issues/95) |
 |  |  |  |  | [#93 feat(agui,showcase,ci): canonical AG-UI activity cards, complete Trip Dossier report & local-quarkus-agui CI](https://github.com/fmatar/quarkus-agui/issues/93) |
 |  |  |  |  | [#90 fix(showcase): eliminate cold-start A2A/MCP readiness timeout & parallelize health probes](https://github.com/fmatar/quarkus-agui/issues/90) |
 |  |  |  |  | [#87 feat: chore(release): finalize ADR-007 Stage 8 hygiene, sync specs & release v0.1.0](https://github.com/fmatar/quarkus-agui/issues/87) |
@@ -68,7 +69,8 @@
 
 | Issue | Status | Priority | Component | Quality Gate | Spec Link |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| [#98 fix(showcase,agui): prevent stuck chat streaming, normalize city+country inputs & harden budget/tool loop](https://github.com/fmatar/quarkus-agui/issues/98) | `status:in-review` | P0 - Critical | Architecture | `Passed` | [ADR-008](docs/adr/ADR-008-canonical-ag-ui-activity-snapshot-surface-kit-co.md) |
+|  |  |  | [#100 feat(a2a,showcase): adopt official A2A Java SDK 1.5.0.Final client (A2ACardResolver + ClientBuilder) & remove custom HTTP client](https://github.com/fmatar/quarkus-agui/issues/100) |  |
+| [#98 fix(showcase,agui): prevent stuck chat streaming, normalize city+country inputs & harden budget/tool loop](https://github.com/fmatar/quarkus-agui/issues/98) | `status:done` | P0 - Critical | Architecture | `Passed` | [ADR-008](docs/adr/ADR-008-canonical-ag-ui-activity-snapshot-surface-kit-co.md) |
 | [#95 chore(release): bump manifests, sync ADR-008 specs/proofs & release v0.2.0](https://github.com/fmatar/quarkus-agui/issues/95) | `status:done` | P1 - High | DevOps | `Passed` | [ADR-008](docs/adr/ADR-008-canonical-ag-ui-activity-snapshot-surface-kit-co.md) |
 | [#93 feat(agui,showcase,ci): canonical AG-UI activity cards, complete Trip Dossier report & local-quarkus-agui CI](https://github.com/fmatar/quarkus-agui/issues/93) | `status:done` | P1 - High | Architecture | `Passed` | [ADR-008](docs/adr/ADR-008-canonical-ag-ui-activity-snapshot-surface-kit-co.md) |
 | [#90 fix(showcase): eliminate cold-start A2A/MCP readiness timeout & parallelize health probes](https://github.com/fmatar/quarkus-agui/issues/90) | `status:done` | P0 - Critical | Backend | `Passed` | [ADR-005](docs/adr/ADR-005-quarkus-langchain4j-mcp-and-smallrye-health.md) |
