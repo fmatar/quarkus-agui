@@ -289,6 +289,7 @@ class AgUiA2aBridgeTest {
         List<String> capturedAuth = new java.util.concurrent.CopyOnWriteArrayList<>();
         List<String> capturedTrace = new java.util.concurrent.CopyOnWriteArrayList<>();
         List<String> capturedBodies = new java.util.concurrent.CopyOnWriteArrayList<>();
+        java.util.concurrent.CountDownLatch hangRelease = new java.util.concurrent.CountDownLatch(1);
 
         server.createContext("/.well-known/agent-card.json", exchange -> {
             String auth = exchange.getRequestHeaders().getFirst("Authorization");
@@ -340,7 +341,7 @@ class AgUiA2aBridgeTest {
                 writeResponse(exchange, 200, "text/event-stream", ssePayload);
             } else if (body.contains("sync-hang")) {
                 try {
-                    Thread.sleep(2000L);
+                    hangRelease.await(10, java.util.concurrent.TimeUnit.SECONDS);
                 } catch (InterruptedException ignored) {
                     Thread.currentThread().interrupt();
                 }
@@ -397,14 +398,14 @@ class AgUiA2aBridgeTest {
                     org.a2aproject.sdk.client.http.A2AHttpClientFactory.create();
             try (AgUiA2aClient rpcClient = AgUiA2aClient.builder(baseUrl + "/")
                     .streaming(false)
-                    .connectTimeout(Duration.ofMillis(500))
-                    .requestTimeout(Duration.ofMillis(400))
+                    .connectTimeout(Duration.ofSeconds(3))
+                    .requestTimeout(Duration.ofSeconds(3))
                     .httpClient(customHttp)
                     .authHeaders(Map.of("Authorization", "Bearer test-token"))
                     .bridge(new AgUiA2aBridge())
                     .build()) {
-                assertEquals(Duration.ofMillis(500), rpcClient.connectTimeout());
-                assertEquals(Duration.ofMillis(400), rpcClient.requestTimeout());
+                assertEquals(Duration.ofSeconds(3), rpcClient.connectTimeout());
+                assertEquals(Duration.ofSeconds(3), rpcClient.requestTimeout());
                 assertFalse(rpcClient.isCached());
                 AgentCard resolved = rpcClient.resolveAgentCard();
                 assertTrue(rpcClient.isCached());
@@ -454,13 +455,6 @@ class AgUiA2aBridgeTest {
                 assertEquals("ERROR", failExec.result().status());
                 assertEquals("Upstream failure", failExec.result().summary());
 
-                // Synchronous JSON-RPC hang bounded by requestTimeout
-                AgUiA2aClient.DelegationExecution syncTimeoutExec = rpcClient.delegate(
-                        "req-sync-hang", "verify-travel-advisory", "sync-hang", Map.of(), Map.of());
-                assertTrue(syncTimeoutExec.result().isError());
-                assertEquals("ERROR", syncTimeoutExec.result().status());
-                assertTrue(syncTimeoutExec.result().summary().contains("timed out"));
-
                 // Interrupted thread before delegate returns ERROR cleanly
                 Thread.currentThread().interrupt();
                 try {
@@ -476,10 +470,10 @@ class AgUiA2aBridgeTest {
                 assertFalse(rpcClient.isCached());
             }
 
-            // 2. Streaming SSE SendStreamingMessage client + timeout handling
+            // 2. Streaming SSE SendStreamingMessage happy path (generous timeout avoids cold-JVM flakiness)
             try (AgUiA2aClient sseClient = AgUiA2aClient.builder(baseUrl)
                     .streaming(true)
-                    .requestTimeout(Duration.ofMillis(400))
+                    .requestTimeout(Duration.ofSeconds(3))
                     .authHeaders(null)
                     .build()) {
                 AgUiA2aClient.DelegationExecution sseExec = sseClient.delegate(
@@ -493,13 +487,9 @@ class AgUiA2aBridgeTest {
                 assertEquals("SSE France advisory verified", sseExec.result().summary());
                 assertEquals("France", sseExec.result().data().get("country"));
                 assertFalse(sseExec.agUiEvents().isEmpty());
-
-                AgUiA2aClient.DelegationExecution timeoutExec = sseClient.delegate(
-                        "req-slow", "verify-travel-advisory", "slow-stream", Map.of(), Map.of());
-                assertTrue(timeoutExec.result().isError());
-                assertEquals("ERROR", timeoutExec.result().status());
             }
         } finally {
+            hangRelease.countDown();
             server.stop(0);
             serverPool.shutdownNow();
         }
@@ -581,14 +571,97 @@ class AgUiA2aBridgeTest {
 
         try (AgUiA2aClient brokenClient = AgUiA2aClient.builder("http://127.0.0.1:1")
                 .streaming(false)
-                .connectTimeout(Duration.ofMillis(200))
-                .requestTimeout(Duration.ofMillis(300))
+                .connectTimeout(Duration.ofSeconds(1))
+                .requestTimeout(Duration.ofSeconds(2))
                 .build()) {
             AgUiA2aClient.DelegationExecution errExec = brokenClient.delegate(
                     "req-err", "verify-travel-advisory", "Verify Paris", Map.of("city", "Paris"), Map.of());
             assertTrue(errExec.result().isError());
             assertEquals("ERROR", errExec.result().status());
             assertEquals("A2A-Agent", errExec.result().agentName());
+        }
+    }
+
+    @Test
+    void agUiA2aClientEnforcesBoundedSynchronousAndStreamingTimeouts() throws Exception {
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        int port = server.getAddress().getPort();
+        String baseUrl = "http://127.0.0.1:" + port;
+        AgentCard card = AgentCard.builder()
+                .name("Nomad-Timeout-Specialist")
+                .description("Timeout Verification Agent")
+                .version("1.5.0")
+                .supportedInterfaces(List.of(new AgentInterface("JSONRPC", baseUrl)))
+                .capabilities(AgentCapabilities.builder().streaming(true).build())
+                .defaultInputModes(List.of("text/plain"))
+                .defaultOutputModes(List.of("text/plain"))
+                .skills(List.of(AgentSkill.builder()
+                        .id("verify-travel-advisory")
+                        .name("Verify Advisory")
+                        .description("REST Countries v5")
+                        .tags(List.of("advisory"))
+                        .build()))
+                .build();
+        java.util.concurrent.CountDownLatch hangRelease = new java.util.concurrent.CountDownLatch(1);
+        server.createContext("/.well-known/agent-card.json", exchange ->
+                writeResponse(exchange, 200, "application/json", toJson(card)));
+        server.createContext("/", exchange -> {
+            String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+            if (body.contains("slow-stream")) {
+                writeResponse(exchange, 200, "text/event-stream",
+                        "data: " + toJson(new SendStreamingMessageResponse("1", Task.builder()
+                                .id("task-slow")
+                                .contextId("ctx-slow")
+                                .status(new TaskStatus(TaskState.TASK_STATE_WORKING))
+                                .build())) + "\n\n");
+            } else {
+                try {
+                    hangRelease.await(10, java.util.concurrent.TimeUnit.SECONDS);
+                } catch (InterruptedException ignored) {
+                    Thread.currentThread().interrupt();
+                }
+                writeResponse(exchange, 200, "application/json", "{}");
+            }
+        });
+        java.util.concurrent.ExecutorService serverPool = java.util.concurrent.Executors.newCachedThreadPool();
+        server.setExecutor(serverPool);
+        server.start();
+
+        try {
+            // Warm up Protobuf & JSON codecs once with generous timeout so subsequent 350ms timeouts are zero-flake
+            try (AgUiA2aClient warmUp = AgUiA2aClient.builder(baseUrl)
+                    .streaming(false)
+                    .requestTimeout(Duration.ofSeconds(3))
+                    .build()) {
+                assertNotNull(warmUp.resolveAgentCard());
+            }
+
+            try (AgUiA2aClient syncTimeoutClient = AgUiA2aClient.builder(baseUrl)
+                    .streaming(false)
+                    .requestTimeout(Duration.ofMillis(350))
+                    .build()) {
+                assertNotNull(syncTimeoutClient.resolveAgentCard());
+                AgUiA2aClient.DelegationExecution syncTimeoutExec = syncTimeoutClient.delegate(
+                        "req-sync-hang", "verify-travel-advisory", "sync-hang", Map.of(), Map.of());
+                assertTrue(syncTimeoutExec.result().isError());
+                assertEquals("ERROR", syncTimeoutExec.result().status());
+                assertTrue(syncTimeoutExec.result().summary().contains("timed out"));
+            }
+
+            try (AgUiA2aClient sseTimeoutClient = AgUiA2aClient.builder(baseUrl)
+                    .streaming(true)
+                    .requestTimeout(Duration.ofMillis(350))
+                    .build()) {
+                assertNotNull(sseTimeoutClient.resolveAgentCard());
+                AgUiA2aClient.DelegationExecution timeoutExec = sseTimeoutClient.delegate(
+                        "req-slow", "verify-travel-advisory", "slow-stream", Map.of(), Map.of());
+                assertTrue(timeoutExec.result().isError());
+                assertEquals("ERROR", timeoutExec.result().status());
+            }
+        } finally {
+            hangRelease.countDown();
+            server.stop(0);
+            serverPool.shutdownNow();
         }
     }
 
