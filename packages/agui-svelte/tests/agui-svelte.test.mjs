@@ -1030,3 +1030,53 @@ test('AG-UI activity surface kit: taxonomy, registry, map deep-links, coordinate
 	assert.equal(upsertActivityList(list, null), list);
 	assert.equal(upsertActivityList(list, { activityType: '   ' }), list);
 });
+
+test('WebSocketAgent enforces stream inactivity timeout and suppresses late frames from aborted runs on shared sockets', async () => {
+	let sharedSock = null;
+	const spontaneous = [];
+	const wsAgent = new WebSocketAgent({
+		url: 'ws://127.0.0.1:8080/api/agent/ws',
+		inactivityTimeoutMs: 60,
+		onSpontaneousEvent: (evt) => spontaneous.push(evt),
+		webSocketFactory: (url) => {
+			sharedSock = new FakeWebSocket(url);
+			return sharedSock;
+		}
+	});
+	wsAgent.connectSocket();
+	sharedSock.openServer();
+
+	// 1. Stalled upstream run rejects via inactivityTimeoutMs instead of hanging forever
+	await assert.rejects(() => wsAgent.runAgent(), /inactivity|timed out/i);
+
+	// 2. Aborting an active shared-socket run suppresses trailing TEXT_MESSAGE_CONTENT / TOOL_CALL_* frames from the aborted run
+	const activeRun = wsAgent.runAgent();
+	await new Promise((r) => setTimeout(r, 10));
+	const sentRunInput = JSON.parse(sharedSock.sentFrames.at(-1));
+	wsAgent.abortRun();
+	await activeRun.catch(() => {});
+
+	sharedSock.emitServerJson({
+		type: EventType.TEXT_MESSAGE_CONTENT,
+		messageId: 'm-late',
+		delta: 'Ghost trailing chunk after Stop button'
+	});
+	sharedSock.emitServerJson({
+		type: EventType.TOOL_CALL_START,
+		toolCallId: 'tc-late',
+		toolCallName: 'discoverLocalCultureAndMedia'
+	});
+	assert.equal(
+		spontaneous.some((e) => e.type === EventType.TEXT_MESSAGE_CONTENT || e.type === EventType.TOOL_CALL_START),
+		false,
+		'Late streaming content/tool events after abortRun() must not leak into onSpontaneousEvent'
+	);
+
+	// Legitimate out-of-band STATE_DELTA (e.g. UPDATE_TRIP_PARAMS or CANCEL_RUN acknowledgement) still flows through
+	sharedSock.emitServerJson({
+		type: EventType.STATE_DELTA,
+		delta: [{ op: 'add', path: '/nomadTrip/nights', value: 5 }]
+	});
+	assert.equal(spontaneous.length, 1);
+	assert.equal(sentRunInput.runId !== undefined, true);
+});

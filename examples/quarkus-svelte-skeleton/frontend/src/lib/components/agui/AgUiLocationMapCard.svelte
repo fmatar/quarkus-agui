@@ -97,7 +97,7 @@
 	{/if}
 
 	<ul class="agui-stops-list">
-		{#each stopsWithLinks as stop (stop.name)}
+		{#each stopsWithLinks as stop, idx (`${stop.name}-${idx}`)}
 			<li class="agui-stop-item">
 				<span class="agui-stop-name">{stop.name}</span>
 				<div class="agui-link-group" role="group" aria-label="Map links for {stop.name}">

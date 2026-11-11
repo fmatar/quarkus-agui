@@ -31,13 +31,14 @@ public class NomadA2aAgentTools {
         if (city == null || city.isBlank()) {
             return missingArgsJson("city");
         }
-        String trimmedCity = city.trim();
-        String country = A2aGatewayClient.resolveCountryForCity(trimmedCity);
+        String rawCity = city.trim();
+        String resolvedCity = TripDossierStore.normalizeCityName(rawCity);
+        String country = A2aGatewayClient.resolveCountryForCity(rawCity);
         Map<String, Object> handoff = a2aClient.delegateTask(
                 "a2a-adv-" + UUID.randomUUID().toString().substring(0, 8),
                 "verify-travel-advisory",
-                "Verify travel advisory for " + trimmedCity,
-                Map.of("city", trimmedCity, "country", country));
+                "Verify travel advisory for " + resolvedCity,
+                Map.of("city", resolvedCity, "country", country));
         return toJson(handoff);
     }
 
@@ -51,16 +52,18 @@ public class NomadA2aAgentTools {
                 || baseCurrency == null || baseCurrency.isBlank()) {
             return missingArgsJson("city, budgetAmount (> 0), baseCurrency");
         }
-        String trimmedCity = city.trim();
-        String normBase = baseCurrency.trim().toUpperCase(Locale.ROOT);
-        String country = A2aGatewayClient.resolveCountryForCity(trimmedCity);
+        String rawCity = city.trim();
+        String resolvedCity = TripDossierStore.normalizeCityName(rawCity);
+        String normBase = TripDossierStore.normalizeCurrencyToken(baseCurrency);
+        String country = A2aGatewayClient.resolveCountryForCity(rawCity);
         String targetCurrency = A2aGatewayClient.resolveCurrencyForCountry(country);
         Map<String, Object> handoff = a2aClient.delegateTask(
                 "a2a-fx-" + UUID.randomUUID().toString().substring(0, 8),
                 "convert-and-audit-budget",
-                "Convert " + budgetAmount + " " + normBase + " for " + trimmedCity,
+                "Convert " + budgetAmount + " " + normBase + " for " + resolvedCity,
                 Map.of(
-                        "city", trimmedCity,
+                        "city", resolvedCity,
+                        "country", country,
                         "budgetUsd", budgetAmount,
                         "baseCurrency", normBase,
                         "targetCurrency", targetCurrency));
@@ -77,12 +80,14 @@ public class NomadA2aAgentTools {
                 || focus == null || focus.isBlank()) {
             return missingArgsJson("city, nights (> 0), focus");
         }
-        String trimmedCity = city.trim();
+        String rawCity = city.trim();
+        String resolvedCity = TripDossierStore.normalizeCityName(rawCity);
+        String country = A2aGatewayClient.resolveCountryForCity(rawCity);
         Map<String, Object> handoff = a2aClient.delegateTask(
                 "a2a-cad-" + UUID.randomUUID().toString().substring(0, 8),
                 "curate-neighborhood-cadence",
-                "Curate " + nights + "-night cadence in " + trimmedCity + " focused on " + focus.trim(),
-                Map.of("city", trimmedCity, "nights", nights, "focus", focus.trim()));
+                "Curate " + nights + "-night cadence in " + resolvedCity + " focused on " + focus.trim(),
+                Map.of("city", resolvedCity, "country", country, "nights", nights, "focus", focus.trim()));
         return toJson(handoff);
     }
 

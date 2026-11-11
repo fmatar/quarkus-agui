@@ -30,7 +30,7 @@
 
 {#if media?.length}
 	<div class="turn-media-grid">
-		{#each media as item (item.title + item.type)}
+		{#each media as item, idx (`${item.title ?? ''}-${item.type ?? ''}-${idx}`)}
 			{@const safeItemUrl = sanitizeExternalUrl(item.url)}
 			{@const safePosterUrl = sanitizeExternalUrl(item.posterUrl)}
 			{#if item.type === 'image' && safeItemUrl}

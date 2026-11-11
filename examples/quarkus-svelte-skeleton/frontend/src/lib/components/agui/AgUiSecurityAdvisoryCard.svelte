@@ -53,7 +53,7 @@
 
 	{#if safetyHighlights.length > 0}
 		<ul class="agui-safety-list">
-			{#each safetyHighlights as item (item)}
+			{#each safetyHighlights as item, idx (`${item}-${idx}`)}
 				<li>{item}</li>
 			{/each}
 		</ul>

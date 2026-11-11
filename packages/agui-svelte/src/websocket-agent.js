@@ -25,11 +25,14 @@ export class WebSocketAgent extends AbstractAgent {
 	#sharedSocket = null;
 	#activeRunSocket = null;
 	#activeObserver = null;
+	#inactivityTimer = null;
+	#suppressSpontaneousRunFrames = false;
 
 	constructor(config) {
 		super(config);
 		this.url = config.url;
 		this.protocols = config.protocols;
+		this.inactivityTimeoutMs = config.inactivityTimeoutMs ?? 60_000;
 		this.webSocketFactory = config.webSocketFactory ?? defaultWebSocketFactory;
 		this.onControlEvent = config.onControlEvent ?? null;
 		this.onSpontaneousEvent = config.onSpontaneousEvent ?? null;
@@ -94,12 +97,14 @@ export class WebSocketAgent extends AbstractAgent {
 	run(input) {
 		const validated = enforceOutgoingInput(input, { maxEntries: this.maxEnforcedEntries });
 		const serialized = JSON.stringify(validated);
+		this.#suppressSpontaneousRunFrames = false;
 		return this.isConnected
 			? this.#runOverSharedSocket(serialized)
 			: this.#runOverDedicatedSocket(serialized);
 	}
 
 	abortRun() {
+		this.#suppressSpontaneousRunFrames = true;
 		const dedicated = this.#activeRunSocket;
 		this.#activeRunSocket = null;
 		this.#failActiveObserver(new Error('WebSocket run aborted'));
@@ -121,6 +126,7 @@ export class WebSocketAgent extends AbstractAgent {
 			maxEnforcedEntries: this.maxEnforcedEntries,
 			url: this.url,
 			protocols: this.protocols,
+			inactivityTimeoutMs: this.inactivityTimeoutMs,
 			webSocketFactory: this.webSocketFactory,
 			onControlEvent: this.onControlEvent,
 			onSpontaneousEvent: this.onSpontaneousEvent,
@@ -135,10 +141,12 @@ export class WebSocketAgent extends AbstractAgent {
 	#runOverSharedSocket(serializedInput) {
 		return new Observable((subscriber) => {
 			this.#activeObserver = subscriber;
+			this.#resetInactivityTimer();
 			this.#sharedSocket.send(serializedInput);
 			return () => {
 				if (this.#activeObserver === subscriber) {
 					this.#activeObserver = null;
+					this.#clearInactivityTimer();
 				}
 			};
 		});
@@ -149,6 +157,7 @@ export class WebSocketAgent extends AbstractAgent {
 			const socket = this.webSocketFactory(this.url, this.protocols);
 			this.#activeRunSocket = socket;
 			this.#activeObserver = subscriber;
+			this.#resetInactivityTimer();
 			let completed = false;
 
 			socket.onopen = () => socket.send(serializedInput);
@@ -158,12 +167,16 @@ export class WebSocketAgent extends AbstractAgent {
 			socket.onerror = (err) => {
 				if (!completed) {
 					completed = true;
+					this.#clearInactivityTimer();
+					this.#activeObserver = null;
 					subscriber.error(toTransportError(err, 'WebSocket transport error'));
 				}
 			};
 			socket.onclose = () => {
 				if (!completed) {
 					completed = true;
+					this.#clearInactivityTimer();
+					this.#activeObserver = null;
 					subscriber.error(new Error('WebSocket closed before RUN_FINISHED'));
 				}
 			};
@@ -172,6 +185,7 @@ export class WebSocketAgent extends AbstractAgent {
 				completed = true;
 				if (this.#activeObserver === subscriber) {
 					this.#activeObserver = null;
+					this.#clearInactivityTimer();
 				}
 				if (this.#activeRunSocket === socket) {
 					this.#activeRunSocket = null;
@@ -186,7 +200,11 @@ export class WebSocketAgent extends AbstractAgent {
 
 	#routeSocketMessage(socket, evt) {
 		const parsed = parseInboundFrame(evt?.data);
-		if (!parsed || parsed.type === 'pong') return false;
+		if (!parsed) return false;
+		if (this.#activeObserver) {
+			this.#resetInactivityTimer();
+		}
+		if (parsed.type === 'pong') return false;
 		if (parsed.type === 'ping') {
 			socket.send('{"type":"pong"}');
 			return false;
@@ -208,6 +226,7 @@ export class WebSocketAgent extends AbstractAgent {
 			parsed.type === EventType.RUN_FINISHED || parsed.type === EventType.RUN_ERROR;
 		if (isTerminal) {
 			this.#activeObserver = null;
+			this.#clearInactivityTimer();
 		}
 		observer.next(parsed);
 		if (isTerminal) {
@@ -217,6 +236,15 @@ export class WebSocketAgent extends AbstractAgent {
 	}
 
 	#applySpontaneousState(event) {
+		if (this.#suppressSpontaneousRunFrames) {
+			if (event.type === EventType.RUN_FINISHED || event.type === EventType.RUN_ERROR) {
+				this.#suppressSpontaneousRunFrames = false;
+				return;
+			}
+			if (event.type !== EventType.STATE_SNAPSHOT && event.type !== EventType.STATE_DELTA) {
+				return;
+			}
+		}
 		if (event.type === EventType.STATE_SNAPSHOT) {
 			this.setState(event.snapshot);
 		} else if (event.type === EventType.STATE_DELTA) {
@@ -226,10 +254,28 @@ export class WebSocketAgent extends AbstractAgent {
 	}
 
 	#failActiveObserver(err) {
+		this.#clearInactivityTimer();
 		const observer = this.#activeObserver;
 		if (observer) {
 			this.#activeObserver = null;
 			observer.error(toTransportError(err, 'WebSocket transport error'));
+		}
+	}
+
+	#clearInactivityTimer() {
+		if (this.#inactivityTimer !== null) {
+			clearTimeout(this.#inactivityTimer);
+			this.#inactivityTimer = null;
+		}
+	}
+
+	#resetInactivityTimer() {
+		this.#clearInactivityTimer();
+		if (typeof this.inactivityTimeoutMs === 'number' && this.inactivityTimeoutMs > 0) {
+			this.#inactivityTimer = setTimeout(() => {
+				this.#inactivityTimer = null;
+				this.#failActiveObserver(new Error('WebSocket agent stream timed out due to inactivity'));
+			}, this.inactivityTimeoutMs);
 		}
 	}
 }

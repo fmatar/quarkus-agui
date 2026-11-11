@@ -48,7 +48,7 @@
 				</div>
 
 				<div class="grid grid-cols-1 gap-2">
-					{#each interaction.options as opt (opt.id)}
+					{#each interaction.options as opt, idx (`${opt.id ?? 'opt'}-${idx}`)}
 						{@const isSelected = selected.includes(opt.id)}
 						<button
 							type="button"
@@ -108,7 +108,7 @@
 
 		{#if interaction?.actions?.length}
 			<div class="flex flex-wrap items-center gap-2 pt-1">
-				{#each interaction.actions as act (act.id)}
+				{#each interaction.actions as act, idx (`${act.id ?? 'act'}-${idx}`)}
 					<button
 						type="button"
 						disabled={disabled}

@@ -633,4 +633,98 @@ class NomadTravelAdvisorServiceTest {
         assertTrue(kyotoStops.stream().anyMatch(s -> s.contains("Arashiyama")));
         assertTrue(kyotoStops.stream().anyMatch(s -> s.contains("Gion")));
     }
+
+    @Test
+    void normalizesSpaceSeparatedCityCountryAndEurosPromptInAdvisoryFxAndCadence() {
+        List<String> probedUrls = new ArrayList<>();
+        service.setHttpProbe(url -> {
+            probedUrls.add(url);
+            if (url.contains("/countries/v5/names.common/France")) {
+                return new NomadTravelAdvisorService.UpstreamHttpResult(200, REST_COUNTRIES_V5_FRANCE_JSON, null, 14L);
+            }
+            if (url.contains("/v1/latest")) {
+                return new NomadTravelAdvisorService.UpstreamHttpResult(
+                        200, "{\"amount\":1.0,\"base\":\"EUR\",\"rates\":{\"EUR\":1.0,\"USD\":1.09}}", null, 12L);
+            }
+            return new NomadTravelAdvisorService.UpstreamHttpResult(404, null, "HTTP 404 for " + url, 8L);
+        });
+
+        String exactUserPrompt =
+                "Plan a trip to Paris France for 5 nights I want to spend 1500 euros and I want to eat and party and go to historical places";
+
+        NomadTravelAdvisorService.AuditResult adv = service.performAudit(
+                "verify-travel-advisory", exactUserPrompt, Map.of("city", "Paris France"));
+        assertEquals("OK", adv.data().get("status"));
+        assertEquals("Paris", adv.data().get("city"));
+        assertEquals("France", adv.data().get("country"));
+        assertFalse(probedUrls.stream().anyMatch(u -> u.contains("Paris")),
+                "REST Countries v5 must query France, never 'Paris France': " + probedUrls);
+
+        NomadTravelAdvisorService.AuditResult fx = service.performAudit(
+                "convert-and-audit-budget", exactUserPrompt, Map.of("city", "Paris France"));
+        assertEquals("OK", fx.data().get("status"));
+        assertEquals("Paris", fx.data().get("city"));
+        assertEquals("France", fx.data().get("country"));
+        assertEquals("EUR", fx.data().get("baseCurrency"));
+        assertEquals("EUR", fx.data().get("targetCurrency"));
+        assertEquals(1500.0, fx.data().get("budgetUsd"));
+
+        NomadTravelAdvisorService.AuditResult cadence = service.performAudit(
+                "curate-neighborhood-cadence", exactUserPrompt, Map.of("city", "Paris France"));
+        assertEquals("OK", cadence.data().get("status"));
+        assertEquals("Paris", cadence.data().get("city"));
+        assertEquals("France", cadence.data().get("country"));
+
+        // Direct boundary coverage for city/country normalization & currency word parsing
+        assertEquals("", NomadTravelAdvisorService.normalizeCityInput(null));
+        assertEquals("", NomadTravelAdvisorService.normalizeCityInput("   "));
+        assertEquals("Paris", NomadTravelAdvisorService.normalizeCityInput("Paris, France"));
+        assertEquals("New York", NomadTravelAdvisorService.normalizeCityInput("new york United States"));
+        assertEquals("Bordeaux", NomadTravelAdvisorService.normalizeCityInput("bordeaux france"));
+        assertEquals("Bordeaux", NomadTravelAdvisorService.normalizeCityInput("bordeaux"));
+        assertEquals("Valletta", NomadTravelAdvisorService.normalizeCityInput("valletta"));
+        assertEquals("Belo Horizonte", NomadTravelAdvisorService.normalizeCityInput("Belo Horizonte"));
+
+        assertNull(NomadTravelAdvisorService.extractTrailingCountry(null));
+        assertNull(NomadTravelAdvisorService.extractTrailingCountry("   "));
+        assertNull(NomadTravelAdvisorService.extractTrailingCountry("Paris,   "));
+        assertNull(NomadTravelAdvisorService.extractTrailingCountry("New York"));
+        assertNull(NomadTravelAdvisorService.extractTrailingCountry("Belo Horizonte"));
+        assertEquals("United Kingdom", NomadTravelAdvisorService.extractTrailingCountry("London, UK"));
+        assertEquals("Malta", NomadTravelAdvisorService.extractTrailingCountry("Valletta, Malta"));
+        assertEquals("United States", NomadTravelAdvisorService.extractTrailingCountry("New York United States of America"));
+
+        assertEquals("", NomadTravelAdvisorService.resolveCountryForCity(null));
+        assertEquals("", NomadTravelAdvisorService.resolveCountryForCity("  "));
+        assertEquals("France", NomadTravelAdvisorService.resolveCountryForCity("Paris"));
+        assertEquals("Malta", NomadTravelAdvisorService.resolveCountryForCity("Valletta, Malta"));
+        assertEquals("France", NomadTravelAdvisorService.resolveCountryForCity("Bordeaux,"));
+        assertEquals("Valletta", NomadTravelAdvisorService.resolveCountryForCity("Valletta"));
+
+        service.setHttpProbe(url -> new NomadTravelAdvisorService.UpstreamHttpResult(
+                200,
+                "{\"amount\":1.0,\"base\":\"GBP\",\"rates\":{\"GBP\":1.0,\"CHF\":1.12,\"EUR\":1.17,\"USD\":1.27}}",
+                null,
+                10L));
+        NomadTravelAdvisorService.AuditResult gbpAudit = service.performAudit(
+                "convert-and-audit-budget",
+                "Plan a trip to London UK and spend 900 pounds sterling",
+                Map.of("city", "London UK"));
+        assertEquals("London", gbpAudit.data().get("city"));
+        assertEquals("United Kingdom", gbpAudit.data().get("country"));
+        assertEquals("GBP", gbpAudit.data().get("baseCurrency"));
+        assertEquals(900.0, gbpAudit.data().get("budgetUsd"));
+
+        NomadTravelAdvisorService.AuditResult chfAudit = service.performAudit(
+                "convert-and-audit-budget",
+                "Explore Bordeaux France with 800 francs",
+                Map.of());
+        assertEquals("Bordeaux", chfAudit.data().get("city"));
+        assertEquals("CHF", chfAudit.data().get("baseCurrency"));
+        assertEquals(800.0, chfAudit.data().get("budgetUsd"));
+
+        NomadTravelAdvisorService.AuditResult invalidAmountMissingBudget = service.performAudit(
+                "convert-and-audit-budget", "Audit budget", Map.of("city", "Paris", "amount", "not-a-number"));
+        assertEquals("MISSING_REQUIRED_ARGUMENTS", invalidAmountMissingBudget.data().get("code"));
+    }
 }

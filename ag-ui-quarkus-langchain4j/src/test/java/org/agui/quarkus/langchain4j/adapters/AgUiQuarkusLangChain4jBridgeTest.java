@@ -140,4 +140,35 @@ class AgUiQuarkusLangChain4jBridgeTest {
 
         assertNotNull(bridge.getClass().getClassLoader().getResourceAsStream("META-INF/beans.xml"));
     }
+
+    @Test
+    void recoversGracefullyWhenQuarkiverseAiServiceExceedsToolCallingRoundTripsAfterStreamingText() {
+        AgUiQuarkusLangChain4jBridge bridge = new AgUiQuarkusLangChain4jBridge();
+        Multi<ChatEvent> roundSixLoopStream = Multi.createBy().concatenating().streams(
+                Multi.createFrom().items(
+                        new ChatEvent.PartialResponseEvent("Here is your 5-night Paris plan. "),
+                        new ChatEvent.PartialResponseEvent("Please confirm if these details look good.")),
+                Multi.createFrom().failure(new RuntimeException(
+                        "Something is wrong, exceeded the maximum number of tool calling round trips")));
+
+        AgUiRunOptions options = AgUiRunOptions.builder()
+                .runId("run-paris-loop")
+                .runResultSupplier(() -> Map.of("status", "completed"))
+                .build();
+
+        List<Event> events = bridge.adapt("thread-paris-loop", roundSixLoopStream, options)
+                .collect().asList().await().indefinitely();
+
+        assertEquals(
+                List.of(
+                        EventType.RUN_STARTED,
+                        EventType.TEXT_MESSAGE_START,
+                        EventType.TEXT_MESSAGE_CONTENT,
+                        EventType.TEXT_MESSAGE_CONTENT,
+                        EventType.TEXT_MESSAGE_END,
+                        EventType.RUN_FINISHED),
+                events.stream().map(Event::type).toList());
+        RunFinishedEvent finished = assertInstanceOf(RunFinishedEvent.class, events.get(events.size() - 1));
+        assertEquals(Map.of("status", "completed"), finished.result());
+    }
 }

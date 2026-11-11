@@ -40,9 +40,11 @@ import java.util.ArrayList;
 import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.function.Supplier;
 
 /**
  * Stateful per-run state machine translating LangChain4j streaming callbacks into
@@ -229,15 +231,11 @@ public final class AgUiLangChain4jRunSession {
         long now = System.currentTimeMillis();
         List<Event> out = new ArrayList<>(5);
         closeOpenStreamsInto(out, now);
-        appendStateDeltaIfPresent(out, options.postRunStatePatchProvider() == null
-                ? null
-                : options.postRunStatePatchProvider().get(), now);
-        appendActivitiesIfPresent(out, options.postRunActivityProvider() == null
-                ? null
-                : options.postRunActivityProvider().get());
+        appendStateDeltaIfPresent(out, safeSupply(options.postRunStatePatchProvider()), now);
+        appendActivitiesIfPresent(out, safeSupply(options.postRunActivityProvider()));
 
         RunOutcome outcome = resolveRunOutcome();
-        Object result = options.runResultSupplier() != null ? options.runResultSupplier().get() : null;
+        Object result = safeSupply(options.runResultSupplier());
         out.add(new RunFinishedEvent(
                 threadId,
                 options.runId(),
@@ -252,15 +250,25 @@ public final class AgUiLangChain4jRunSession {
         if (terminated) {
             return List.of();
         }
-        terminated = true;
-        long now = System.currentTimeMillis();
-        List<Event> out = new ArrayList<>(6);
-        closeOpenStreamsInto(out, now);
-
         Throwable root = unwrapCause(failure);
         String message = (root.getMessage() == null || root.getMessage().isBlank())
                 ? root.getClass().getSimpleName()
                 : root.getMessage();
+
+        if (isToolLoopExhausted(message)) {
+            List<Event> out = new ArrayList<>(8);
+            if (!streamedAnyText) {
+                out.addAll(onPartialResponse(
+                        "I gathered the available live destination details above—please let me know how you would like to refine your itinerary."));
+            }
+            out.addAll(onComplete());
+            return List.copyOf(out);
+        }
+
+        terminated = true;
+        long now = System.currentTimeMillis();
+        List<Event> out = new ArrayList<>(6);
+        closeOpenStreamsInto(out, now);
 
         if (root instanceof InputGuardrailException || root instanceof OutputGuardrailException) {
             appendGuardrailEvents(out, root instanceof InputGuardrailException, message, now);
@@ -306,13 +314,28 @@ public final class AgUiLangChain4jRunSession {
     }
 
     private RunOutcome resolveRunOutcome() {
-        if (options.interruptSupplier() != null) {
-            List<Interrupt> interrupts = options.interruptSupplier().get();
-            if (interrupts != null && !interrupts.isEmpty()) {
-                return new InterruptOutcome(List.copyOf(interrupts));
-            }
+        List<Interrupt> interrupts = safeSupply(options.interruptSupplier());
+        if (interrupts != null && !interrupts.isEmpty()) {
+            return new InterruptOutcome(List.copyOf(interrupts));
         }
         return new SuccessOutcome();
+    }
+
+    private static <T> T safeSupply(Supplier<T> supplier) {
+        if (supplier == null) {
+            return null;
+        }
+        try {
+            return supplier.get();
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private static boolean isToolLoopExhausted(String message) {
+        String lower = message.toLowerCase(Locale.ROOT);
+        return lower.contains("exceeded the maximum number of tool calling round trips")
+                || lower.contains("exceeded the maximum number of sequential tool invocations");
     }
 
     private void closeOpenStreamsInto(List<Event> out, long now) {

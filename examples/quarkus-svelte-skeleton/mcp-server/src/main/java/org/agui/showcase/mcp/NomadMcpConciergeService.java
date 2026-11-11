@@ -31,11 +31,13 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.function.Function;
@@ -379,17 +381,23 @@ public class NomadMcpConciergeService {
         }
     }
 
-    @Tool(description = "Discover local cultural landmarks via Wikipedia REST v1 and a 30s local music preview via Apple iTunes Search API for an explicit destination. Never invent a default destination.")
+    public ToolResponse discoverLocalCultureAndMedia(String destination, String genre) {
+        return discoverLocalCultureAndMedia(destination, genre, null);
+    }
+
+    @Tool(name = "discoverLocalCultureAndMedia", description = "Discover local cultural landmarks via Wikipedia REST v1 and a 30s local music preview via Apple iTunes Search API for an explicit destination city. Never invent a default destination.")
     public ToolResponse discoverLocalCultureAndMedia(
-            @ToolArg(description = "Explicit destination city or country stated by the traveler (never invent a default)", required = true) String destination,
-            @ToolArg(description = "Optional regional music artist or instrument explicitly requested by the traveler", required = false) String genre) {
-        if (destination == null || destination.isBlank()) {
+            @ToolArg(description = "Explicit destination city stated by the traveler (never invent a default)", required = false) String destination,
+            @ToolArg(description = "Optional regional music artist or instrument explicitly requested by the traveler", required = false) String genre,
+            @ToolArg(description = "Alias for destination city if passed as city", required = false) String city) {
+        String rawDestination = (destination != null && !destination.isBlank()) ? destination : city;
+        if (rawDestination == null || rawDestination.isBlank()) {
             return errorToolResponse(
                     "MISSING_REQUIRED_ARGUMENTS",
                     "Missing required argument 'destination' for discoverLocalCultureAndMedia.",
                     "en.wikipedia.org");
         }
-        String resolvedCity = normalizeCity(destination);
+        String resolvedCity = normalizeCity(rawDestination);
         String searchQuery = resolveMusicQuery(resolvedCity, genre);
 
         Map<String, Object> wikiData = fetchWikipediaSummary(resolvedCity);
@@ -731,7 +739,8 @@ public class NomadMcpConciergeService {
             case "fetchCityWeather" -> fetchCityWeather(stringArg(args, "city"));
             case "discoverLocalCultureAndMedia" -> discoverLocalCultureAndMedia(
                     stringArg(args, "destination"),
-                    stringArg(args, "genre"));
+                    stringArg(args, "genre"),
+                    stringArg(args, "city"));
             case "updateTripItinerary" -> updateTripItinerary(
                     stringArg(args, "city"),
                     stringArg(args, "stopTitle"),
@@ -756,12 +765,30 @@ public class NomadMcpConciergeService {
     }
 
     private CityCoordinates resolveCityCoordinates(String city) {
-        CityCoordinates known = KNOWN_COORDINATES.get(city.toLowerCase(Locale.ROOT));
+        CityCoordinates direct = lookupSingleCityCoordinates(city);
+        if (direct != null) {
+            return direct;
+        }
+        if (city.contains(" ")) {
+            String[] words = city.split("\\s+");
+            for (int len = words.length - 1; len >= 1; len--) {
+                String prefix = String.join(" ", Arrays.copyOf(words, len));
+                CityCoordinates prefixMatch = lookupSingleCityCoordinates(prefix);
+                if (prefixMatch != null) {
+                    return prefixMatch;
+                }
+            }
+        }
+        return null;
+    }
+
+    private CityCoordinates lookupSingleCityCoordinates(String candidate) {
+        CityCoordinates known = KNOWN_COORDINATES.get(candidate.toLowerCase(Locale.ROOT));
         if (known != null) {
             return known;
         }
         String geoUrl = openMeteoGeoBaseUrl + "/v1/search?name="
-                + URLEncoder.encode(city, StandardCharsets.UTF_8)
+                + URLEncoder.encode(candidate, StandardCharsets.UTF_8)
                 + "&count=1&language=en&format=json";
         UpstreamHttpResult geoRes = httpProbe.apply(geoUrl);
         if (!geoRes.isOk()) {
@@ -772,7 +799,7 @@ public class NomadMcpConciergeService {
             if (results.isArray() && !results.isEmpty()) {
                 JsonNode first = results.get(0);
                 return new CityCoordinates(
-                        first.path("name").asText(city),
+                        first.path("name").asText(candidate),
                         first.path("country").asText(""),
                         first.path("latitude").asDouble(),
                         first.path("longitude").asDouble());
@@ -947,8 +974,22 @@ public class NomadMcpConciergeService {
         return WMO_CONDITIONS.getOrDefault(code, "Variable Local Conditions");
     }
 
+    private static final Set<String> TRAILING_COUNTRIES = Set.of(
+            "france", "japan", "portugal", "iceland", "lebanon", "italy", "spain",
+            "united kingdom", "uk", "great britain", "england", "scotland", "ireland",
+            "germany", "austria", "switzerland", "netherlands", "belgium", "denmark",
+            "sweden", "norway", "finland", "czechia", "czech republic", "poland",
+            "hungary", "romania", "croatia", "greece", "turkey", "jordan",
+            "united arab emirates", "uae", "saudi arabia", "qatar", "oman", "kuwait",
+            "bahrain", "israel", "morocco", "tunisia", "egypt", "kenya", "south africa",
+            "nigeria", "ghana", "india", "nepal", "sri lanka", "south korea", "korea",
+            "thailand", "vietnam", "indonesia", "malaysia", "philippines", "taiwan",
+            "china", "australia", "new zealand", "united states", "united states of america",
+            "usa", "us", "canada", "mexico", "colombia", "peru", "chile", "argentina",
+            "brazil", "cuba");
+
     private String normalizeCity(String raw) {
-        String trimmed = raw.trim();
+        String trimmed = raw.trim().replaceAll("\\s+", " ");
         int commaIdx = trimmed.indexOf(',');
         if (commaIdx > 0) {
             trimmed = trimmed.substring(0, commaIdx).trim();
@@ -956,7 +997,43 @@ public class NomadMcpConciergeService {
         if (trimmed.isEmpty()) {
             return "";
         }
+        String canonical = findCanonicalKnownCity(trimmed);
+        if (canonical != null) {
+            return canonical;
+        }
+        if (trimmed.contains(" ")) {
+            String[] words = trimmed.split(" ");
+            for (int suffixLen = Math.min(4, words.length - 1); suffixLen >= 1; suffixLen--) {
+                int splitIdx = words.length - suffixLen;
+                String suffix = String.join(" ", Arrays.copyOfRange(words, splitIdx, words.length))
+                        .toLowerCase(Locale.ROOT);
+                if (TRAILING_COUNTRIES.contains(suffix)) {
+                    String prefix = String.join(" ", Arrays.copyOf(words, splitIdx));
+                    String prefixCanonical = findCanonicalKnownCity(prefix);
+                    return prefixCanonical != null
+                            ? prefixCanonical
+                            : Character.toUpperCase(prefix.charAt(0)) + prefix.substring(1);
+                }
+            }
+        }
         return Character.toUpperCase(trimmed.charAt(0)) + trimmed.substring(1);
+    }
+
+    private static String findCanonicalKnownCity(String candidate) {
+        String lower = candidate.toLowerCase(Locale.ROOT);
+        CityCoordinates knownCoords = KNOWN_COORDINATES.get(lower);
+        if (knownCoords != null) {
+            return knownCoords.city();
+        }
+        for (String curated : CURATED_GLOBAL_CITIES) {
+            if (curated.equalsIgnoreCase(candidate)) {
+                return curated;
+            }
+        }
+        if (CITY_MUSIC_QUERIES.containsKey(lower)) {
+            return Character.toUpperCase(candidate.charAt(0)) + candidate.substring(1);
+        }
+        return null;
     }
 
     private static String describeFailure(UpstreamHttpResult res) {

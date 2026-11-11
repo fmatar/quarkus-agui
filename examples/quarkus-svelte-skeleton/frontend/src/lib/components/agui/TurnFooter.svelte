@@ -30,7 +30,7 @@
 	{#if sources?.length}
 		<div class="flex flex-wrap items-center gap-1.5">
 			<span class="text-[11px] font-medium text-[#575551] mr-1">Telemetry & Sources:</span>
-			{#each sources as src (src.title)}
+			{#each sources as src, idx (`${src.title ?? src.url ?? 'src'}-${idx}`)}
 				{@const safeSourceUrl = sanitizeExternalUrl(src.url)}
 				{#if src.status === 'error'}
 					<span
@@ -58,7 +58,7 @@
 
 	<div class="flex flex-wrap items-center justify-between gap-2">
 		<div class="flex flex-wrap items-center gap-1.5">
-			{#each followUps ?? [] as chip (chip)}
+			{#each followUps ?? [] as chip, idx (`${chip}-${idx}`)}
 				<button
 					type="button"
 					disabled={disabled}

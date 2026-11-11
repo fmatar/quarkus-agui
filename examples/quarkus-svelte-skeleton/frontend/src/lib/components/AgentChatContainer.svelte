@@ -19,6 +19,7 @@
 		buildHitlResumeInput,
 		buildRunAgentInput,
 		createInitialWorkbenchState,
+		finalizeAbortedStream,
 		lockTurnInteraction,
 		parseSseChunk,
 		recordClientOutboundEvent,
@@ -204,14 +205,19 @@
 						workbench = reduceAgUiEvent(workbench, evt);
 					},
 					error: (err) => {
-						workbench = {
-							...workbench,
-							isStreaming: false,
-							statusText: `WebSocket error (${err?.message ?? 'stream interrupted'})`
-						};
+						const reason = err?.message ?? 'stream interrupted';
+						const statusText = /aborted/i.test(reason)
+							? 'Stream stopped by traveler'
+							: `WebSocket error (${reason})`;
+						workbench = finalizeAbortedStream(workbench, statusText);
 						resolve();
 					},
-					complete: () => resolve()
+					complete: () => {
+						if (workbench.isStreaming || workbench.streamBuffer) {
+							workbench = finalizeAbortedStream(workbench, workbench.statusText || 'Completed');
+						}
+						resolve();
+					}
 				});
 			});
 			return;
@@ -227,20 +233,14 @@
 			});
 			await consumeSseResponse(response);
 		} catch (err) {
-			workbench = {
-				...workbench,
-				isStreaming: false,
-				statusText:
-					err?.name === 'AbortError'
-						? 'Stream paused by traveler'
-						: `Bridge error (${err?.message ?? 'connect failed to :8080'})`
-			};
+			const statusText =
+				err?.name === 'AbortError'
+					? 'Stream paused by traveler'
+					: `Bridge error (${err?.message ?? 'connect failed to :8080'})`;
+			workbench = finalizeAbortedStream(workbench, statusText);
 		} finally {
-			if (workbench.isStreaming) {
-				workbench = {
-					...workbench,
-					isStreaming: false
-				};
+			if (workbench.isStreaming || workbench.streamBuffer) {
+				workbench = finalizeAbortedStream(workbench, workbench.statusText || 'Completed');
 			}
 		}
 	}
@@ -254,6 +254,7 @@
 			activeTurn: {
 				reasoning: null,
 				timeline: [],
+				activities: [],
 				media: [],
 				interaction: null,
 				sources: [],
@@ -390,9 +391,11 @@
 	function cancelStream() {
 		wsAgent?.abortRun();
 		if (sendWebSocketCommand('CANCEL_RUN', {})) {
+			workbench = finalizeAbortedStream(workbench, 'Stream stopped by traveler');
 			return;
 		}
 		abortController?.abort();
+		workbench = finalizeAbortedStream(workbench, 'Stream stopped by traveler');
 	}
 
 	function handleWindowKeydown(event) {

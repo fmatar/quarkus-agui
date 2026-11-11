@@ -41,7 +41,7 @@
 	aria-live="polite"
 >
 	<div class="mx-auto w-full max-w-[1440px] space-y-4">
-		{#each messages as msg (msg.id)}
+		{#each messages as msg, idx (`${msg.id ?? 'msg'}-${idx}`)}
 			{#if msg.role === 'user'}
 				<article
 					class="ml-auto max-w-2xl rounded-2xl border border-[#E4E0D8] bg-[#EFECE6] px-4 py-3 text-[#141413]"

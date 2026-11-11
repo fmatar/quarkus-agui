@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- fix(showcase,agui): eliminate stuck chat streaming and Dossier errors on multi-word city+country & natural-language currency prompts (e.g., `"Plan a trip to Paris France for 5 nights I want to spend 1500 euros..."`) by capping `@RegisterAiService` tool loops (`maxToolCallingRoundTrips = 5`, `maxToolCallsPerResponse = 4`) in `NomadConciergeAiService`, recovering cleanly from LangChain4j tool-loop exhaustion and post-run callback failures in `AgUiLangChain4jRunSession`, adding `AgUiWebSocketHandler.cancelRun` + `AgUiQuarkusBridge` stream idle timeout (`60s`) + `WebSocketAgent` inactivity timeout & aborted-run frame suppression + `finalizeAbortedStream`, deduplicating `turnSources` / `media` and indexing Svelte 5 keyed `{#each}` blocks in `TurnFooter.svelte` & AG-UI surface cards to prevent `each_key_duplicate` DOM crashes on `RUN_FINISHED`, normalizing space-separated `<City> <Country>` inputs across `NomadMcpConciergeService`, `NomadTravelAdvisorService`, `A2aGatewayClient`, and `TripDossierStore`, accepting `city` alias on `discoverLocalCultureAndMedia`, parsing spoken currency words (`euros`, `dollars`, `pounds`, `francs`, `yen`) and grounding `FX & Budget Audit` to explicit prompt amounts, parallelizing `finalizeTurnDossier` on Virtual Threads, and preserving `RESTCOUNTRIES_API_KEY` from `.env` in `docker-compose.yml` ([#98](https://github.com/fmatar/quarkus-agui/issues/98))
+
 ## [0.2.0] - 2026-11-11
 
 ### Added

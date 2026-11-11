@@ -20,13 +20,19 @@ test('Docker Compose topology uses Jib-built images for mcp-server, a2a-server, 
 	assert.match(content, /nomad-agui-showcase\/mcp-server:latest/);
 	assert.match(content, /nomad-agui-showcase\/a2a-server:latest/);
 	assert.match(content, /nomad-agui-showcase\/backend:latest/);
-	assert.match(content, /8081:8081/);
+	assert.match(content, /(?:\$\{MCP_HOST_PORT:-8081\}|8081):8081/);
 	assert.match(content, /8082:8082/);
 	assert.match(content, /8080:8080/);
 	assert.match(content, /AGUI_A2A_BASE_URL=http:\/\/a2a-server:8082/);
 	assert.match(content, /AGUI_A2A_PUBLIC_URL=http:\/\/a2a-server:8082/);
 	assert.match(content, /AGUI_MCP_URL=http:\/\/mcp-server:8081\/mcp/);
-	assert.match(content, /RESTCOUNTRIES_API_KEY=/);
+	assert.match(content, /env_file:/);
+	assert.match(content, /\.\.\/\.\.\/\.env/);
+	assert.doesNotMatch(
+		content,
+		/RESTCOUNTRIES_API_KEY=\$\{RESTCOUNTRIES_API_KEY:-\}/,
+		'docker-compose.yml must not blank-override RESTCOUNTRIES_API_KEY loaded from ../../.env'
+	);
 	assert.match(content, /\/q\/health\/live/);
 	assert.doesNotMatch(content, /GET \/q\/health\/ready/);
 	assert.match(content, /condition:\s*service_healthy/);

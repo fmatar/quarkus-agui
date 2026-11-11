@@ -273,4 +273,73 @@ class AgUiQuarkusAdaptersTest {
         assertNotNull(handler.getClass().getClassLoader()
                 .getResourceAsStream("META-INF/native-image/org.agui/ag-ui-quarkus/reflect-config.json"));
     }
+
+    @Test
+    void webSocketHandlerCancelsActiveInFlightSubscriptionsAndEnforcesStreamIdleTimeout() throws Exception {
+        List<String> frames = java.util.Collections.synchronizedList(new ArrayList<>());
+        WebSocketConnection connection = (WebSocketConnection) Proxy.newProxyInstance(
+                WebSocketConnection.class.getClassLoader(),
+                new Class<?>[]{WebSocketConnection.class},
+                (proxy, method, args) -> switch (method.getName()) {
+                    case "id" -> "ws-cancel-conn";
+                    case "isClosed" -> false;
+                    case "isOpen" -> true;
+                    case "sendTextAndAwait" -> {
+                        frames.add(String.valueOf(args[0]));
+                        yield null;
+                    }
+                    default -> null;
+                });
+
+        AgUiWebSocketHandler handler = new AgUiWebSocketHandler();
+        handler.onOpen(connection);
+
+        java.util.concurrent.CountDownLatch startedLatch = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.CountDownLatch finishedLatch = new java.util.concurrent.CountDownLatch(1);
+        AtomicBoolean subscriptionCancelled = new AtomicBoolean(false);
+
+        Agent hangingAgent = input -> Multi.createBy().concatenating().streams(
+                Multi.createFrom().item((Event) new RunStartedEvent(input.threadId(), input.runId()))
+                        .onItem().invoke(startedLatch::countDown),
+                Multi.createFrom().<Event>nothing()
+                        .onCancellation().invoke(() -> subscriptionCancelled.set(true)));
+
+        Thread worker = new Thread(() -> {
+            try {
+                handler.runAndSend(
+                        hangingAgent,
+                        "{\"threadId\":\"t-hang\",\"runId\":\"r-hang\",\"messages\":[],\"tools\":[]}",
+                        connection);
+            } finally {
+                finishedLatch.countDown();
+            }
+        });
+        worker.start();
+
+        assertTrue(startedLatch.await(2, java.util.concurrent.TimeUnit.SECONDS));
+        assertFalse(handler.cancelRun(null, "t-hang"));
+        assertFalse(handler.cancelRun(connection, "unrelated-thread"));
+        assertTrue(handler.cancelRun(connection, "t-hang"));
+        assertTrue(finishedLatch.await(2, java.util.concurrent.TimeUnit.SECONDS));
+        worker.join(1000);
+        assertTrue(subscriptionCancelled.get(), "Cancelling run must cancel upstream Multi subscription");
+        assertFalse(frames.stream().anyMatch(f -> f.contains("RUN_ERROR")),
+                "Explicit client cancellation must not emit spurious RUN_ERROR: " + frames);
+
+        // Stream idle timeout aborts stalled upstream deterministically and surfaces RUN_ERROR
+        frames.clear();
+        handler.setStreamIdleTimeout(null);
+        assertEquals(java.time.Duration.ofSeconds(60), handler.streamIdleTimeout());
+        handler.setStreamIdleTimeout(java.time.Duration.ZERO);
+        assertEquals(java.time.Duration.ofSeconds(60), handler.streamIdleTimeout());
+        handler.setStreamIdleTimeout(java.time.Duration.ofMillis(80));
+        assertEquals(java.time.Duration.ofMillis(80), handler.streamIdleTimeout());
+        Agent stalledAgent = input -> Multi.createFrom().nothing();
+        handler.runAndSend(
+                stalledAgent,
+                "{\"threadId\":\"t-stall\",\"runId\":\"r-stall\",\"messages\":[],\"tools\":[]}",
+                connection);
+        assertTrue(frames.stream().anyMatch(f -> f.contains("RUN_ERROR")),
+                "Stalled upstream stream must emit RUN_ERROR after idle timeout: " + frames);
+    }
 }

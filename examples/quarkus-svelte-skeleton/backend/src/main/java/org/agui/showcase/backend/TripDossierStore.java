@@ -24,7 +24,10 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -62,11 +65,11 @@ public class TripDossierStore {
     private static final Pattern NIGHTS_PATTERN = Pattern.compile(
             "(?i)\\b(\\d{1,2})\\s*[- ]?\\s*(?:night|nights|day|days)\\b");
     private static final Pattern SYMBOL_BUDGET_PATTERN = Pattern.compile(
-            "(?i)(?<![\\d])(\\$|€|£)[ \\t]*([\\d,]+(?:\\.\\d+)?)[ \\t]*(USD|EUR|GBP|CHF)?\\b");
+            "(?i)(?<![\\d])(\\$|€|£)[ \\t]*([\\d,]+(?:\\.\\d+)?)[ \\t]*(USD|EUR|GBP|CHF|euros?|dollars?|pounds?|sterling|francs?)?\\b");
     private static final Pattern TRAILING_SYMBOL_BUDGET_PATTERN = Pattern.compile(
-            "(?i)\\b([\\d,]+(?:\\.\\d+)?)[ \\t]*(\\$|€|£)(?:[ \\t]*(USD|EUR|GBP|CHF)\\b)?");
+            "(?i)\\b([\\d,]+(?:\\.\\d+)?)[ \\t]*(\\$|€|£)(?:[ \\t]*(USD|EUR|GBP|CHF|euros?|dollars?|pounds?|sterling|francs?)\\b)?");
     private static final Pattern CODE_BUDGET_PATTERN = Pattern.compile(
-            "(?i)\\b([\\d,]+(?:\\.\\d+)?)[ \\t]*(USD|EUR|GBP|CHF)\\b");
+            "(?i)\\b([\\d,]+(?:\\.\\d+)?)[ \\t]*(USD|EUR|GBP|CHF|JPY|CAD|AUD|ISK|MXN|LBP|MAD|euros?|dollars?|pounds?|sterling|francs?|yen)\\b");
     private static final Pattern MEDIA_OR_DETAILS_PATTERN = Pattern.compile(
             "(?i)\\b(music|song|audio|listen|soundtrack|fado|koto|oud|culture|cultural|media|photo|picture|image|landmark|details)\\b");
     private static final Pattern RESERVATION_INTENT_PATTERN = Pattern.compile(
@@ -442,28 +445,38 @@ public class TripDossierStore {
                     preferences.put("homeCurrency", explicitBudget.currency());
                     nomadTrip.putIfAbsent("allocatedUsd", allocated);
                     nomadTrip.putIfAbsent("stopTitle", resolvedCity + " Cultural & Architectural Itinerary");
-                    needsWeather = !reportSections.containsKey("weather") || nomadTrip.get("temperatureC") == null;
-                    needsFx = (!reportSections.containsKey("fxBudget") || nomadTrip.get("exchangeRate") == null) && a2aClient != null;
+                    needsWeather = !hasSectionForCityLocked("weather", resolvedCity) || nomadTrip.get("temperatureC") == null;
+                    needsFx = (!hasSectionForCityLocked("fxBudget", resolvedCity) || nomadTrip.get("exchangeRate") == null) && a2aClient != null;
                     needsCadence = !(nomadTrip.get("places") instanceof List<?> p && !p.isEmpty()) && a2aClient != null;
-                    needsAdvisory = !reportSections.containsKey("securityAdvisory") && a2aClient != null;
+                    needsAdvisory = (!hasSectionForCityLocked("securityAdvisory", resolvedCity)
+                            || Boolean.TRUE.equals(reportSections.get("securityAdvisory").get("isError"))) && a2aClient != null;
                     needsAcoustic = nomadTrip.get("acousticMood") == null;
                 }
 
-                ensureTurnCultureMedia(key, resolvedCity, "");
+                List<Runnable> tasks = new ArrayList<>();
+                tasks.add(() -> ensureTurnCultureMedia(key, resolvedCity, ""));
                 if (needsWeather) {
-                    ensureTurnWeather(key, resolvedCity);
+                    tasks.add(() -> ensureTurnWeather(key, resolvedCity));
                 }
                 if (needsAcoustic) {
-                    ensureTurnAcousticMood(key, resolvedCity);
+                    tasks.add(() -> ensureTurnAcousticMood(key, resolvedCity));
                 }
                 if (needsCadence) {
-                    ensureTurnNeighborhoodPlaces(key, resolvedCity, a2aClient);
+                    tasks.add(() -> ensureTurnNeighborhoodPlaces(key, resolvedCity, a2aClient));
                 }
                 if (needsAdvisory) {
-                    ensureTurnAdvisory(key, resolvedCity, a2aClient);
+                    tasks.add(() -> ensureTurnAdvisory(key, resolvedCity, a2aClient));
                 }
                 if (needsFx) {
-                    ensureTurnBudget(key, resolvedCity, explicitBudget.amount(), explicitBudget.currency(), a2aClient);
+                    tasks.add(() -> ensureTurnBudget(key, resolvedCity, explicitBudget.amount(), explicitBudget.currency(), a2aClient));
+                }
+                try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+                    List<CompletableFuture<Void>> futures = tasks.stream()
+                            .map(task -> CompletableFuture.runAsync(task, executor)
+                                    .orTimeout(4, TimeUnit.SECONDS)
+                                    .exceptionally(ex -> null))
+                            .toList();
+                    CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new)).join();
                 }
                 ensureCompleteSectionsLocked(key, resolvedCity);
                 return buildCurrentStateDelta(key);
@@ -472,11 +485,28 @@ public class TripDossierStore {
         return Map.of();
     }
 
+    private boolean hasSectionForCityLocked(String sectionKey, String expectedCity) {
+        Map<String, Object> sec = reportSections.get(sectionKey);
+        if (sec == null || sec.isEmpty()) {
+            return false;
+        }
+        String secCity = stringOrDefault(sec.get("city"), "");
+        return expectedCity != null && secCity.equalsIgnoreCase(expectedCity);
+    }
+
     private void ensureCompleteSectionsLocked(String threadKey, String resolvedCity) {
+        Map<String, Object> weatherSection = null;
+        Map<String, Object> securitySection = null;
         Map<String, Object> mapSection;
         Map<String, Object> fxSection;
         Map<String, Object> cultureSection;
         synchronized (stateLock) {
+            if (hasSectionForCityLocked("weather", resolvedCity)) {
+                weatherSection = new LinkedHashMap<>(reportSections.get("weather"));
+            }
+            if (hasSectionForCityLocked("securityAdvisory", resolvedCity)) {
+                securitySection = new LinkedHashMap<>(reportSections.get("securityAdvisory"));
+            }
             mapSection = buildMapPlacesSectionLocked(resolvedCity);
             reportSections.put("mapPlaces", mapSection);
             fxSection = buildFxBudgetSectionLocked(resolvedCity, false, null);
@@ -484,7 +514,13 @@ public class TripDossierStore {
             cultureSection = buildCultureAudioSectionLocked(resolvedCity, false, null);
             reportSections.put("cultureAudio", cultureSection);
         }
+        if (weatherSection != null) {
+            queueActivity(threadKey, ACT_WEATHER, resolvedCity, weatherSection);
+        }
         queueActivity(threadKey, ACT_MAP_PLACES, resolvedCity, mapSection);
+        if (securitySection != null) {
+            queueActivity(threadKey, ACT_SECURITY_ADVISORY, resolvedCity, securitySection);
+        }
         queueActivity(threadKey, ACT_FX_BUDGET, resolvedCity, fxSection);
         queueActivity(threadKey, ACT_CULTURE_AUDIO, resolvedCity, cultureSection);
     }
@@ -611,7 +647,8 @@ public class TripDossierStore {
     }
 
     private void applyCultureResult(String threadKey, Map<String, Object> args, Map<String, Object> result, boolean isError) {
-        String city = normalizeCityName(stringOrDefault(result.get("destination"), stringOrDefault(args.get("destination"), "Destination")));
+        String argDest = stringOrDefault(args.get("destination"), stringOrDefault(args.get("city"), "Destination"));
+        String city = normalizeCityName(stringOrDefault(result.get("destination"), argDest));
         String wikiUrl = stringOrDefault(
                 result.get("wikiSourceUrl"),
                 "https://en.wikipedia.org/wiki/" + URLEncoder.encode(city.replace(' ', '_'), StandardCharsets.UTF_8));
@@ -622,12 +659,22 @@ public class TripDossierStore {
                 "status", isError ? "error" : "verified",
                 "error", isError ? errText : ""));
         if (isError) {
-            Map<String, Object> errSection;
+            Map<String, Object> errSection = null;
             synchronized (stateLock) {
-                errSection = buildCultureAudioSectionLocked(city, true, errText);
-                reportSections.put("cultureAudio", errSection);
+                String currentActive = stringOrDefault(nomadTrip.get("activeCity"), null);
+                boolean missingDestinationCall = "Destination".equals(city);
+                boolean keepExistingHealthy = (missingDestinationCall && currentActive != null && hasSectionForCityLocked("cultureAudio", currentActive))
+                        || (hasSectionForCityLocked("cultureAudio", city)
+                                && reportSections.get("cultureAudio") instanceof Map<?, ?> existing
+                                && !Boolean.TRUE.equals(existing.get("isError")));
+                if (!keepExistingHealthy) {
+                    errSection = buildCultureAudioSectionLocked(city, true, errText);
+                    reportSections.put("cultureAudio", errSection);
+                }
             }
-            queueActivity(threadKey, ACT_CULTURE_AUDIO, city, errSection);
+            if (errSection != null) {
+                queueActivity(threadKey, ACT_CULTURE_AUDIO, city, errSection);
+            }
             return;
         }
         List<Map<String, Object>> mediaItems = new ArrayList<>();
@@ -947,8 +994,12 @@ public class TripDossierStore {
     @SuppressWarnings("unchecked")
     private void applyAdvisoryResult(String threadKey, Map<String, Object> args, Map<String, Object> result, boolean isError) {
         Map<String, Object> report = result.get("report") instanceof Map<?, ?> r ? (Map<String, Object>) r : result;
-        String city = normalizeCityName(stringOrDefault(report.get("city"), stringOrDefault(args.get("city"), "Destination")));
-        String country = stringOrDefault(report.get("country"), A2aGatewayClient.resolveCountryForCity(city));
+        String rawCityVal = stringOrDefault(report.get("city"), stringOrDefault(args.get("city"), "Destination"));
+        String city = normalizeCityName(rawCityVal);
+        String rawCountry = stringOrDefault(report.get("country"), "");
+        String country = (rawCountry.isBlank() || rawCountry.equalsIgnoreCase(rawCityVal))
+                ? A2aGatewayClient.resolveCountryForCity(rawCityVal)
+                : rawCountry;
         String errorMsg = stringOrDefault(result.get("error"), stringOrDefault(report.get("error"), "Travel Advisory API unavailable"));
         appendSource(threadKey, Map.of(
                 "title", "REST Countries v5 Travel Advisory — " + (country.isBlank() ? city : country),
@@ -993,11 +1044,13 @@ public class TripDossierStore {
         }
 
         synchronized (stateLock) {
-            if (!city.isBlank() && !"Destination".equals(city)) {
+            String existingActiveCity = stringOrDefault(nomadTrip.get("activeCity"), null);
+            if (!city.isBlank() && !"Destination".equals(city)
+                    && (!isError || existingActiveCity == null || existingActiveCity.equalsIgnoreCase(city))) {
                 switchActiveCityLocked(city);
-            }
-            if (!country.isBlank()) {
-                nomadTrip.put("country", country);
+                if (!country.isBlank()) {
+                    nomadTrip.put("country", country);
+                }
             }
             if (!isError) {
                 nomadTrip.put("currency", currency);
@@ -1020,7 +1073,8 @@ public class TripDossierStore {
                 "status", isError ? "error" : "verified",
                 "error", isError ? errText : ""));
 
-        String city = normalizeCityName(stringOrDefault(report.get("city"), stringOrDefault(args.get("city"), "Destination")));
+        String rawCityVal = stringOrDefault(report.get("city"), stringOrDefault(args.get("city"), "Destination"));
+        String city = normalizeCityName(rawCityVal);
         if (isError) {
             Map<String, Object> errSection;
             synchronized (stateLock) {
@@ -1030,31 +1084,67 @@ public class TripDossierStore {
             queueActivity(threadKey, ACT_FX_BUDGET, city, errSection);
             return;
         }
+        String turnPrompt = turnPrompts.getOrDefault(threadKey, "");
+        boolean nonReservationTurn = !turnPrompt.isBlank() && !RESERVATION_INTENT_PATTERN.matcher(turnPrompt).find();
+        ParsedBudget promptBudget = nonReservationTurn ? extractBudgetFromPrompt(turnPrompt) : null;
+        Integer promptNights = nonReservationTurn ? extractNightsFromPrompt(turnPrompt) : null;
+
         Map<String, Object> fxSection;
         synchronized (stateLock) {
             if (!city.isBlank() && !"Destination".equals(city)) {
                 switchActiveCityLocked(city);
             }
-            if (report.get("country") instanceof String country && !country.isBlank()) {
-                nomadTrip.put("country", country);
+            String rawCountry = stringOrDefault(report.get("country"), "");
+            String resolvedCountry = (rawCountry.isBlank() || rawCountry.equalsIgnoreCase(rawCityVal))
+                    ? A2aGatewayClient.resolveCountryForCity(rawCityVal)
+                    : rawCountry;
+            if (!resolvedCountry.isBlank()) {
+                nomadTrip.put("country", resolvedCountry);
             }
-            if (report.get("targetCurrency") instanceof String tc && !tc.isBlank()) {
-                nomadTrip.put("currency", tc);
+            if (promptNights != null) {
+                nomadTrip.put("nights", promptNights);
             }
-            if (report.get("baseCurrency") instanceof String bc && !bc.isBlank()) {
-                nomadTrip.put("homeCurrency", bc);
-            }
-            if (report.get("exchangeRate") instanceof Number rate) {
-                nomadTrip.put("exchangeRate", rate.doubleValue());
-            }
-            if (report.get("convertedTotal") instanceof Number conv) {
-                nomadTrip.put("convertedTotal", conv.doubleValue());
+            String targetCurrency = stringOrDefault(
+                    report.get("targetCurrency"),
+                    stringOrDefault(nomadTrip.get("currency"), A2aGatewayClient.resolveCurrencyForCountry(resolvedCountry)));
+            if (!targetCurrency.isBlank()) {
+                nomadTrip.put("currency", targetCurrency);
             }
             nomadTrip.put("fxSource", sourceHost);
-            Object budgetObj = args.get("budgetAmount") != null ? args.get("budgetAmount") : report.get("budgetUsd");
-            if (budgetObj instanceof Number budget && budget.doubleValue() > 0.0) {
-                nomadTrip.put("budgetUsd", budget.doubleValue());
-                nomadTrip.putIfAbsent("allocatedUsd", Math.round(budget.doubleValue() * 0.65 * 100.0) / 100.0);
+            if (promptBudget != null) {
+                String groundedBase = promptBudget.currency();
+                double groundedAmount = promptBudget.amount();
+                nomadTrip.put("homeCurrency", groundedBase);
+                preferences.put("homeCurrency", groundedBase);
+                nomadTrip.put("budgetUsd", groundedAmount);
+                nomadTrip.put("allocatedUsd", Math.round(groundedAmount * 0.65 * 100.0) / 100.0);
+                if (groundedBase.equalsIgnoreCase(targetCurrency)) {
+                    nomadTrip.put("exchangeRate", 1.0);
+                    nomadTrip.put("convertedTotal", groundedAmount);
+                } else if (groundedBase.equalsIgnoreCase(stringOrDefault(report.get("baseCurrency"), ""))
+                        && report.get("exchangeRate") instanceof Number r) {
+                    double rateVal = r.doubleValue();
+                    nomadTrip.put("exchangeRate", rateVal);
+                    nomadTrip.put("convertedTotal", Math.round(groundedAmount * rateVal * 100.0) / 100.0);
+                } else {
+                    nomadTrip.remove("exchangeRate");
+                    nomadTrip.remove("convertedTotal");
+                }
+            } else {
+                if (report.get("baseCurrency") instanceof String bc && !bc.isBlank()) {
+                    nomadTrip.put("homeCurrency", bc);
+                }
+                if (report.get("exchangeRate") instanceof Number rate) {
+                    nomadTrip.put("exchangeRate", rate.doubleValue());
+                }
+                if (report.get("convertedTotal") instanceof Number conv) {
+                    nomadTrip.put("convertedTotal", conv.doubleValue());
+                }
+                Object budgetObj = args.get("budgetAmount") != null ? args.get("budgetAmount") : report.get("budgetUsd");
+                if (budgetObj instanceof Number budget && budget.doubleValue() > 0.0) {
+                    nomadTrip.put("budgetUsd", budget.doubleValue());
+                    nomadTrip.putIfAbsent("allocatedUsd", Math.round(budget.doubleValue() * 0.65 * 100.0) / 100.0);
+                }
             }
             fxSection = buildFxBudgetSectionLocked(city, false, null);
             reportSections.put("fxBudget", fxSection);
@@ -1262,7 +1352,7 @@ public class TripDossierStore {
                 double amount = Double.parseDouble(numberStr);
                 if (amount > 0.0) {
                     String currency = explicitCode != null && !explicitCode.isBlank()
-                            ? explicitCode.toUpperCase(Locale.ROOT)
+                            ? normalizeCurrencyToken(explicitCode)
                             : ("€".equals(symbol) ? "EUR" : ("£".equals(symbol) ? "GBP" : "USD"));
                     return new ParsedBudget(amount, currency);
                 }
@@ -1279,7 +1369,7 @@ public class TripDossierStore {
                 double amount = Double.parseDouble(numberStr);
                 if (amount > 0.0) {
                     String currency = explicitCode != null && !explicitCode.isBlank()
-                            ? explicitCode.toUpperCase(Locale.ROOT)
+                            ? normalizeCurrencyToken(explicitCode)
                             : ("€".equals(symbol) ? "EUR" : ("£".equals(symbol) ? "GBP" : "USD"));
                     return new ParsedBudget(amount, currency);
                 }
@@ -1290,7 +1380,7 @@ public class TripDossierStore {
         Matcher codeMatcher = CODE_BUDGET_PATTERN.matcher(prompt);
         if (codeMatcher.find()) {
             String numberStr = codeMatcher.group(1).replace(",", "");
-            String code = codeMatcher.group(2).toUpperCase(Locale.ROOT);
+            String code = normalizeCurrencyToken(codeMatcher.group(2));
             try {
                 double amount = Double.parseDouble(numberStr);
                 if (amount > 0.0) {
@@ -1301,6 +1391,18 @@ public class TripDossierStore {
             }
         }
         return null;
+    }
+
+    static String normalizeCurrencyToken(String raw) {
+        String lower = raw.trim().toLowerCase(Locale.ROOT);
+        return switch (lower) {
+            case "euro", "euros" -> "EUR";
+            case "dollar", "dollars" -> "USD";
+            case "pound", "pounds", "sterling" -> "GBP";
+            case "franc", "francs" -> "CHF";
+            case "yen" -> "JPY";
+            default -> raw.trim().toUpperCase(Locale.ROOT);
+        };
     }
 
     static boolean isKnownCityName(String raw) {
@@ -1315,7 +1417,7 @@ public class TripDossierStore {
         if (raw == null) {
             return "";
         }
-        String trimmed = raw.trim();
+        String trimmed = raw.trim().replaceAll("\\s+", " ");
         int commaIdx = trimmed.indexOf(',');
         if (commaIdx > 0) {
             trimmed = trimmed.substring(0, commaIdx).trim();
@@ -1328,12 +1430,34 @@ public class TripDossierStore {
                 return city;
             }
         }
+        String stripped = A2aGatewayClient.stripTrailingCountry(trimmed);
+        if (!stripped.isEmpty()) {
+            for (String city : COMPLETION_CITIES) {
+                if (city.equalsIgnoreCase(stripped)) {
+                    return city;
+                }
+            }
+            return Character.toUpperCase(stripped.charAt(0)) + stripped.substring(1);
+        }
         return Character.toUpperCase(trimmed.charAt(0)) + trimmed.substring(1);
     }
 
     private void appendSource(String threadKey, Map<String, Object> source) {
+        String incomingTitle = stringOrDefault(source.get("title"), "");
         turnSources.compute(threadKey, (k, existing) -> {
             List<Map<String, Object>> next = existing == null ? new ArrayList<>() : new ArrayList<>(existing);
+            if (!incomingTitle.isEmpty()) {
+                for (int i = 0; i < next.size(); i++) {
+                    if (incomingTitle.equals(stringOrDefault(next.get(i).get("title"), ""))) {
+                        boolean prevVerified = "verified".equals(next.get(i).get("status"));
+                        boolean nextError = "error".equals(source.get("status"));
+                        if (!(prevVerified && nextError)) {
+                            next.set(i, source);
+                        }
+                        return next;
+                    }
+                }
+            }
             next.add(source);
             return next;
         });
