@@ -12,11 +12,25 @@ import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.a2aproject.sdk.jsonrpc.common.json.JsonUtil;
+import org.a2aproject.sdk.jsonrpc.common.wrappers.SendMessageResponse;
+import org.a2aproject.sdk.spec.AgentCapabilities;
+import org.a2aproject.sdk.spec.AgentCard;
+import org.a2aproject.sdk.spec.AgentInterface;
+import org.a2aproject.sdk.spec.AgentSkill;
+import org.a2aproject.sdk.spec.Artifact;
+import org.a2aproject.sdk.spec.DataPart;
+import org.a2aproject.sdk.spec.Task;
+import org.a2aproject.sdk.spec.TaskState;
+import org.a2aproject.sdk.spec.TaskStatus;
+import org.a2aproject.sdk.spec.TextPart;
+import org.a2aproject.sdk.spec.TransportProtocol;
 
 /**
  * Ephemeral local test harness for {@code @QuarkusTest} validating Quarkus LangChain4j MCP
- * ({@code QuarkusStreamableHttpMcpTransport}), {@code McpClientHealthCheck}, SmallRye Health,
- * and {@code @RegisterAiService NomadConciergeAiService} without external network dependencies.
+ * ({@code QuarkusStreamableHttpMcpTransport}), official A2A 1.5.0.Final {@code A2ACardResolver} +
+ * JSON-RPC 2.0 {@code SendMessage}, SmallRye Health, and {@code @RegisterAiService NomadConciergeAiService}
+ * without external network dependencies.
  */
 public class MockTriProtocolTestResource implements QuarkusTestResourceLifecycleManager {
 
@@ -30,7 +44,30 @@ public class MockTriProtocolTestResource implements QuarkusTestResourceLifecycle
             int port = server.getAddress().getPort();
             String baseUrl = "http://127.0.0.1:" + port;
 
+            AgentCard agentCard = AgentCard.builder()
+                    .name("Nomad-A2A-Specialist")
+                    .description("Specialist A2A Travel Advisor Agent")
+                    .version("1.5.0")
+                    .url(baseUrl)
+                    .preferredTransport(TransportProtocol.JSONRPC.asString())
+                    .supportedInterfaces(List.of(new AgentInterface(TransportProtocol.JSONRPC.asString(), baseUrl)))
+                    .capabilities(AgentCapabilities.builder().streaming(true).pushNotifications(false).build())
+                    .defaultInputModes(List.of("text/plain", "application/json"))
+                    .defaultOutputModes(List.of("text/plain", "application/json"))
+                    .skills(List.of(
+                            AgentSkill.builder().id("convert-and-audit-budget").name("FX Audit").description("FX").tags(List.of("fx")).build(),
+                            AgentSkill.builder().id("verify-travel-advisory").name("Travel Advisory").description("Advisory").tags(List.of("advisory")).build(),
+                            AgentSkill.builder().id("curate-neighborhood-cadence").name("Cadence").description("Cadence").tags(List.of("cadence")).build()))
+                    .build();
+
             server.createContext("/mcp", this::handleMcpJsonRpc);
+            server.createContext("/.well-known/agent-card.json", exchange -> {
+                try {
+                    writeRawJson(exchange, 200, JsonUtil.toJson(agentCard));
+                } catch (Exception ex) {
+                    throw new IOException(ex);
+                }
+            });
             server.createContext("/q/health/ready", exchange -> writeJson(exchange, 200, Map.of(
                     "status", "UP",
                     "checks", List.of(Map.of(
@@ -39,21 +76,10 @@ public class MockTriProtocolTestResource implements QuarkusTestResourceLifecycle
                             "data", Map.of(
                                     "frankfurter-fx.status", "UP",
                                     "restcountries-advisory.status", "UP"))))));
-            server.createContext("/api/a2a/audit", exchange -> writeJson(exchange, 200, Map.of(
-                    "artifactId", "art-adv-ok",
-                    "artifactTitle", "Destination Advisory",
-                    "summary", "REST Countries v5 verified for France (Paris, EUR)",
-                    "data", Map.of(
-                            "status", "OK",
-                            "isError", false,
-                            "serviceAvailable", true,
-                            "country", "France",
-                            "capital", "Paris",
-                            "currency", "EUR",
-                            "source", "api.restcountries.com"))));
             server.createContext("/api/tags", exchange -> writeJson(
                     exchange, 200, Map.of("models", List.of(Map.of("name", "llama3.2:latest")))));
             server.createContext("/api/chat", this::handleOllamaChat);
+            server.createContext("/", this::handleA2aJsonRpc);
 
             server.start();
             return Map.of(
@@ -70,6 +96,37 @@ public class MockTriProtocolTestResource implements QuarkusTestResourceLifecycle
     public void stop() {
         if (server != null) {
             server.stop(0);
+        }
+    }
+
+    private void handleA2aJsonRpc(HttpExchange exchange) throws IOException {
+        String raw = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+        JsonNode rpc = raw.isBlank() ? MAPPER.createObjectNode() : MAPPER.readTree(raw);
+        Object rpcId = rpc.has("id") ? MAPPER.convertValue(rpc.get("id"), Object.class) : "1";
+        Artifact artifact = Artifact.builder()
+                .artifactId("art-adv-ok")
+                .name("Destination Advisory")
+                .parts(List.of(
+                        new TextPart("REST Countries v5 verified for France (Paris, EUR)"),
+                        new DataPart(Map.of(
+                                "status", "OK",
+                                "isError", false,
+                                "serviceAvailable", true,
+                                "country", "France",
+                                "capital", "Paris",
+                                "currency", "EUR",
+                                "source", "api.restcountries.com"))))
+                .build();
+        Task completed = Task.builder()
+                .id("task-a2a-1")
+                .contextId("ctx-a2a-1")
+                .status(new TaskStatus(TaskState.TASK_STATE_COMPLETED))
+                .artifacts(List.of(artifact))
+                .build();
+        try {
+            writeRawJson(exchange, 200, JsonUtil.toJson(new SendMessageResponse(rpcId, completed)));
+        } catch (Exception ex) {
+            throw new IOException(ex);
         }
     }
 
@@ -201,7 +258,11 @@ public class MockTriProtocolTestResource implements QuarkusTestResourceLifecycle
     }
 
     private static void writeJson(HttpExchange exchange, int status, Object payload) throws IOException {
-        byte[] bytes = (MAPPER.writeValueAsString(payload) + "\n").getBytes(StandardCharsets.UTF_8);
+        writeRawJson(exchange, status, MAPPER.writeValueAsString(payload));
+    }
+
+    private static void writeRawJson(HttpExchange exchange, int status, String json) throws IOException {
+        byte[] bytes = (json + "\n").getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().add("Content-Type", "application/json");
         exchange.sendResponseHeaders(status, bytes.length);
         try (OutputStream os = exchange.getResponseBody()) {

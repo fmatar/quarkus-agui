@@ -1,19 +1,30 @@
 package org.agui.showcase.a2a;
 
-import io.quarkus.test.junit.QuarkusTest;
-import jakarta.inject.Inject;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import io.quarkus.test.common.http.TestHTTPResource;
+import io.quarkus.test.junit.QuarkusTest;
+import jakarta.inject.Inject;
+import java.net.URL;
+import java.time.Duration;
+import java.util.Map;
+import org.agui.a2a.adapters.AgUiA2aClient;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 @QuarkusTest
 class A2aAgentResourceTest {
 
     @Inject
     NomadTravelAdvisorService advisorService;
+
+    @TestHTTPResource("/")
+    URL serverUrl;
 
     @BeforeEach
     void setUp() {
@@ -31,12 +42,13 @@ class A2aAgentResourceTest {
     }
 
     @Test
-    void wellKnownAgentCardAndHealthEndpointExposeDegradedRestCountriesStatus() throws Exception {
+    void wellKnownAgentCardHealthAndOfficialA2aClientSdkWorkEndToEnd() throws Exception {
         given()
             .when().get("/.well-known/agent-card.json")
             .then()
             .statusCode(200)
             .body("name", equalTo("Nomad-A2A-Specialist"))
+            .body("version", equalTo("1.5.0"))
             .body("capabilities.streaming", equalTo(true))
             .body("skills.size()", equalTo(3));
 
@@ -60,41 +72,38 @@ class A2aAgentResourceTest {
             .body("upstreams[1].status", equalTo("DOWN"))
             .body("upstreams[1].error", containsString("This API version has been deprecated"));
 
+        // Verify legacy custom /api/a2a/audit side-door has been removed
         given()
             .contentType("application/json")
-            .body(java.util.Map.of(
-                    "skillId", "verify-travel-advisory",
-                    "prompt", "Verify travel advisory for Paris",
-                    "context", java.util.Map.of("city", "Paris")))
+            .body(Map.of("skillId", "verify-travel-advisory", "prompt", "Verify Paris"))
             .when().post("/api/a2a/audit")
             .then()
-            .statusCode(200)
-            .body("data.status", equalTo("ERROR"))
-            .body("data.isError", equalTo(true))
-            .body("summary", containsString("This API version has been deprecated"));
+            .statusCode(404);
 
-        // Exercise official A2A JSON-RPC 2.0 AgentExecutor + DataPart extraction at POST /
-        org.a2aproject.sdk.spec.Message userMessage = org.a2aproject.sdk.spec.Message.builder()
-                .role(org.a2aproject.sdk.spec.Message.Role.ROLE_USER)
-                .messageId("msg-1")
-                .parts(java.util.List.of(
-                        new org.a2aproject.sdk.spec.TextPart("[verify-travel-advisory] Verify travel advisory for Paris"),
-                        new org.a2aproject.sdk.spec.DataPart(java.util.Map.of("city", "Paris", "skillId", "verify-travel-advisory"))))
-                .build();
-        org.a2aproject.sdk.jsonrpc.common.wrappers.SendMessageRequest rpcReq =
-                org.a2aproject.sdk.jsonrpc.common.wrappers.SendMessageRequest.builder()
-                        .id("rpc-1")
-                        .params(org.a2aproject.sdk.spec.MessageSendParams.builder().message(userMessage).build())
-                        .build();
-        String jsonRpcRequest = org.a2aproject.sdk.jsonrpc.common.json.JsonUtil.toJson(rpcReq);
+        // Exercise official A2A 1.5.0.Final client (A2ACardResolver + Client.builder + JSONRPCTransport)
+        try (AgUiA2aClient client = AgUiA2aClient.builder(serverUrl.toString())
+                .streaming(false)
+                .requestTimeout(Duration.ofSeconds(5))
+                .build()) {
+            assertEquals("1.5.0", client.resolveAgentCard().version());
 
-        given()
-            .contentType("application/json")
-            .header("A2A-Version", "1.0")
-            .body(jsonRpcRequest)
-            .when().post("/")
-            .then()
-            .statusCode(200)
-            .body(containsString("Travel Advisory Service Unavailable"));
+            AgUiA2aClient.DelegationExecution fxExec = client.delegate(
+                    "req-fx-1",
+                    "convert-and-audit-budget",
+                    "Convert 2000 USD for Paris",
+                    Map.of("city", "Paris", "country", "France", "budgetUsd", 2000.0, "baseCurrency", "USD", "targetCurrency", "EUR"),
+                    Map.of());
+            assertFalse(fxExec.result().isError());
+            assertEquals(0.92, fxExec.result().data().get("exchangeRate"));
+
+            AgUiA2aClient.DelegationExecution advExec = client.delegate(
+                    "req-adv-1",
+                    "verify-travel-advisory",
+                    "Verify travel advisory for Paris",
+                    Map.of("city", "Paris", "country", "France"),
+                    Map.of());
+            assertTrue(advExec.result().isError());
+            assertTrue(advExec.result().summary().contains("This API version has been deprecated"));
+        }
     }
 }

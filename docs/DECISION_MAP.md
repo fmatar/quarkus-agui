@@ -46,6 +46,8 @@ flowchart TD
   _81["Ticket #81 (feature/issue-#81-adopt-upstream-ag-ui-java-sdks)"]
   ADR_008["ADR-008: Canonical AG-UI ACTIVITY_SNAPSHOT Surface Kit, Complete Trip Dossier Report & local-quarkus-agui CI"]
   _93["Ticket #93"]
+  ADR_009["ADR-009: Adopt Official A2A Java SDK 1.5.0.Final Client (A2ACardResolver, ClientBuilder & VertxA2AHttpClient) and Remove Custom HTTP Audit Endpoint"]
+  _100["Ticket #100"]
   __9450["##9450"]
   _66["Ticket #66 (feature/issue-#66-nomad-travel-chatbot-mcp-health)"]
   _68["Ticket #68 (feature/issue-#68-quarkus-langchain4j-mcp-v5)"]
@@ -55,6 +57,7 @@ flowchart TD
   _85["Ticket #85 (feature/issue-#85-nomad-showcase-cutover-delete-core)"]
   _87["Ticket #87 (chore/issue-#87-release-v0.1.0)"]
   _90["Ticket #90 (fix/issue-#90-cold-start-readiness-timeout)"]
+  _95["Ticket #95 (chore/issue-#95-release-v0.2.0)"]
   CAP_01 -->|specified_by| SPEC_01
   CAP_02 -->|specified_by| SPEC_02
   CAP_01 -->|depends_on| CAP_02
@@ -101,6 +104,9 @@ flowchart TD
   CAP_04 -.->|ADR Drift| ADR_008
   CAP_08 -.->|ADR Drift| ADR_008
   ADR_004 -.->|ADR Drift| ADR_008
+  _100 -->|triggered_drift_adr| ADR_009
+  CAP_01 -.->|ADR Drift| ADR_009
+  CAP_06 -.->|ADR Drift| ADR_009
   CAP_01 -->|realized_by| CAP_02
   CAP_01 -->|realized_by| CAP_03
   CAP_02 -->|realized_by| CAP_03
@@ -133,6 +139,7 @@ flowchart TD
   CAP_04 -->|realized_by| ADR_008
   CAP_08 -->|realized_by| ADR_008
   ADR_004 -->|realized_by| ADR_008
+  _100 -.->|ADR Drift| ADR_009
 ```
 
 ---
@@ -149,6 +156,7 @@ flowchart TD
 | **ADR-006** | Framework-Agnostic Module Topology (ag-ui-core, ag-ui-a2a, ag-ui-langchain4j, ag-ui-quarkus) and Removal of Quarkus Deployment Processors | `technical` | `accepted` | #74 | CAP-06, CAP-07, ADR-003 |
 | **ADR-007** | Adopt Upstream AG-UI SDKs (com.ag-ui.community & @ag-ui/client) and Orthogonal Java 17 Quarkus Modules | `technical` | `accepted` | #81 | CAP-05, CAP-06, ADR-006 |
 | **ADR-008** | Canonical AG-UI ACTIVITY_SNAPSHOT Surface Kit, Complete Trip Dossier Report & local-quarkus-agui CI | `technical` | `accepted` | #93 | CAP-03, CAP-04, CAP-08, ADR-004 |
+| **ADR-009** | Adopt Official A2A Java SDK 1.5.0.Final Client (A2ACardResolver, ClientBuilder & VertxA2AHttpClient) and Remove Custom HTTP Audit Endpoint | `technical` | `accepted` | #100 | CAP-01, CAP-06 |
 
 ---
 

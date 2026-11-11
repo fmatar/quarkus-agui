@@ -443,15 +443,7 @@ class NomadTravelAdvisorServiceTest {
         assertEquals("DOWN", healthResource.health().get("status"));
         assertEquals(org.eclipse.microprofile.health.HealthCheckResponse.Status.DOWN, readinessCheck.call().getStatus());
 
-        // 4. NomadA2aHealthResource.audit
-        assertEquals("MISSING_REQUIRED_ARGUMENTS", healthResource.audit(null).data().get("code"));
-        NomadTravelAdvisorService.AuditResult resourceCadence = healthResource.audit(Map.of(
-                "skillId", "curate-neighborhood-cadence",
-                "prompt", "Curate Paris",
-                "context", Map.of("city", "Paris")));
-        assertEquals("OK", resourceCadence.data().get("status"));
-
-        // 5. NomadA2aAgentConfiguration publicAgentCard + extractExecutionContext + agentExecutor
+        // 4. NomadA2aAgentConfiguration publicAgentCard + extractExecutionContext + agentExecutor
         NomadA2aAgentConfiguration config = new NomadA2aAgentConfiguration();
         config.publicUrl = Optional.of("   ");
         AgentCard defaultCard = config.publicAgentCard();

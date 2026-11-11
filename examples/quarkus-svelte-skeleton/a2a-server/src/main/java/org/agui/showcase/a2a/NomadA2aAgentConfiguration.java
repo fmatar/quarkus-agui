@@ -18,7 +18,7 @@ import org.a2aproject.sdk.spec.TransportProtocol;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 /**
- * Official A2A Java SDK ({@code org.a2aproject.sdk} 1.4.0.Final) configuration for {@code Nomad-A2A-Specialist} (:8082).
+ * Official A2A Java SDK ({@code org.a2aproject.sdk} 1.5.0.Final) configuration for {@code Nomad-A2A-Specialist} (:8082).
  * Exposes {@link PublicAgentCard} at {@code GET /.well-known/agent-card.json} and {@link AgentExecutor} over JSON-RPC 2.0 at {@code POST /}.
  */
 @ApplicationScoped
@@ -37,7 +37,7 @@ public class NomadA2aAgentConfiguration {
         return org.a2aproject.sdk.spec.AgentCard.builder()
                 .name(NomadTravelAdvisorService.AGENT_NAME)
                 .description("Specialist A2A Travel Advisor Agent for Frankfurter ECB FX Conversion, Destination Entry Advisories, and Architectural Neighborhood Curation")
-                .version("1.4.0")
+                .version("1.5.0")
                 .url(endpointUrl)
                 .preferredTransport(TransportProtocol.JSONRPC.asString())
                 .supportedInterfaces(List.of(

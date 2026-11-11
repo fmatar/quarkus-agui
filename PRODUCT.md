@@ -33,12 +33,12 @@ Fill the gap in Java/JVM ecosystems for the **AG-UI (Agent–User Interaction Pr
 
 | Capability ID | Capability Title | Functional Spec | Depends On | Status |
 | :--- | :--- | :--- | :--- | :--- |
-| CAP-01 | Quarkus MCP Server (:8081) & Quarkus A2A Server (:8082) in Reference Showcase | `docs/specs/cap-01-mcp-a2a-servers.md` | None | `IMPLEMENTED (ADR-002)` |
+| CAP-01 | Quarkus MCP Server (:8081) & Quarkus A2A Server (:8082) in Reference Showcase | `docs/specs/cap-01-mcp-a2a-servers.md` | None | `AMENDED (ADR-009)` |
 | CAP-02 | OpsPilot Quarkus Orchestrator (:8080) & SvelteKit + pnpm 3-Pane Baseline (:5173) | `docs/specs/cap-02-orchestrator-svelte-baseline.md` | CAP-01 | `IMPLEMENTED (ADR-002)` |
 | CAP-03 | In-Place AG-UI Protocol Engine in Orchestrator (Core 6 + MCP/A2A + State + HITL) | `docs/specs/cap-03-inplace-agui-backend.md` | CAP-02 | `AMENDED (ADR-008)` |
 | CAP-04 | Full 3-Pane SvelteKit + Skeleton UI + @lucide/svelte AG-UI Workbench | `docs/specs/cap-04-svelte-agui-workbench.md` | CAP-02 | `AMENDED (ADR-008)` |
 | CAP-05 | Extract ag-ui-core Standalone Java 25 Library & Refactor Showcase | `docs/specs/cap-05-extract-agui-core.md` | CAP-03, CAP-04 | `AMENDED (ADR-007)` |
-| CAP-06 | Extract quarkus-ag-ui-runtime (AgUiBridge, AgUiMcpBridge, AgUiA2aBridge, Mutiny SSE) | `docs/specs/cap-06-extract-quarkus-runtime.md` | CAP-05 | `AMENDED (ADR-007)` |
+| CAP-06 | Extract quarkus-ag-ui-runtime (AgUiBridge, AgUiMcpBridge, AgUiA2aBridge, Mutiny SSE) | `docs/specs/cap-06-extract-quarkus-runtime.md` | CAP-05 | `AMENDED (ADR-009)` |
 | CAP-07 | Extract quarkus-ag-ui-deployment, GraalVM 25 Reflection, Dev UI & Integration Tests | `docs/specs/cap-07-extract-quarkus-deployment-it.md` | CAP-06 | `AMENDED (ADR-006)` |
 | CAP-08 | Migrate Showcase to quarkus-ag-ui Extension & Full E2E + Native Benchmarks | `docs/specs/cap-08-migrate-showcase-e2e-benchmarks.md` | CAP-07 | `AMENDED (ADR-008)` |
 
@@ -62,4 +62,5 @@ Fill the gap in Java/JVM ecosystems for the **AG-UI (Agent–User Interaction Pr
 | ADR-006 | Framework-Agnostic Module Topology (ag-ui-core, ag-ui-a2a, ag-ui-langchain4j, ag-ui-quarkus) and Removal of Quarkus Deployment Processors | `technical` | `accepted` | #74 | CAP-06, CAP-07, ADR-003 |
 | ADR-007 | Adopt Upstream AG-UI SDKs (com.ag-ui.community & @ag-ui/client) and Orthogonal Java 17 Quarkus Modules | `technical` | `accepted` | #81 | CAP-05, CAP-06, ADR-006 |
 | ADR-008 | Canonical AG-UI ACTIVITY_SNAPSHOT Surface Kit, Complete Trip Dossier Report & local-quarkus-agui CI | `technical` | `accepted` | #93 | CAP-03, CAP-04, CAP-08, ADR-004 |
+| ADR-009 | Adopt Official A2A Java SDK 1.5.0.Final Client (A2ACardResolver, ClientBuilder & VertxA2AHttpClient) and Remove Custom HTTP Audit Endpoint | `technical` | `accepted` | #100 | CAP-01, CAP-06 |
 <!-- ADR_INDEX_END -->

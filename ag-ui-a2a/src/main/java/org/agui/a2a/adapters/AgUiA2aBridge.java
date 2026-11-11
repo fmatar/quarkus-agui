@@ -6,6 +6,7 @@ import com.agui.community.core.event.StepFinishedEvent;
 import com.agui.community.core.event.StepStartedEvent;
 import jakarta.enterprise.context.ApplicationScoped;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -16,6 +17,7 @@ import org.a2aproject.sdk.client.TaskEvent;
 import org.a2aproject.sdk.client.TaskUpdateEvent;
 import org.a2aproject.sdk.spec.AgentCard;
 import org.a2aproject.sdk.spec.Artifact;
+import org.a2aproject.sdk.spec.DataPart;
 import org.a2aproject.sdk.spec.Message;
 import org.a2aproject.sdk.spec.Part;
 import org.a2aproject.sdk.spec.Task;
@@ -41,7 +43,8 @@ public class AgUiA2aBridge {
         Objects.requireNonNull(task, "task must not be null");
 
         String summary = extractTaskSummary(task);
-        boolean isError = isTerminalFailure(task.status().state());
+        Map<String, Object> data = extractTaskData(task);
+        boolean isError = isTerminalFailure(task.status().state()) || isPayloadError(data);
         A2aHandoff handoff = new A2aHandoff(
                 task.id(),
                 agentName,
@@ -63,14 +66,16 @@ public class AgUiA2aBridge {
         if (event instanceof MessageEvent messageEvent) {
             Message msg = messageEvent.getMessage();
             String stepId = msg.taskId() != null ? msg.taskId() : msg.messageId();
+            Map<String, Object> data = extractMessageData(msg);
             return new StepFinishedEvent(
                     stepName,
                     now,
-                    buildProvenance(stepId, agentName, skillId, extractMessageText(msg), false, Map.of()));
+                    buildProvenance(stepId, agentName, skillId, extractMessageText(msg), isPayloadError(data), data));
         }
         if (event instanceof TaskEvent taskEvent) {
             Task task = taskEvent.getTask();
-            boolean isError = isTerminalFailure(task.status().state());
+            Map<String, Object> data = extractTaskData(task);
+            boolean isError = isTerminalFailure(task.status().state()) || isPayloadError(data);
             Map<String, Object> meta = task.metadata() != null ? task.metadata() : Map.of();
             return new StepFinishedEvent(
                     stepName,
@@ -88,19 +93,62 @@ public class AgUiA2aBridge {
     public String extractTaskSummary(Task task) {
         Objects.requireNonNull(task, "task must not be null");
         if (task.artifacts() != null && !task.artifacts().isEmpty()) {
-            return extractArtifactsText(task.artifacts());
+            String text = extractArtifactsText(task.artifacts());
+            if (!text.isEmpty()) {
+                return text;
+            }
         }
         if (task.status().message() != null) {
-            return extractMessageText(task.status().message());
+            String msgText = extractMessageText(task.status().message());
+            if (!msgText.isEmpty()) {
+                return msgText;
+            }
         }
         return task.status().state().name();
     }
 
+    public Map<String, Object> extractTaskData(Task task) {
+        Objects.requireNonNull(task, "task must not be null");
+        Map<String, Object> merged = new LinkedHashMap<>();
+        if (task.metadata() != null) {
+            merged.putAll(task.metadata());
+        }
+        if (task.status().message() != null) {
+            merged.putAll(extractMessageData(task.status().message()));
+        }
+        if (task.artifacts() != null && !task.artifacts().isEmpty()) {
+            merged.putAll(extractArtifactsData(task.artifacts()));
+        }
+        return merged.isEmpty() ? Map.of() : Collections.unmodifiableMap(merged);
+    }
+
     public String extractMessageText(Message message) {
-        if (message == null) {
+        if (message == null || message.parts() == null) {
             return "";
         }
         return extractPartsText(message.parts());
+    }
+
+    public Map<String, Object> extractMessageData(Message message) {
+        if (message == null || message.parts() == null) {
+            return Map.of();
+        }
+        Map<String, Object> merged = extractPartsData(message.parts());
+        return merged.isEmpty() ? Map.of() : Collections.unmodifiableMap(merged);
+    }
+
+    static boolean isTerminalFailure(TaskState state) {
+        return state == TaskState.TASK_STATE_FAILED
+                || state == TaskState.TASK_STATE_REJECTED
+                || state == TaskState.TASK_STATE_CANCELED;
+    }
+
+    static boolean isPayloadError(Map<String, Object> data) {
+        if (data == null || data.isEmpty()) {
+            return false;
+        }
+        return Boolean.TRUE.equals(data.get("isError"))
+                || "ERROR".equalsIgnoreCase(String.valueOf(data.get("status")));
     }
 
     private static List<Event> buildDelegationEvents(
@@ -116,16 +164,18 @@ public class AgUiA2aBridge {
                 buildProvenance(handoff.taskId(), handoff.agentName(), handoff.skillId(), "Delegated", false, handoff.metadata())));
 
         if (!artifacts.isEmpty()) {
-            Map<String, Object> content = Map.of(
-                    "taskId", handoff.taskId(),
-                    "agentName", handoff.agentName(),
-                    "skillId", handoff.skillId(),
-                    "summary", handoff.summary(),
-                    "artifactCount", artifacts.size());
+            Map<String, Object> artifactData = extractArtifactsData(artifacts);
+            Map<String, Object> content = new LinkedHashMap<>();
+            content.put("taskId", handoff.taskId());
+            content.put("agentName", handoff.agentName());
+            content.put("skillId", handoff.skillId());
+            content.put("summary", handoff.summary());
+            content.put("artifactCount", artifacts.size());
+            content.put("data", Collections.unmodifiableMap(artifactData));
             events.add(new ActivitySnapshotEvent(
                     handoff.taskId(),
                     "a2a:artifact",
-                    content,
+                    Collections.unmodifiableMap(content),
                     Boolean.TRUE,
                     now,
                     buildProvenance(handoff.taskId(), handoff.agentName(), handoff.skillId(), handoff.summary(), isError, handoff.metadata())));
@@ -155,23 +205,31 @@ public class AgUiA2aBridge {
         raw.put("isError", isError);
         raw.put("summary", summary);
         raw.put("metadata", metadata);
-        return Map.copyOf(raw);
+        return Collections.unmodifiableMap(raw);
     }
 
     private static String formatStepName(String agentName, String skillId) {
         return "a2a:" + agentName + ":" + skillId;
     }
 
-    private static boolean isTerminalFailure(TaskState state) {
-        return state == TaskState.TASK_STATE_FAILED || state == TaskState.TASK_STATE_REJECTED;
-    }
-
     private static String extractArtifactsText(List<Artifact> artifacts) {
         StringBuilder sb = new StringBuilder();
         for (Artifact artifact : artifacts) {
-            sb.append(extractPartsText(artifact.parts()));
+            if (artifact.parts() != null) {
+                sb.append(extractPartsText(artifact.parts()));
+            }
         }
         return sb.toString();
+    }
+
+    private static Map<String, Object> extractArtifactsData(List<Artifact> artifacts) {
+        Map<String, Object> merged = new LinkedHashMap<>();
+        for (Artifact artifact : artifacts) {
+            if (artifact.parts() != null) {
+                merged.putAll(extractPartsData(artifact.parts()));
+            }
+        }
+        return merged;
     }
 
     private static String extractPartsText(List<Part<?>> parts) {
@@ -182,5 +240,16 @@ public class AgUiA2aBridge {
             }
         }
         return sb.toString();
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> extractPartsData(List<Part<?>> parts) {
+        Map<String, Object> merged = new LinkedHashMap<>();
+        for (Part<?> part : parts) {
+            if (part instanceof DataPart dataPart && dataPart.data() instanceof Map<?, ?> mapData) {
+                merged.putAll((Map<String, Object>) mapData);
+            }
+        }
+        return merged;
     }
 }
