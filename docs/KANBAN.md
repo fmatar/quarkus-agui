@@ -5,7 +5,7 @@
 > To refresh this board: `.agent/skills/sdlc-kanban/scripts/kanban-sync.sh`
 
 > **Repository**: `fmatar/quarkus-agui`  
-> **Last Synced**: `2026-11-11 14:00:00 UTC`
+> **Last Synced**: `2026-11-11 14:10:00 UTC`
 
 ---
 
@@ -13,7 +13,7 @@
 
 | 📥 Backlog | 📋 Ready | ⚡ In Progress | 🔍 In Review | ✅ Done |
 | :--- | :--- | :--- | :--- | :--- |
-|  |  |  | [#100 feat(a2a,showcase): adopt official A2A Java SDK 1.5.0.Final client (A2ACardResolver + ClientBuilder) & remove custom HTTP client](https://github.com/fmatar/quarkus-agui/issues/100) |  |
+|  |  |  |  | [#100 feat(a2a,showcase): adopt official A2A Java SDK 1.5.0.Final client (A2ACardResolver + ClientBuilder) & remove custom HTTP client](https://github.com/fmatar/quarkus-agui/issues/100) |
 |  |  |  |  | [#98 fix(showcase,agui): prevent stuck chat streaming, normalize city+country inputs & harden budget/tool loop](https://github.com/fmatar/quarkus-agui/issues/98) |
 |  |  |  |  | [#95 chore(release): bump manifests, sync ADR-008 specs/proofs & release v0.2.0](https://github.com/fmatar/quarkus-agui/issues/95) |
 |  |  |  |  | [#93 feat(agui,showcase,ci): canonical AG-UI activity cards, complete Trip Dossier report & local-quarkus-agui CI](https://github.com/fmatar/quarkus-agui/issues/93) |
@@ -70,7 +70,7 @@
 
 | Issue | Status | Priority | Component | Quality Gate | Spec Link |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| [#100 feat(a2a,showcase): adopt official A2A Java SDK 1.5.0.Final client (A2ACardResolver + ClientBuilder) & remove custom HTTP client](https://github.com/fmatar/quarkus-agui/issues/100) | `status:in-review` | P1 - High | Architecture | `Passed` | [ADR-009](docs/adr/ADR-009-adopt-official-a2a-java-sdk-1-5-0-final-client-a.md) |
+| [#100 feat(a2a,showcase): adopt official A2A Java SDK 1.5.0.Final client (A2ACardResolver + ClientBuilder) & remove custom HTTP client](https://github.com/fmatar/quarkus-agui/issues/100) | `status:done` | P1 - High | Architecture | `Passed` | [ADR-009](docs/adr/ADR-009-adopt-official-a2a-java-sdk-1-5-0-final-client-a.md) |
 | [#98 fix(showcase,agui): prevent stuck chat streaming, normalize city+country inputs & harden budget/tool loop](https://github.com/fmatar/quarkus-agui/issues/98) | `status:done` | P0 - Critical | Architecture | `Passed` | [ADR-008](docs/adr/ADR-008-canonical-ag-ui-activity-snapshot-surface-kit-co.md) |
 | [#95 chore(release): bump manifests, sync ADR-008 specs/proofs & release v0.2.0](https://github.com/fmatar/quarkus-agui/issues/95) | `status:done` | P1 - High | DevOps | `Passed` | [ADR-008](docs/adr/ADR-008-canonical-ag-ui-activity-snapshot-surface-kit-co.md) |
 | [#93 feat(agui,showcase,ci): canonical AG-UI activity cards, complete Trip Dossier report & local-quarkus-agui CI](https://github.com/fmatar/quarkus-agui/issues/93) | `status:done` | P1 - High | Architecture | `Passed` | [ADR-008](docs/adr/ADR-008-canonical-ag-ui-activity-snapshot-surface-kit-co.md) |
