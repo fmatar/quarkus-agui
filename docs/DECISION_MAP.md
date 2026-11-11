@@ -48,7 +48,6 @@ flowchart TD
   _93["Ticket #93"]
   ADR_009["ADR-009: Adopt Official A2A Java SDK 1.5.0.Final Client (A2ACardResolver, ClientBuilder & VertxA2AHttpClient) and Remove Custom HTTP Audit Endpoint"]
   _100["Ticket #100"]
-  __9450["##9450"]
   _66["Ticket #66 (feature/issue-#66-nomad-travel-chatbot-mcp-health)"]
   _68["Ticket #68 (feature/issue-#68-quarkus-langchain4j-mcp-v5)"]
   _72["Ticket #72 (fix/issue-#72-healthcheck-ttl-and-tool-prompts)"]
@@ -60,20 +59,20 @@ flowchart TD
   _95["Ticket #95 (chore/issue-#95-release-v0.2.0)"]
   CAP_01 -->|specified_by| SPEC_01
   CAP_02 -->|specified_by| SPEC_02
-  CAP_01 -->|depends_on| CAP_02
+  CAP_02 -->|depends_on| CAP_01
   CAP_03 -->|specified_by| SPEC_03
-  CAP_02 -->|depends_on| CAP_03
+  CAP_03 -->|depends_on| CAP_02
   CAP_04 -->|specified_by| SPEC_04
-  CAP_02 -->|depends_on| CAP_04
+  CAP_04 -->|depends_on| CAP_02
   CAP_05 -->|specified_by| SPEC_05
-  CAP_03 -->|depends_on| CAP_05
-  CAP_04 -->|depends_on| CAP_05
+  CAP_05 -->|depends_on| CAP_03
+  CAP_05 -->|depends_on| CAP_04
   CAP_06 -->|specified_by| SPEC_06
-  CAP_05 -->|depends_on| CAP_06
+  CAP_06 -->|depends_on| CAP_05
   CAP_07 -->|specified_by| SPEC_07
-  CAP_06 -->|depends_on| CAP_07
+  CAP_07 -->|depends_on| CAP_06
   CAP_08 -->|specified_by| SPEC_08
-  CAP_07 -->|depends_on| CAP_08
+  CAP_08 -->|depends_on| CAP_07
   _1 -->|triggered_drift_adr| ADR_001
   CAP_01 -.->|ADR Drift| ADR_001
   CAP_03 -.->|ADR Drift| ADR_001
@@ -107,39 +106,14 @@ flowchart TD
   _100 -->|triggered_drift_adr| ADR_009
   CAP_01 -.->|ADR Drift| ADR_009
   CAP_06 -.->|ADR Drift| ADR_009
-  CAP_01 -->|realized_by| CAP_02
-  CAP_01 -->|realized_by| CAP_03
-  CAP_02 -->|realized_by| CAP_03
-  CAP_01 -->|realized_by| CAP_04
-  CAP_02 -->|realized_by| CAP_04
-  CAP_03 -->|realized_by| CAP_05
-  CAP_04 -->|realized_by| CAP_05
-  CAP_03 -->|realized_by| CAP_06
-  CAP_04 -->|realized_by| CAP_06
-  CAP_01 -->|realized_by| CAP_07
-  CAP_02 -->|realized_by| CAP_07
-  CAP_05 -->|realized_by| CAP_08
-  CAP_06 -->|realized_by| CAP_08
-  CAP_07 -->|realized_by| CAP_08
-  _1 -.->|ADR Drift| ADR_001
-  _2 -.->|ADR Drift| ADR_002
-  CAP_01 -->|realized_by| ADR_002
-  CAP_02 -->|realized_by| ADR_002
-  CAP_03 -->|realized_by| ADR_002
-  CAP_04 -->|realized_by| ADR_002
-  CAP_05 -->|realized_by| ADR_002
-  CAP_06 -->|realized_by| ADR_002
-  CAP_07 -->|realized_by| ADR_002
-  CAP_08 -->|realized_by| ADR_002
-  _30 -.->|ADR Drift| ADR_003
-  __9450 -.->|ADR Drift| ADR_006
-  _81 -.->|ADR Drift| ADR_007
-  _93 -.->|ADR Drift| ADR_008
-  CAP_03 -->|realized_by| ADR_008
-  CAP_04 -->|realized_by| ADR_008
-  CAP_08 -->|realized_by| ADR_008
-  ADR_004 -->|realized_by| ADR_008
-  _100 -.->|ADR Drift| ADR_009
+  CAP_03 -->|depends_on| CAP_01
+  CAP_04 -->|depends_on| CAP_01
+  CAP_06 -->|depends_on| CAP_03
+  CAP_06 -->|depends_on| CAP_04
+  CAP_07 -->|depends_on| CAP_01
+  CAP_07 -->|depends_on| CAP_02
+  CAP_08 -->|depends_on| CAP_05
+  CAP_08 -->|depends_on| CAP_06
 ```
 
 ---
