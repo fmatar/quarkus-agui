@@ -28,7 +28,7 @@
 
 {#if resolvedItems.length > 0}
 	<div class="agui-activity-stack" data-variant={variant}>
-		{#each resolvedItems as { activity, Component } (activity.messageId ?? activity.activityType)}
+		{#each resolvedItems as { activity, Component }, idx (`${activity.messageId ?? activity.activityType}-${idx}`)}
 			<Component content={activity.content ?? {}} {variant} />
 		{/each}
 	</div>

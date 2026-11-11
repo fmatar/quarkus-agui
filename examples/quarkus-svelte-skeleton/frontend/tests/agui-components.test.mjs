@@ -51,6 +51,14 @@ test('Svelte 5 AG-UI surface kit components exist and honor semantic, accessibil
 		turnFooterSource.includes('bg-[#FBEEE9] px-2 py-0.5 text-[11px] font-semibold text-[#9E331D]'),
 		'TurnFooter error pill must use WCAG AA #9E331D contrast on #FBEEE9'
 	);
+	assert.ok(
+		!turnFooterSource.includes('{#each sources as src (src.title)}'),
+		'TurnFooter must index keyed #each blocks so duplicate source titles never throw Svelte 5 each_key_duplicate (#98)'
+	);
+	assert.ok(
+		turnFooterSource.includes('-${idx}`)}'),
+		'TurnFooter keyed #each blocks must include index disambiguation'
+	);
 
 	const dossierSource = fs.readFileSync(
 		path.resolve(__dirname, '../src/lib/components/TripDossierPanel.svelte'),

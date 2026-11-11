@@ -798,4 +798,70 @@ class AgUiLangChain4jBridgeTest {
                 emptyProviders));
         assertFalse(minimal.stream().anyMatch(e -> e.type() == EventType.ACTIVITY_SNAPSHOT));
     }
+
+    @Test
+    void postRunSupplierExceptionsAndToolRoundTripExhaustionNeverLeaveStreamWithoutTerminalEvent() {
+        AgUiRunOptions throwingSuppliers = AgUiRunOptions.builder()
+                .runId("run-resilient-complete")
+                .postRunStatePatchProvider(() -> {
+                    throw new IllegalStateException("post-run state patch boom");
+                })
+                .postRunActivityProvider(() -> {
+                    throw new IllegalStateException("post-run activity boom");
+                })
+                .interruptSupplier(() -> {
+                    throw new IllegalStateException("interrupt supplier boom");
+                })
+                .runResultSupplier(() -> {
+                    throw new IllegalStateException("run result boom");
+                })
+                .build();
+
+        List<Event> resilientEvents = collectAll(bridge.adapt(
+                "thread-resilient-complete",
+                new StubTokenStream(s -> {
+                    s.partialResponseHandler.accept("Paris itinerary ready.");
+                    s.completeHandler.accept(ChatResponse.builder()
+                            .aiMessage(AiMessage.from("Paris itinerary ready."))
+                            .build());
+                }),
+                throwingSuppliers));
+        assertEquals(
+                List.of(
+                        EventType.RUN_STARTED,
+                        EventType.TEXT_MESSAGE_START,
+                        EventType.TEXT_MESSAGE_CONTENT,
+                        EventType.TEXT_MESSAGE_END,
+                        EventType.RUN_FINISHED),
+                resilientEvents.stream().map(Event::type).toList());
+
+        // Tool loop exhaustion AFTER streaming assistant text completes cleanly instead of emitting RUN_ERROR
+        List<Event> loopAfterText = collectAll(bridge.adapt(
+                "thread-loop-after-text",
+                new StubTokenStream(s -> {
+                    s.partialResponseHandler.accept("Please confirm these Paris details.");
+                    s.errorHandler.accept(new RuntimeException(
+                            "Something is wrong, exceeded the maximum number of tool calling round trips"));
+                }),
+                AgUiRunOptions.builder()
+                        .postRunStatePatchProvider(() -> List.of(AgUiStatePatch.add("memoryTurns", 2)))
+                        .build()));
+        assertEquals(
+                List.of(
+                        EventType.RUN_STARTED,
+                        EventType.TEXT_MESSAGE_START,
+                        EventType.TEXT_MESSAGE_CONTENT,
+                        EventType.TEXT_MESSAGE_END,
+                        EventType.STATE_DELTA,
+                        EventType.RUN_FINISHED),
+                loopAfterText.stream().map(Event::type).toList());
+
+        // Tool loop exhaustion BEFORE any assistant text emits concise fallback text + RUN_FINISHED
+        List<Event> loopBeforeText = collectAll(bridge.adapt(
+                "thread-loop-before-text",
+                new StubTokenStream(s -> s.errorHandler.accept(new RuntimeException(
+                        "Something is wrong, exceeded the maximum number of sequential tool invocations")))));
+        assertEquals(EventType.RUN_FINISHED, loopBeforeText.get(loopBeforeText.size() - 1).type());
+        assertTrue(loopBeforeText.stream().anyMatch(e -> e.type() == EventType.TEXT_MESSAGE_CONTENT));
+    }
 }

@@ -553,4 +553,73 @@ class NomadMcpConciergeServiceTest {
         service.checkHealth();
         assertEquals(6, calls.get(), "Degraded MCP health report must expire quickly");
     }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void normalizesSpaceSeparatedCityAndCountryInputsAcrossWeatherCultureAndGeocoding() {
+        service.setHttpProbe(url -> {
+            if (url.contains("/v1/forecast")) {
+                return new NomadMcpConciergeService.UpstreamHttpResult(
+                        200,
+                        "{\"current\":{\"temperature_2m\":16.5,\"wind_speed_10m\":12.0,\"weather_code\":1}}",
+                        null,
+                        12L);
+            }
+            if (url.contains("/v1/search?name=Oaxaca+Mexico") || url.contains("/v1/search?name=Oaxaca+State")) {
+                return new NomadMcpConciergeService.UpstreamHttpResult(200, "{}", null, 10L);
+            }
+            if (url.contains("/v1/search?name=Oaxaca")) {
+                return new NomadMcpConciergeService.UpstreamHttpResult(
+                        200,
+                        "{\"results\":[{\"name\":\"Oaxaca\",\"country\":\"Mexico\",\"latitude\":17.0732,\"longitude\":-96.7266}]}",
+                        null,
+                        12L);
+            }
+            if (url.contains("/api/rest_v1/page/summary/Paris")) {
+                return new NomadMcpConciergeService.UpstreamHttpResult(
+                        200,
+                        "{\"title\":\"Paris\",\"extract\":\"Paris historic stone bridges.\",\"originalimage\":{\"source\":\"https://upload.wikimedia.org/paris.jpg\"}}",
+                        null,
+                        15L);
+            }
+            if (url.contains("itunes.apple.com/search")) {
+                return new NomadMcpConciergeService.UpstreamHttpResult(
+                        200,
+                        "{\"resultCount\":1,\"results\":[{\"trackName\":\"La Vie En Rose\",\"artistName\":\"Edith Piaf\",\"previewUrl\":\"https://itunes.example/piaf.m4a\"}]}",
+                        null,
+                        15L);
+            }
+            return new NomadMcpConciergeService.UpstreamHttpResult(404, null, "Not found: " + url, 5L);
+        });
+
+        ToolResponse parisFranceWeather = service.fetchCityWeather("Paris France");
+        assertFalse(parisFranceWeather.isError(), "Expected Paris France weather to succeed");
+        Map<String, Object> parisData = (Map<String, Object>) parisFranceWeather.structuredContent();
+        assertEquals("Paris", parisData.get("city"));
+        assertEquals("France", parisData.get("country"));
+        assertEquals(16.5, parisData.get("temperatureC"));
+
+        ToolResponse nyUsaWeather = service.fetchCityWeather("New York United States");
+        assertFalse(nyUsaWeather.isError());
+        assertEquals("New York", ((Map<String, Object>) nyUsaWeather.structuredContent()).get("city"));
+
+        ToolResponse oaxacaMexicoWeather = service.fetchCityWeather("Oaxaca Mexico");
+        assertFalse(oaxacaMexicoWeather.isError(), "Multi-word country suffix should resolve Oaxaca from 'Oaxaca Mexico'");
+        assertEquals("Oaxaca", ((Map<String, Object>) oaxacaMexicoWeather.structuredContent()).get("city"));
+
+        ToolResponse oaxacaStateWeather = service.fetchCityWeather("Oaxaca State");
+        assertFalse(oaxacaStateWeather.isError(), "Prefix geocoding fallback should resolve Oaxaca from 'Oaxaca State'");
+        assertEquals("Oaxaca", ((Map<String, Object>) oaxacaStateWeather.structuredContent()).get("city"));
+
+        ToolResponse parisFranceCulture = service.discoverLocalCultureAndMedia("Paris France", null);
+        assertFalse(parisFranceCulture.isError());
+        assertEquals("Paris", ((Map<String, Object>) parisFranceCulture.structuredContent()).get("destination"));
+
+        McpToolInvocationResponse parisCityAliasCulture = service.dispatchTool(
+                new McpToolInvocationRequest("discoverLocalCultureAndMedia", Map.of("city", "Paris France")));
+        assertFalse(parisCityAliasCulture.isError(), "discoverLocalCultureAndMedia should accept 'city' alias when LLM omits 'destination'");
+        assertEquals("Paris", ((Map<String, Object>) parisCityAliasCulture.result()).get("destination"));
+
+        assertTrue(service.discoverLocalCultureAndMedia("  ", null, "  ").isError());
+    }
 }

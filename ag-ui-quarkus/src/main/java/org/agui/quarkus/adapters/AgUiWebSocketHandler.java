@@ -6,10 +6,19 @@ import com.agui.community.core.event.Event;
 import com.agui.community.core.event.RunErrorEvent;
 import com.agui.community.core.serialization.Serializer;
 import io.quarkus.websockets.next.WebSocketConnection;
+import io.smallrye.mutiny.Multi;
+import io.smallrye.mutiny.subscription.Cancellable;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import java.time.Duration;
+import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import org.agui.quarkus.application.AgUiSessionRegistry;
 
 /**
@@ -19,9 +28,30 @@ import org.agui.quarkus.application.AgUiSessionRegistry;
 @ApplicationScoped
 public class AgUiWebSocketHandler {
 
+    private static final Duration DEFAULT_STREAM_IDLE_TIMEOUT = Duration.ofSeconds(60);
+
     private final AgUiSessionRegistry registry;
     private final AgUiQuarkusBridge bridge;
     private final Serializer serializer;
+    private final List<ActiveRun> activeRuns = new CopyOnWriteArrayList<>();
+    private volatile Duration streamIdleTimeout = DEFAULT_STREAM_IDLE_TIMEOUT;
+
+    private record ActiveRun(
+            String connectionId,
+            String threadId,
+            AtomicBoolean cancelledByClient,
+            CompletableFuture<Void> completion,
+            AtomicReference<Cancellable> cancellableRef) {
+
+        void cancel() {
+            cancelledByClient.set(true);
+            Cancellable cancellable = cancellableRef.getAndSet(null);
+            if (cancellable != null) {
+                cancellable.cancel();
+            }
+            completion.complete(null);
+        }
+    }
 
     public AgUiWebSocketHandler() {
         AgUiJacksonSerializer defaultSerializer = new AgUiJacksonSerializer();
@@ -50,8 +80,37 @@ public class AgUiWebSocketHandler {
 
     public void onClose(WebSocketConnection connection) {
         if (connection != null) {
+            cancelRun(connection, null);
             registry.unregister(connection.id());
         }
+    }
+
+    public void setStreamIdleTimeout(Duration timeout) {
+        this.streamIdleTimeout = (timeout == null || timeout.isNegative() || timeout.isZero())
+                ? DEFAULT_STREAM_IDLE_TIMEOUT
+                : timeout;
+    }
+
+    public Duration streamIdleTimeout() {
+        return streamIdleTimeout;
+    }
+
+    public boolean cancelRun(WebSocketConnection connection, String threadId) {
+        if (connection == null) {
+            return false;
+        }
+        String connId = connection.id();
+        boolean cancelledAny = false;
+        for (ActiveRun active : activeRuns) {
+            boolean sameConn = Objects.equals(connId, active.connectionId());
+            boolean sameThread = threadId == null || threadId.isBlank() || Objects.equals(threadId, active.threadId());
+            if (sameConn && sameThread) {
+                activeRuns.remove(active);
+                active.cancel();
+                cancelledAny = true;
+            }
+        }
+        return cancelledAny;
     }
 
     public void onError(WebSocketConnection connection, Throwable error) {
@@ -88,9 +147,44 @@ public class AgUiWebSocketHandler {
         }
         try {
             RunAgentInput input = parseInput(rawMessage);
-            bridge.runAsJsonPayloads(agent, input)
-                    .onItem().invoke(json -> sendRawJson(connection, json))
-                    .collect().last().await().indefinitely();
+            Duration timeout = this.streamIdleTimeout;
+            Multi<String> timedPayloads = bridge.runAsJsonPayloads(agent, input)
+                    .ifNoItem()
+                    .after(timeout)
+                    .failWith(() -> new IllegalStateException(
+                            "WebSocket agent stream timed out after " + timeout.toMillis() + "ms"));
+
+            String connId = connection != null ? connection.id() : "";
+            CompletableFuture<Void> done = new CompletableFuture<>();
+            AtomicBoolean cancelledByClient = new AtomicBoolean(false);
+            AtomicReference<Cancellable> cancellableRef = new AtomicReference<>();
+            ActiveRun activeRun = new ActiveRun(connId, input.threadId(), cancelledByClient, done, cancellableRef);
+            activeRuns.add(activeRun);
+            try {
+                Cancellable cancellable = timedPayloads.subscribe().with(
+                        json -> {
+                            if (!cancelledByClient.get()) {
+                                sendRawJson(connection, json);
+                            }
+                        },
+                        done::completeExceptionally,
+                        () -> done.complete(null));
+                cancellableRef.set(cancellable);
+                if (cancelledByClient.get()) {
+                    cancellable.cancel();
+                }
+                done.join();
+            } catch (CompletionException ce) {
+                if (!cancelledByClient.get()) {
+                    Throwable cause = ce.getCause() != null ? ce.getCause() : ce;
+                    if (cause instanceof Error err) {
+                        throw err;
+                    }
+                    throw (cause instanceof RuntimeException re) ? re : new RuntimeException(cause);
+                }
+            } finally {
+                activeRuns.remove(activeRun);
+            }
         } catch (Exception failure) {
             String msg = (failure.getMessage() == null || failure.getMessage().isBlank())
                     ? failure.getClass().getSimpleName()

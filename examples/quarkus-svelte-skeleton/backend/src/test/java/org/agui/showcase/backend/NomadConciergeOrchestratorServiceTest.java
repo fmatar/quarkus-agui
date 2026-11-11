@@ -46,6 +46,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -1331,6 +1332,203 @@ class NomadConciergeOrchestratorServiceTest {
                 null);
         AgentChatResponse modeChat = orchestrator.executeChat(modeInput);
         assertEquals("COMPLETED", modeChat.status());
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void reproducesParisFranceEurosPromptGroundedBudgetParallelEnrichmentAndWsCancel() throws Exception {
+        String exactPrompt =
+                "Plan a trip to Paris France for 5 nights I want to spend 1500 euros and I want to eat and party and go to historical places";
+
+        // 1. Natural-language currency word parsing ("1500 euros", "dollars", "pounds", "francs", "yen")
+        assertEquals(new TripDossierStore.ParsedBudget(1500.0, "EUR"), TripDossierStore.extractBudgetFromPrompt(exactPrompt));
+        assertEquals(new TripDossierStore.ParsedBudget(1500.0, "EUR"), TripDossierStore.extractBudgetFromPrompt("budget is 1,500 euro"));
+        assertEquals(new TripDossierStore.ParsedBudget(2000.0, "USD"), TripDossierStore.extractBudgetFromPrompt("spend 2000 dollars"));
+        assertEquals(new TripDossierStore.ParsedBudget(1200.0, "GBP"), TripDossierStore.extractBudgetFromPrompt("around 1200 pounds"));
+        assertEquals(new TripDossierStore.ParsedBudget(900.0, "CHF"), TripDossierStore.extractBudgetFromPrompt("spend 900 francs"));
+        assertEquals(new TripDossierStore.ParsedBudget(150000.0, "JPY"), TripDossierStore.extractBudgetFromPrompt("budget 150,000 yen"));
+
+        // 2. Space-separated "<City> <Country>" normalization
+        assertEquals("Paris", TripDossierStore.normalizeCityName("Paris France"));
+        assertEquals("New York", TripDossierStore.normalizeCityName("New York United States"));
+        assertEquals("France", A2aGatewayClient.resolveCountryForCity("Paris France"));
+
+        // 3. Prompt-grounded budget & nights override hallucinated LLM tool args (e.g. 4485 USD -> 1500 EUR)
+        //    and failed verifyTravelAdvisory("Paris France") never corrupts activeCity/country to "Paris France"!
+        dossierStore.beginTurn("th-paris-98", exactPrompt);
+        dossierStore.onToolExecuted("th-paris-98", buildExecution(
+                ToolExecutionRequest.builder()
+                        .id("fx-hallucinated")
+                        .name("convertAndAuditBudget")
+                        .arguments("{\"city\":\"Paris France\",\"budgetAmount\":4485.0,\"baseCurrency\":\"USD\"}")
+                        .build(),
+                false,
+                "{\"status\":\"OK\",\"city\":\"Paris France\",\"country\":\"France\",\"baseCurrency\":\"USD\",\"targetCurrency\":\"EUR\",\"exchangeRate\":0.92,\"budgetUsd\":4485.0,\"convertedTotal\":4126.2,\"source\":\"api.frankfurter.dev\"}"));
+        dossierStore.onToolExecuted("th-paris-98", buildExecution(
+                ToolExecutionRequest.builder()
+                        .id("adv-404")
+                        .name("verifyTravelAdvisory")
+                        .arguments("{\"city\":\"Paris France\"}")
+                        .build(),
+                true,
+                "{\"status\":\"ERROR\",\"isError\":true,\"city\":\"Paris France\",\"error\":\"HTTP 404 from api.restcountries.com\"}"));
+
+        Map<String, Object> parisState = dossierStore.readTripDossierState();
+        Map<String, Object> parisTrip = (Map<String, Object>) parisState.get("nomadTrip");
+        assertEquals("Paris", parisTrip.get("activeCity"));
+        assertEquals("France", parisTrip.get("country"));
+        assertEquals(5, parisTrip.get("nights"));
+        assertEquals(1500.0, parisTrip.get("budgetUsd"), "User's explicit 1500 EUR budget must not be overwritten by hallucinated 4485 USD");
+        assertEquals("EUR", parisTrip.get("homeCurrency"));
+        Map<String, Object> fxReport = (Map<String, Object>) ((Map<?, ?>) parisState.get("reportSections")).get("fxBudget");
+        assertEquals(1500.0, fxReport.get("budgetUsd"));
+        assertEquals("EUR", fxReport.get("baseCurrency"));
+
+        // 4. Parallel finalizeTurnDossier enrichment completes concurrently rather than serially blocking RUN_FINISHED
+        McpClient slowMcp = (McpClient) Proxy.newProxyInstance(
+                McpClient.class.getClassLoader(),
+                new Class<?>[]{McpClient.class},
+                (proxy, method, args) -> {
+                    if ("executeTool".equals(method.getName())) {
+                        Thread.sleep(160);
+                    }
+                    return method.invoke(stubMcpClient, args);
+                });
+        TripDossierStore parallelStore = new TripDossierStore(slowMcp);
+        A2aGatewayClient slowA2a = new A2aGatewayClient() {
+            @Override
+            public Map<String, Object> delegateTask(String taskId, String skillId, String prompt, Map<String, Object> context) {
+                try {
+                    Thread.sleep(160);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                return a2aClient.delegateTask(taskId, skillId, prompt, context);
+            }
+        };
+        parallelStore.beginTurn("th-parallel-98", exactPrompt);
+        long t0 = System.nanoTime();
+        Map<String, Object> enriched = parallelStore.finalizeTurnDossier("th-parallel-98", slowA2a);
+        long elapsedMs = (System.nanoTime() - t0) / 1_000_000L;
+        assertFalse(enriched.isEmpty());
+        assertTrue(elapsedMs < 550, "Expected parallel post-run dossier enrichment (<550ms for 6x160ms tasks), took " + elapsedMs + "ms");
+
+        // 5. CANCEL_RUN over AgentWebSocketEndpoint cancels active async stream immediately
+        CountDownLatch hangStarted = new CountDownLatch(1);
+        CountDownLatch hangCancelled = new CountDownLatch(1);
+        NomadConciergeAiService hangingAi = (tid, p) -> Multi.createBy().concatenating().streams(
+                Multi.createFrom().item((ChatEvent) new ChatEvent.PartialResponseEvent("Streaming chunk..."))
+                        .onItem().invoke(hangStarted::countDown),
+                Multi.createFrom().<ChatEvent>nothing())
+                .onCancellation().invoke(hangCancelled::countDown);
+        NomadConciergeOrchestratorService cancellableOrch = new NomadConciergeOrchestratorService(
+                hangingAi, langChain4jBridge, stubMcpClient, a2aClient, dossierStore, readinessChecks);
+        cancellableOrch.defaultOllamaModel = "llama3.2:latest";
+        AgentWebSocketEndpoint ws = new AgentWebSocketEndpoint(cancellableOrch);
+        ws.asyncDispatch = true;
+        List<String> wsFrames = Collections.synchronizedList(new ArrayList<>());
+        WebSocketConnection wsConn = (WebSocketConnection) Proxy.newProxyInstance(
+                WebSocketConnection.class.getClassLoader(),
+                new Class<?>[]{WebSocketConnection.class},
+                (proxy, method, args) -> switch (method.getName()) {
+                    case "id" -> "ws-hang-98";
+                    case "isOpen" -> true;
+                    case "isClosed" -> false;
+                    case "equals" -> proxy == args[0];
+                    case "hashCode" -> System.identityHashCode(proxy);
+                    case "toString" -> "ws-hang-98";
+                    case "sendTextAndAwait" -> {
+                        wsFrames.add(String.valueOf(args[0]));
+                        yield null;
+                    }
+                    default -> null;
+                });
+        ws.onOpen(wsConn);
+        ws.onMessage(
+                "{\"threadId\":\"th-ws-hang\",\"runId\":\"r-ws-hang\",\"state\":{},\"messages\":[{\"id\":\"u1\",\"role\":\"user\",\"content\":\"Plan Paris\"}],\"tools\":[],\"context\":[],\"forwardedProps\":{}}",
+                wsConn);
+        assertTrue(hangStarted.await(2, TimeUnit.SECONDS));
+        ws.onMessage("{\"type\":\"CANCEL_RUN\",\"threadId\":\"th-ws-hang\"}", wsConn);
+        assertTrue(hangCancelled.await(2, TimeUnit.SECONDS), "CANCEL_RUN must cancel in-flight upstream stream subscription");
+
+        // 6. Direct boundary coverage for A2aGatewayClient & TripDossierStore normalization helpers
+        assertEquals("", A2aGatewayClient.stripTrailingCountry(null));
+        assertEquals("", A2aGatewayClient.stripTrailingCountry("   "));
+        assertEquals("Paris", A2aGatewayClient.stripTrailingCountry("Paris, France"));
+        assertEquals("New York", A2aGatewayClient.stripTrailingCountry("New York United States of America"));
+        assertEquals("New York", A2aGatewayClient.stripTrailingCountry("New York"));
+        assertEquals("Belo Horizonte", A2aGatewayClient.stripTrailingCountry("Belo Horizonte"));
+
+        assertNull(A2aGatewayClient.extractTrailingCountry(null));
+        assertNull(A2aGatewayClient.extractTrailingCountry("   "));
+        assertNull(A2aGatewayClient.extractTrailingCountry("Paris,   "));
+        assertNull(A2aGatewayClient.extractTrailingCountry("New York"));
+        assertNull(A2aGatewayClient.extractTrailingCountry("Belo Horizonte"));
+        assertEquals("United Kingdom", A2aGatewayClient.extractTrailingCountry("London, UK"));
+        assertEquals("Malta", A2aGatewayClient.extractTrailingCountry("Valletta, Malta"));
+        assertEquals("United States", A2aGatewayClient.extractTrailingCountry("New York USA"));
+
+        assertEquals("", A2aGatewayClient.resolveCountryForCity(null));
+        assertEquals("", A2aGatewayClient.resolveCountryForCity("  "));
+        assertEquals("France", A2aGatewayClient.resolveCountryForCity("Paris"));
+        assertEquals("Malta", A2aGatewayClient.resolveCountryForCity("Valletta, Malta"));
+        assertEquals("France", A2aGatewayClient.resolveCountryForCity("Bordeaux,"));
+        assertEquals("Valletta", A2aGatewayClient.resolveCountryForCity("Valletta"));
+
+        assertEquals("EUR", TripDossierStore.normalizeCurrencyToken("euro"));
+        assertEquals("EUR", TripDossierStore.normalizeCurrencyToken("euros"));
+        assertEquals("USD", TripDossierStore.normalizeCurrencyToken("dollars"));
+        assertEquals("GBP", TripDossierStore.normalizeCurrencyToken("pounds"));
+        assertEquals("GBP", TripDossierStore.normalizeCurrencyToken("sterling"));
+        assertEquals("CHF", TripDossierStore.normalizeCurrencyToken("francs"));
+        assertEquals("JPY", TripDossierStore.normalizeCurrencyToken("yen"));
+        assertEquals("CAD", TripDossierStore.normalizeCurrencyToken("cad"));
+        assertEquals("EUR", TripDossierStore.extractBudgetFromPrompt("spend 1500 euros").currency());
+        assertEquals("USD", TripDossierStore.extractBudgetFromPrompt("spend 1200 dollars").currency());
+        assertEquals("GBP", TripDossierStore.extractBudgetFromPrompt("spend 900 pounds").currency());
+        assertEquals("CHF", TripDossierStore.extractBudgetFromPrompt("spend 800 francs").currency());
+        assertEquals("JPY", TripDossierStore.extractBudgetFromPrompt("spend 95000 yen").currency());
+        assertEquals("", TripDossierStore.normalizeCityName(null));
+        assertEquals("", TripDossierStore.normalizeCityName("   "));
+        assertEquals("Paris", TripDossierStore.normalizeCityName("paris france"));
+        assertEquals("Bordeaux", TripDossierStore.normalizeCityName("bordeaux france"));
+
+        // 7. Turn sources deduplicate by title across repeated LLM + post-run enrichments (preventing Svelte 5 each_key_duplicate)
+        dossierStore.beginTurn("th-dedup-sources-98", exactPrompt);
+        dossierStore.onToolExecuted("th-dedup-sources-98", buildExecution(
+                ToolExecutionRequest.builder()
+                        .id("cult-err")
+                        .name("discoverLocalCultureAndMedia")
+                        .arguments("{}")
+                        .build(),
+                true,
+                "{\"status\":\"ERROR\",\"isError\":true,\"destination\":\"Paris\",\"error\":\"Missing destination\"}"));
+        dossierStore.onToolExecuted("th-dedup-sources-98", buildExecution(
+                ToolExecutionRequest.builder()
+                        .id("cult-ok")
+                        .name("discoverLocalCultureAndMedia")
+                        .arguments("{\"destination\":\"Paris\"}")
+                        .build(),
+                false,
+                "{\"status\":\"OK\",\"destination\":\"Paris\",\"culturalSummary\":\"Paris is the capital of France.\",\"heroImageUrl\":\"https://upload.wikimedia.org/paris.jpg\"}"));
+        dossierStore.onToolExecuted("th-dedup-sources-98", buildExecution(
+                ToolExecutionRequest.builder()
+                        .id("cult-dup-err")
+                        .name("discoverLocalCultureAndMedia")
+                        .arguments("{\"destination\":\"Paris\"}")
+                        .build(),
+                true,
+                "{\"status\":\"ERROR\",\"isError\":true,\"destination\":\"Paris\",\"error\":\"Spurious retry\"}"));
+        Map<String, Object> dedupDelta = dossierStore.finalizeTurnDossier("th-dedup-sources-98", a2aClient);
+        List<Map<String, Object>> dedupSources = (List<Map<String, Object>>) dedupDelta.get("sources");
+        assertNotNull(dedupSources);
+        List<String> sourceTitles = dedupSources.stream().map(s -> String.valueOf(s.get("title"))).toList();
+        assertEquals(new HashSet<>(sourceTitles).size(), sourceTitles.size(), "turnSources must never contain duplicate titles: " + sourceTitles);
+        Map<String, Object> wikiSource = dedupSources.stream()
+                .filter(s -> "Wikipedia Cultural Summary — Paris".equals(s.get("title")))
+                .findFirst()
+                .orElseThrow();
+        assertEquals("verified", wikiSource.get("status"), "Verified source must upgrade initial error and resist spurious downgrade");
     }
 
     private static RunAgentInput runInput(String threadId, String prompt, String llmMode) {

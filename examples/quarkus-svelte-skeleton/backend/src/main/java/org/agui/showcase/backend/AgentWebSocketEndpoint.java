@@ -106,6 +106,7 @@ public class AgentWebSocketEndpoint {
     }
 
     private void handleCancelCommand(WebSocketConnection connection, String threadId) {
+        wsHandler.cancelRun(connection, threadId);
         orchestrator.cancelRun(threadId);
         wsHandler.sendEvent(connection, new RunFinishedEvent(
                 threadId,

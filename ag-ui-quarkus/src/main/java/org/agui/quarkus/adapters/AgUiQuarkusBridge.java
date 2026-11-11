@@ -57,6 +57,9 @@ public class AgUiQuarkusBridge {
 
     public <T> Multi<T> toMulti(Flow.Publisher<T> publisher) {
         Objects.requireNonNull(publisher, "publisher must not be null");
+        if (publisher instanceof Multi<T> multi) {
+            return multi;
+        }
         return Multi.createFrom().publisher(publisher);
     }
 

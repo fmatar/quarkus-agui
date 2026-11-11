@@ -15,6 +15,7 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -38,7 +39,7 @@ public class NomadTravelAdvisorService {
     public static final String AGENT_NAME = "Nomad-A2A-Specialist";
 
     private static final Pattern BUDGET_AMOUNT_PATTERN = Pattern.compile(
-            "(?:(?<![0-9])[$€£¥][ \\t]*([0-9][0-9,]*(?:\\.[0-9]+)?)|\\b([0-9][0-9,]*(?:\\.[0-9]+)?)[ \\t]*(?:[$€£¥]|\\b(?:usd|eur|gbp|chf|cad|aud|jpy|isk|mxn|dollars?|euros?|pounds?)\\b))",
+            "(?:(?<![0-9])[$€£¥][ \\t]*([0-9][0-9,]*(?:\\.[0-9]+)?)|\\b([0-9][0-9,]*(?:\\.[0-9]+)?)[ \\t]*(?:[$€£¥]|\\b(?:usd|eur|gbp|chf|cad|aud|jpy|isk|mxn|dollars?|euros?|pounds?|sterling|francs?|yen)\\b))",
             Pattern.CASE_INSENSITIVE);
 
     private static final List<String> KNOWN_CITIES = List.of(
@@ -171,6 +172,7 @@ public class NomadTravelAdvisorService {
     }
 
     private AuditResult performCurrencyAndBudgetAudit(String prompt, Map<String, Object> ctx) {
+        String rawCtxCity = stringFromCtx(ctx, "city", null);
         String city = resolveExplicitCity(prompt, ctx);
         if (city == null) {
             return errorAuditResult(
@@ -190,7 +192,7 @@ public class NomadTravelAdvisorService {
                     "Missing required argument 'budgetUsd' (or budget amount) for convert-and-audit-budget in " + city + ".");
         }
 
-        String country = stringFromCtx(ctx, "country", resolveCountryForCity(city));
+        String country = stringFromCtx(ctx, "country", resolveCountryForCity(rawCtxCity != null ? rawCtxCity : city));
         String baseCurrency = stringFromCtx(ctx, "baseCurrency", detectCurrencyFromPrompt(prompt, "USD")).toUpperCase(Locale.ROOT);
         String targetCurrency = stringFromCtx(
                 ctx,
@@ -331,6 +333,7 @@ public class NomadTravelAdvisorService {
     }
 
     private AuditResult performTravelAdvisoryAudit(String prompt, Map<String, Object> ctx) {
+        String rawCtxCity = stringFromCtx(ctx, "city", null);
         String city = resolveExplicitCity(prompt, ctx);
         if (city == null) {
             return errorAuditResult(
@@ -340,7 +343,7 @@ public class NomadTravelAdvisorService {
                     AGENT_NAME,
                     "Missing required argument 'city' for verify-travel-advisory.");
         }
-        String country = stringFromCtx(ctx, "country", resolveCountryForCity(city));
+        String country = stringFromCtx(ctx, "country", resolveCountryForCity(rawCtxCity != null ? rawCtxCity : city));
         String encodedCountry = URLEncoder.encode(country, StandardCharsets.UTF_8).replace("+", "%20");
         String url = restCountriesBaseUrl + "/countries/v5/names.common/"
                 + encodedCountry
@@ -421,6 +424,7 @@ public class NomadTravelAdvisorService {
     }
 
     private AuditResult performNeighborhoodCadenceCuration(String prompt, Map<String, Object> ctx) {
+        String rawCtxCity = stringFromCtx(ctx, "city", null);
         String city = resolveExplicitCity(prompt, ctx);
         if (city == null) {
             return errorAuditResult(
@@ -430,7 +434,7 @@ public class NomadTravelAdvisorService {
                     AGENT_NAME,
                     "Missing required argument 'city' for curate-neighborhood-cadence.");
         }
-        String country = stringFromCtx(ctx, "country", resolveCountryForCity(city));
+        String country = stringFromCtx(ctx, "country", resolveCountryForCity(rawCtxCity != null ? rawCtxCity : city));
         String focus = stringFromCtx(ctx, "focus", "architecture, local craft & evening acoustics");
         List<String> stops = switch (city.toLowerCase(Locale.ROOT)) {
             case "kyoto" -> List.of("Morning: Arashiyama Cedar & Moss Sanctuary", "Afternoon: Gion Sukiya-zukuri Machiya Joinery", "Evening: Pontocho Silk-String Koto Salon");
@@ -630,7 +634,7 @@ public class NomadTravelAdvisorService {
 
     private String resolveExplicitCity(String prompt, Map<String, Object> ctx) {
         if (ctx != null && ctx.get("city") instanceof String c && !c.isBlank()) {
-            return c.trim();
+            return normalizeCityInput(c);
         }
         return detectCityFromPrompt(prompt);
     }
@@ -693,10 +697,10 @@ public class NomadTravelAdvisorService {
                 return candidate;
             }
         }
-        Matcher m = Pattern.compile("\\b(?:in|to|for|visit|explore|around|about)\\s+([A-Z][a-zA-Z]+(?:\\s+[A-Z][a-zA-Z]+)?)\\b")
+        Matcher m = Pattern.compile("\\b(?i:in|to|for|visit|explore|around|about)\\s+([A-Z][a-zA-Z]+(?:\\s+[A-Z][a-zA-Z]+)?)\\b")
                 .matcher(raw);
         if (m.find()) {
-            String candidate = m.group(1).trim();
+            String candidate = normalizeCityInput(m.group(1));
             if (!List.of("France", "Japan", "Portugal", "Iceland", "Currency", "Travel").contains(candidate)) {
                 return candidate;
             }
@@ -854,8 +858,122 @@ public class NomadTravelAdvisorService {
         return Map.copyOf(map);
     }
 
+    private static final Map<String, String> COUNTRY_ALIASES = Map.ofEntries(
+            Map.entry("uk", "United Kingdom"),
+            Map.entry("great britain", "United Kingdom"),
+            Map.entry("england", "United Kingdom"),
+            Map.entry("scotland", "United Kingdom"),
+            Map.entry("usa", "United States"),
+            Map.entry("us", "United States"),
+            Map.entry("united states of america", "United States"),
+            Map.entry("uae", "United Arab Emirates"),
+            Map.entry("korea", "South Korea"),
+            Map.entry("czech republic", "Czechia"));
+
+    static String normalizeCityInput(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return "";
+        }
+        String trimmed = raw.trim().replaceAll("\\s+", " ");
+        int commaIdx = trimmed.indexOf(',');
+        if (commaIdx > 0) {
+            trimmed = trimmed.substring(0, commaIdx).trim();
+        }
+        if (trimmed.isEmpty()) {
+            return "";
+        }
+        for (String known : KNOWN_CITIES) {
+            if (known.equalsIgnoreCase(trimmed)) {
+                return known;
+            }
+        }
+        if (CITY_TO_COUNTRY.containsKey(trimmed.toLowerCase(Locale.ROOT))) {
+            return Character.toUpperCase(trimmed.charAt(0)) + trimmed.substring(1);
+        }
+        if (trimmed.contains(" ")) {
+            String[] words = trimmed.split(" ");
+            for (int suffixLen = Math.min(4, words.length - 1); suffixLen >= 1; suffixLen--) {
+                int splitIdx = words.length - suffixLen;
+                String suffix = String.join(" ", Arrays.copyOfRange(words, splitIdx, words.length));
+                if (matchCanonicalCountry(suffix) != null) {
+                    String prefix = String.join(" ", Arrays.copyOf(words, splitIdx));
+                    for (String known : KNOWN_CITIES) {
+                        if (known.equalsIgnoreCase(prefix)) {
+                            return known;
+                        }
+                    }
+                    return Character.toUpperCase(prefix.charAt(0)) + prefix.substring(1);
+                }
+            }
+        }
+        return Character.toUpperCase(trimmed.charAt(0)) + trimmed.substring(1);
+    }
+
+    static String extractTrailingCountry(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        String trimmed = raw.trim().replaceAll("\\s+", " ");
+        int commaIdx = trimmed.indexOf(',');
+        if (commaIdx > 0) {
+            String afterComma = trimmed.substring(commaIdx + 1).trim();
+            String canonical = matchCanonicalCountry(afterComma);
+            return canonical != null ? canonical : (afterComma.isEmpty() ? null : afterComma);
+        }
+        String lower = trimmed.toLowerCase(Locale.ROOT);
+        if (CITY_TO_COUNTRY.containsKey(lower)) {
+            return null;
+        }
+        for (String known : KNOWN_CITIES) {
+            if (known.equalsIgnoreCase(trimmed)) {
+                return null;
+            }
+        }
+        if (trimmed.contains(" ")) {
+            String[] words = trimmed.split(" ");
+            for (int suffixLen = Math.min(4, words.length - 1); suffixLen >= 1; suffixLen--) {
+                int splitIdx = words.length - suffixLen;
+                String suffix = String.join(" ", Arrays.copyOfRange(words, splitIdx, words.length));
+                String canonical = matchCanonicalCountry(suffix);
+                if (canonical != null) {
+                    return canonical;
+                }
+            }
+        }
+        return null;
+    }
+
+    private static String matchCanonicalCountry(String candidate) {
+        if (candidate == null || candidate.isBlank()) {
+            return null;
+        }
+        String lower = candidate.trim().toLowerCase(Locale.ROOT);
+        String alias = COUNTRY_ALIASES.get(lower);
+        if (alias != null) {
+            return alias;
+        }
+        for (String country : COUNTRY_TO_CURRENCY.keySet()) {
+            if (country.equalsIgnoreCase(candidate.trim())) {
+                return country;
+            }
+        }
+        return null;
+    }
+
     static String resolveCountryForCity(String city) {
-        return CITY_TO_COUNTRY.getOrDefault(city.toLowerCase(Locale.ROOT), city);
+        if (city == null || city.isBlank()) {
+            return "";
+        }
+        String direct = CITY_TO_COUNTRY.get(city.trim().toLowerCase(Locale.ROOT));
+        if (direct != null) {
+            return direct;
+        }
+        String trailing = extractTrailingCountry(city);
+        if (trailing != null) {
+            return trailing;
+        }
+        String normalized = normalizeCityInput(city);
+        return CITY_TO_COUNTRY.getOrDefault(normalized.toLowerCase(Locale.ROOT), normalized);
     }
 
     static String resolveStaticCurrencyForCountry(String country) {

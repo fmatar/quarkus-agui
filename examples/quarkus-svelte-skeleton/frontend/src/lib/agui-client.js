@@ -544,11 +544,43 @@ function mergeTurnArtifacts(currentTurn, fields) {
 		: currentTurn.interaction;
 	return {
 		...currentTurn,
-		media: nonEmptyArrayOrFallback(fields.media, currentTurn.media),
+		media: deduplicateMedia(nonEmptyArrayOrFallback(fields.media, currentTurn.media)),
 		interaction: nextInteraction,
-		sources: nonEmptyArrayOrFallback(fields.sources, currentTurn.sources),
+		sources: deduplicateSources(nonEmptyArrayOrFallback(fields.sources, currentTurn.sources)),
 		followUps: nonEmptyArrayOrFallback(fields.followUps, currentTurn.followUps)
 	};
+}
+
+function deduplicateSources(sources) {
+	if (!Array.isArray(sources) || sources.length <= 1) return sources ?? [];
+	const out = [];
+	const indexByKey = new Map();
+	for (const src of sources) {
+		if (!src || typeof src !== 'object') continue;
+		const key = String(src.title || src.url || '').trim();
+		const prevIdx = key ? indexByKey.get(key) : undefined;
+		if (prevIdx === undefined) {
+			if (key) indexByKey.set(key, out.length);
+			out.push(src);
+		} else if (!(out[prevIdx].status === 'verified' && src.status === 'error')) {
+			out[prevIdx] = src;
+		}
+	}
+	return out;
+}
+
+function deduplicateMedia(media) {
+	if (!Array.isArray(media) || media.length <= 1) return media ?? [];
+	const seen = new Set();
+	const out = [];
+	for (const item of media) {
+		if (!item || typeof item !== 'object') continue;
+		const key = `${item.type ?? ''}:${item.url || item.title || ''}`;
+		if (seen.has(key)) continue;
+		seen.add(key);
+		out.push(item);
+	}
+	return out;
 }
 
 function nonEmptyArrayOrFallback(candidate, fallback) {
@@ -934,8 +966,13 @@ function syncDossierFromActivity(currentDossier, event) {
 	}
 	const prevTrip = currentDossier?.nomadTrip ?? {};
 	const prevSections = currentDossier?.reportSections ?? {};
-	const city = nonBlankString(event.content.city) ?? prevTrip.activeCity ?? null;
-	const country = nonBlankString(event.content.country) ?? prevTrip.country ?? null;
+	const isError = Boolean(event.content.isError);
+	const city = isError
+		? (prevTrip.activeCity ?? nonBlankString(event.content.city) ?? null)
+		: (nonBlankString(event.content.city) ?? prevTrip.activeCity ?? null);
+	const country = isError
+		? (prevTrip.country ?? nonBlankString(event.content.country) ?? null)
+		: (nonBlankString(event.content.country) ?? prevTrip.country ?? null);
 	return {
 		...currentDossier,
 		nomadTrip: {
@@ -1065,8 +1102,13 @@ function resolveFinalReplyText(streamBuffer, status) {
 }
 
 function buildCompletedAssistantTurn(event, content, currentTurn, state) {
+	const preferredId = `msg-${event.runId ?? event.id ?? randomUUID()}`;
+	const existingMessages = Array.isArray(state?.messages) ? state.messages : [];
+	const resolvedId = existingMessages.some((m) => m.id === preferredId)
+		? `${preferredId}-${existingMessages.length}`
+		: preferredId;
 	return {
-		id: `msg-${event.runId ?? event.id ?? randomUUID()}`,
+		id: resolvedId,
 		role: 'assistant',
 		status: 'completed',
 		content,
@@ -1075,9 +1117,9 @@ function buildCompletedAssistantTurn(event, content, currentTurn, state) {
 		mcpCalls: state.mcpCalls,
 		a2aSteps: state.a2aSteps,
 		activities: currentTurn.activities ?? [],
-		media: currentTurn.media,
+		media: deduplicateMedia(currentTurn.media),
 		interaction: currentTurn.interaction,
-		sources: currentTurn.sources,
+		sources: deduplicateSources(currentTurn.sources),
 		followUps: currentTurn.followUps
 	};
 }
@@ -1118,6 +1160,48 @@ const WORKBENCH_HANDLERS = new Map([
 	[EventType.RUN_FINISHED, handleRunFinished],
 	[EventType.RUN_ERROR, handleRunError]
 ]);
+
+/**
+ * Cleanly terminates an aborted, timed-out, or prematurely closed stream so the UI never stays
+ * stuck with a ghost streaming cursor or orphaned `streamBuffer`.
+ */
+export function finalizeAbortedStream(state, statusText = 'Stream stopped by traveler') {
+	const currentTurn = state.activeTurn ?? createEmptyActiveTurn();
+	const cancelledTimeline = (currentTurn.timeline ?? []).map((item) =>
+		item.status === 'running' ? { ...item, status: 'cancelled' } : item
+	);
+	const cancelledMcpCalls = (state.mcpCalls ?? []).map((call) =>
+		call.status === 'running' ? { ...call, status: 'cancelled' } : call
+	);
+	const trimmedBuffer = (state.streamBuffer ?? '').trim();
+	const turnSnapshot = {
+		...currentTurn,
+		timeline: cancelledTimeline
+	};
+	const stateWithCancelledCalls = {
+		...state,
+		mcpCalls: cancelledMcpCalls
+	};
+	const flushedTurn = trimmedBuffer
+		? [
+				buildCompletedAssistantTurn(
+					{ id: `abort-${randomUUID()}` },
+					trimmedBuffer,
+					turnSnapshot,
+					stateWithCancelledCalls
+				)
+			]
+		: [];
+	return {
+		...stateWithCancelledCalls,
+		isStreaming: false,
+		pendingApproval: null,
+		statusText,
+		streamBuffer: '',
+		activeTurn: createEmptyActiveTurn(),
+		messages: [...state.messages, ...flushedTurn]
+	};
+}
 
 /**
  * Pure reducer updating the 3-Pane Workbench state for each incoming canonical AG-UI `Event`.

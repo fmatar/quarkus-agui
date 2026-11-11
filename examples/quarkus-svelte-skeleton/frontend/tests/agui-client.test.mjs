@@ -1349,3 +1349,114 @@ test('AG-UI activity snapshots populate turn.activities, sync reportSections, de
 	const links = buildPlaceMapLinks({ city: 'Kyoto', country: 'Japan', latitude: 35.0116, longitude: 135.7681 });
 	assert.ok(links.openStreetMapEmbedUrl.includes('openstreetmap.org'));
 });
+
+test('finalizeAbortedStream flushes partial streamBuffer, clears ghost streaming cursor, and marks running timeline items cancelled (#98)', async () => {
+	const mod = await import('../src/lib/agui-client.js');
+	assert.equal(typeof mod.finalizeAbortedStream, 'function', 'finalizeAbortedStream must be exported from agui-client.js');
+
+	let state = createInitialWorkbenchState('th-stuck-98');
+	state = reduceAgUiEvent(state, {
+		type: EventType.RUN_STARTED,
+		threadId: 'th-stuck-98',
+		runId: 'run-paris-98'
+	});
+	state = reduceAgUiEvent(state, {
+		type: EventType.TOOL_CALL_START,
+		toolCallId: 'tc-running-98',
+		toolCallName: 'discoverLocalCultureAndMedia',
+		rawEvent: { callId: 'tc-running-98', tool: 'discoverLocalCultureAndMedia', callType: 'mcp:tool' }
+	});
+	state = reduceAgUiEvent(state, {
+		type: EventType.TEXT_MESSAGE_CONTENT,
+		messageId: 'm-paris-98',
+		delta: 'Please let me know if these details are correct, and I will proceed with planning your trip.'
+	});
+	assert.equal(state.isStreaming, true);
+	assert.ok(state.streamBuffer.length > 0);
+
+	const finalized = mod.finalizeAbortedStream(state, 'Stream stopped by traveler');
+	assert.equal(finalized.isStreaming, false);
+	assert.equal(finalized.streamBuffer, '', 'streamBuffer must be cleared so MessageHistory does not stay stuck in turn-streaming');
+	assert.equal(finalized.statusText, 'Stream stopped by traveler');
+	assert.equal(finalized.messages.at(-1).role, 'assistant');
+	assert.ok(finalized.messages.at(-1).content.includes('Please let me know if these details are correct'));
+	assert.equal(finalized.messages.at(-1).timeline[0].status, 'cancelled');
+	assert.equal(finalized.activeTurn.timeline.length, 0);
+
+	// Empty streamBuffer abort resets cleanly without adding a blank assistant message
+	const emptyStreamState = reduceAgUiEvent(createInitialWorkbenchState('th-empty-abort'), {
+		type: EventType.RUN_STARTED,
+		threadId: 'th-empty-abort',
+		runId: 'r-empty'
+	});
+	const beforeCount = emptyStreamState.messages.length;
+	const finalizedEmpty = mod.finalizeAbortedStream(emptyStreamState, 'Paused');
+	assert.equal(finalizedEmpty.isStreaming, false);
+	assert.equal(finalizedEmpty.streamBuffer, '');
+	assert.equal(finalizedEmpty.messages.length, beforeCount);
+});
+
+test('reduceAgUiEvent deduplicates sources, media, and message IDs on RUN_FINISHED to prevent Svelte 5 each_key_duplicate (#98)', () => {
+	let state = createInitialWorkbenchState('th-dedup-98');
+	state = reduceAgUiEvent(state, {
+		type: EventType.RUN_STARTED,
+		threadId: 'th-dedup-98',
+		runId: 'run-dedup-98'
+	});
+	state = reduceAgUiEvent(state, {
+		type: EventType.STATE_DELTA,
+		rawEvent: {
+			sources: [
+				{ title: 'Wikipedia Cultural Summary — Paris', url: 'https://en.wikipedia.org/wiki/Paris', status: 'error', error: 'missing arg' },
+				{ title: 'Wikipedia Cultural Summary — Paris', url: 'https://en.wikipedia.org/wiki/Paris', status: 'verified', error: '' },
+				{ title: 'Frankfurter ECB FX Reference', url: 'https://api.frankfurter.dev/v1/latest', status: 'verified', error: '' },
+				{ title: 'Frankfurter ECB FX Reference', url: 'https://api.frankfurter.dev/v1/latest', status: 'error', error: 'spurious retry' }
+			],
+			media: [
+				{ type: 'image', title: 'Paris Cultural & Architectural Plate', url: 'https://upload.wikimedia.org/paris.jpg' },
+				{ type: 'image', title: 'Paris Cultural & Architectural Plate', url: 'https://upload.wikimedia.org/paris.jpg' },
+				{ type: 'audio', title: 'La Vie En Rose', url: 'https://audio-ssl.itunes.apple.com/preview.m4a' }
+			]
+		}
+	});
+	state = reduceAgUiEvent(state, {
+		type: EventType.TEXT_MESSAGE_CONTENT,
+		messageId: 'm-dedup-98',
+		delta: 'Here is your 5-night Paris itinerary.'
+	});
+	state = reduceAgUiEvent(state, {
+		type: EventType.RUN_FINISHED,
+		threadId: 'th-dedup-98',
+		runId: 'run-dedup-98',
+		result: { status: 'completed', memoryTurns: 1 }
+	});
+
+	assert.equal(state.isStreaming, false);
+	const completedTurn = state.messages.at(-1);
+	assert.equal(completedTurn.sources.length, 2, 'Duplicate source titles must be collapsed');
+	assert.equal(completedTurn.sources[0].title, 'Wikipedia Cultural Summary — Paris');
+	assert.equal(completedTurn.sources[0].status, 'verified', 'Later verified source upgrades earlier error');
+	assert.equal(completedTurn.sources[1].title, 'Frankfurter ECB FX Reference');
+	assert.equal(completedTurn.sources[1].status, 'verified', 'Earlier verified source is not downgraded by spurious error');
+	assert.equal(completedTurn.media.length, 2, 'Duplicate media items must be collapsed');
+
+	// Reusing the same runId in a subsequent turn still assigns a unique message ID
+	state = reduceAgUiEvent(state, {
+		type: EventType.RUN_STARTED,
+		threadId: 'th-dedup-98',
+		runId: 'run-dedup-98'
+	});
+	state = reduceAgUiEvent(state, {
+		type: EventType.TEXT_MESSAGE_CONTENT,
+		messageId: 'm-dedup-98-2',
+		delta: 'Follow-up turn with reused runId.'
+	});
+	state = reduceAgUiEvent(state, {
+		type: EventType.RUN_FINISHED,
+		threadId: 'th-dedup-98',
+		runId: 'run-dedup-98',
+		result: { status: 'completed', memoryTurns: 2 }
+	});
+	const ids = state.messages.map((m) => m.id);
+	assert.equal(new Set(ids).size, ids.length, 'Every message in history must have a unique id');
+});
