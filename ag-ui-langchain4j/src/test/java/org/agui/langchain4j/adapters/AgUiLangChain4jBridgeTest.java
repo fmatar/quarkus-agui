@@ -9,6 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.agui.community.core.agent.Agent;
 import com.agui.community.core.agent.RunAgentInput;
+import com.agui.community.core.event.ActivitySnapshotEvent;
 import com.agui.community.core.event.Event;
 import com.agui.community.core.event.EventType;
 import com.agui.community.core.event.JsonPatchOperation;
@@ -706,5 +707,95 @@ class AgUiLangChain4jBridgeTest {
         assertThrows(AssertionError.class, () -> collectAll(fatalPub));
 
         assertNotNull(bridge.getClass().getClassLoader().getResourceAsStream("META-INF/beans.xml"));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void emitsCanonicalActivitySnapshotsAfterToolExecutionAndPostRunEnrichment() {
+        ToolExecutionRequest weatherReq = ToolExecutionRequest.builder()
+                .id("call-weather-93")
+                .name("fetchCityWeather")
+                .arguments("{\"city\":\"Kyoto\"}")
+                .build();
+        ToolExecution weatherExec = toolExecution(
+                weatherReq,
+                "{\"status\":\"OK\",\"city\":\"Kyoto\",\"temperatureC\":19.2,\"latitude\":35.0116,\"longitude\":135.7681}",
+                false);
+
+        TokenStream stream = new StubTokenStream(s -> {
+            s.beforeToolHandler.accept(beforeToolExecution(weatherReq));
+            s.toolExecutedHandler.accept(weatherExec);
+            s.partialResponseHandler.accept("Kyoto report ready.");
+            s.completeHandler.accept(ChatResponse.builder()
+                    .aiMessage(AiMessage.from("Kyoto report ready."))
+                    .build());
+        });
+
+        AgUiRunOptions baseOptions = AgUiRunOptions.builder()
+                .runId("run-initial")
+                .postToolActivityProvider(exec -> List.of(new ActivitySnapshotEvent(
+                        "act-weather-kyoto",
+                        "agui:weather",
+                        Map.of("city", "Kyoto", "temperatureC", 19.2, "tool", exec.request().name()),
+                        true,
+                        1700000000L,
+                        Map.of("protocol", "AG-UI", "callType", "agui:activity"))))
+                .postRunActivityProvider(() -> List.of(new ActivitySnapshotEvent(
+                        "act-security-kyoto",
+                        "agui:security-advisory",
+                        Map.of("city", "Kyoto", "country", "Japan", "status", "VERIFIED"),
+                        true,
+                        1700000001L,
+                        Map.of("protocol", "AG-UI", "callType", "agui:activity"))))
+                .build();
+
+        AgUiRunOptions options = baseOptions.withRunId("run-override-93");
+        assertEquals("run-override-93", options.runId());
+
+        List<Event> events = collectAll(bridge.adapt("thread-act-93", stream, options));
+        List<EventType> types = events.stream().map(Event::type).toList();
+        assertEquals(List.of(
+                EventType.RUN_STARTED,
+                EventType.TOOL_CALL_START,
+                EventType.TOOL_CALL_ARGS,
+                EventType.TOOL_CALL_END,
+                EventType.TOOL_CALL_RESULT,
+                EventType.ACTIVITY_SNAPSHOT,
+                EventType.TEXT_MESSAGE_START,
+                EventType.TEXT_MESSAGE_CONTENT,
+                EventType.TEXT_MESSAGE_END,
+                EventType.ACTIVITY_SNAPSHOT,
+                EventType.RUN_FINISHED), types);
+
+        ActivitySnapshotEvent weatherAct = assertInstanceOf(ActivitySnapshotEvent.class, events.get(5));
+        assertEquals("act-weather-kyoto", weatherAct.messageId());
+        assertEquals("agui:weather", weatherAct.activityType());
+        assertEquals(Boolean.TRUE, weatherAct.replace());
+        assertEquals("fetchCityWeather", ((Map<String, Object>) weatherAct.content()).get("tool"));
+
+        ActivitySnapshotEvent securityAct = assertInstanceOf(ActivitySnapshotEvent.class, events.get(9));
+        assertEquals("act-security-kyoto", securityAct.messageId());
+        assertEquals("agui:security-advisory", securityAct.activityType());
+
+        // Empty/null activity lists emit zero spurious events
+        AgUiRunOptions legacyCtorOptions = new AgUiRunOptions(
+                "run-legacy-8", "langchain4j", Map.of(), null, null, null, null, null);
+        assertEquals("run-legacy-8", legacyCtorOptions.runId());
+
+        List<ActivitySnapshotEvent> listWithNull = new ArrayList<>();
+        listWithNull.add(null);
+        AgUiRunOptions emptyProviders = AgUiRunOptions.builder()
+                .postToolActivityProvider(exec -> listWithNull)
+                .postRunActivityProvider(() -> null)
+                .build();
+        List<Event> minimal = collectAll(bridge.adapt(
+                "thread-act-empty",
+                new StubTokenStream(s -> {
+                    s.beforeToolHandler.accept(beforeToolExecution(weatherReq));
+                    s.toolExecutedHandler.accept(weatherExec);
+                    s.completeHandler.accept(ChatResponse.builder().build());
+                }),
+                emptyProviders));
+        assertFalse(minimal.stream().anyMatch(e -> e.type() == EventType.ACTIVITY_SNAPSHOT));
     }
 }

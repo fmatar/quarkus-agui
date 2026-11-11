@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-11
+
+### Added
+- feat(agui,showcase,ci): introduce canonical AG-UI `ACTIVITY_SNAPSHOT` (`com.agui.community.core.event.ActivitySnapshotEvent`) lifecycle hooks (`postToolActivityProvider` & `postRunActivityProvider`) in `AgUiRunOptions` / `AgUiLangChain4jRunSession`, headless `@agui/svelte` activity registry & map deep-link builders (`AGUI_ACTIVITY_TYPES`, `sanitizeExternalUrl`, `buildPlaceMapLinks`, `createActivityRegistry`, `upsertActivityList`, `agui:activity` taxonomy), 5 Svelte 5 Runes AG-UI activity cards (`AgUiWeatherCard`, `AgUiLocationMapCard` with Google Maps / Apple Maps / OpenStreetMap / Wikipedia deep links & lazy `<details>` OSM preview, `AgUiSecurityAdvisoryCard`, `AgUiFxBudgetCard`, `AgUiCultureAudioCard`, `AgUiActivityRenderer`) rendered inline in `AssistantTurn.svelte` and as a Complete Trip Dossier Report in `TripDossierPanel.svelte` + `.md` export, and self-hosted `local-quarkus-agui` GitHub Actions CI (`ADR-008`, [#93](https://github.com/fmatar/quarkus-agui/issues/93))
+
+### Changed
+- chore(release): bump all 10 `org.agui` Maven modules (`0.2.0`), `@agui/svelte@0.2.0`, and `quarkus-svelte-skeleton-frontend@0.2.0`, synchronize `docs/specs/` (`PRD.md`, `SRS.md`) with `ADR-008`, generate cryptographic regression proof (`agui-v0.2.0`), and release `v0.2.0` ([#95](https://github.com/fmatar/quarkus-agui/issues/95))
+
 ## [0.1.1] - 2026-11-10
 
 ### Fixed

@@ -394,7 +394,14 @@ public class NomadTravelAdvisorService {
             data.put("region", region);
             data.put("currencyCode", currencyCode);
             data.put("timezone", timezone);
+            data.put("advisoryLevel", "STANDARD_PRECAUTIONS");
             data.put("advisoryStatus", "VERIFIED — Country Metadata & Timezone Confirmed");
+            data.put("emergencyNumbers", resolveEmergencyNumbers(resolvedCountry, region));
+            data.put("hitlThresholdUsd", 1500.0);
+            data.put("safetyHighlights", List.of(
+                    "Confirm passport validity (6+ months) & consular entry rules for " + resolvedCountry + " (" + capital + ").",
+                    "Local reference timezone " + timezone + " • official settlement currency " + currencyCode + ".",
+                    "Nomad HITL financial safeguard active: sanctuary holds >= $1,500 USD require explicit traveler authorization."));
             data.put("source", "api.restcountries.com");
 
             String summary = String.format(
@@ -426,6 +433,7 @@ public class NomadTravelAdvisorService {
         String country = stringFromCtx(ctx, "country", resolveCountryForCity(city));
         String focus = stringFromCtx(ctx, "focus", "architecture, local craft & evening acoustics");
         List<String> stops = switch (city.toLowerCase(Locale.ROOT)) {
+            case "kyoto" -> List.of("Morning: Arashiyama Cedar & Moss Sanctuary", "Afternoon: Gion Sukiya-zukuri Machiya Joinery", "Evening: Pontocho Silk-String Koto Salon");
             case "lisbon" -> List.of("Morning: Chiado Azulejo Atelier", "Afternoon: Santa Luzia Miradouro", "Evening: Alfama Acoustic Fado Tavern");
             case "reykjavik" -> List.of("Morning: Harpa Basalt Concert Hall", "Afternoon: Sky Lagoon Geothermal Ritual", "Evening: Nordic Chamber Strings Lounge");
             case "tokyo" -> List.of("Morning: Nezu Museum Bamboo Courtyard", "Afternoon: Aoyama Tadao Ando Galleries", "Evening: Shibuya Vinyl Kissaten");
@@ -452,6 +460,18 @@ public class NomadTravelAdvisorService {
                 "Curated 3-stop neighborhood sequence for %s (%s) focused on %s: %s.",
                 city, country, focus, String.join(" -> ", stops));
         return new AuditResult(summary, "art-cadence-1", "Neighborhood Architectural & Acoustic Cadence", data);
+    }
+
+    static String resolveEmergencyNumbers(String country, String region) {
+        String normCountry = country == null ? "" : country.trim().toLowerCase(Locale.ROOT);
+        if ("japan".equals(normCountry)) {
+            return "110 Police • 119 Fire & Ambulance";
+        }
+        String normRegion = region == null ? "" : region.trim().toLowerCase(Locale.ROOT);
+        if (normRegion.contains("americas")) {
+            return "911 Emergency Dispatch";
+        }
+        return "112 Universal GSM • Local Municipal Dispatch";
     }
 
     public Map<String, Object> checkHealth() {

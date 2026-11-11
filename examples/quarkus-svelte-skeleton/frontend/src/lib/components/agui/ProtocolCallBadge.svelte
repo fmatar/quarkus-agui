@@ -47,8 +47,8 @@
 		<BookOpen class="size-3 shrink-0" />
 	{:else if meta.iconName === 'Sparkles'}
 		<Sparkles class="size-3 shrink-0" />
-	{:else if meta.iconName === 'LayoutGrid'}
-		<LayoutGrid class="size-3 shrink-0" />
+	{:else if meta.iconName === 'LayoutGrid' || meta.iconName === 'LayoutDashboard'}
+		<LayoutGrid class="size-3 shrink-0" aria-hidden="true" />
 	{:else}
 		<Wrench class="size-3 shrink-0" />
 	{/if}

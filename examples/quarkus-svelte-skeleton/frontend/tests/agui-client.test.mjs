@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+	AGUI_ACTIVITY_TYPES,
 	EventType,
 	HttpAgent,
 	NOMAD_DESTINATIONS,
@@ -13,8 +14,10 @@ import {
 	WebSocketAgent,
 	applyJsonPatch,
 	buildHitlResumeInput,
+	buildPlaceMapLinks,
 	buildRunAgentInput,
 	createInitialWorkbenchState,
+	deriveDossierActivities,
 	filterInspectorEvents,
 	formatTripDossierMarkdown,
 	lockTurnInteraction,
@@ -1156,4 +1159,193 @@ test('Boundary & mutation defense across envelope builders, reducer branches, he
 	assert.deepEqual(toRootStateDeltaOps({ 'nested/key~flag': 7 }), [
 		{ op: 'add', path: '/nested~1key~0flag', value: 7 }
 	]);
+});
+
+test('AG-UI activity snapshots populate turn.activities, sync reportSections, derive all 5 Dossier Report cards, and export complete Markdown', () => {
+	let state = createInitialWorkbenchState('th-agui-93');
+	assert.deepEqual(deriveDossierActivities(state.tripDossierState), []);
+
+	state = reduceAgUiEvent(state, {
+		type: EventType.RUN_STARTED,
+		threadId: 'th-agui-93',
+		runId: 'run-93'
+	});
+
+	state = reduceAgUiEvent(state, {
+		type: EventType.ACTIVITY_SNAPSHOT,
+		messageId: 'act-weather-kyoto',
+		activityType: AGUI_ACTIVITY_TYPES.WEATHER,
+		content: {
+			status: 'OK',
+			isError: false,
+			city: 'Kyoto',
+			country: 'Japan',
+			temperatureC: 18.4,
+			windSpeedKph: 11.2,
+			condition: 'Clear Sky & Crisp Light',
+			latitude: 35.0116,
+			longitude: 135.7681,
+			source: 'api.open-meteo.com'
+		},
+		rawEvent: { protocol: 'AG-UI', callType: 'agui:activity' }
+	});
+
+	// Upsert same weather messageId idempotently
+	state = reduceAgUiEvent(state, {
+		type: EventType.ACTIVITY_SNAPSHOT,
+		messageId: 'act-weather-kyoto',
+		activityType: AGUI_ACTIVITY_TYPES.WEATHER,
+		content: {
+			status: 'OK',
+			isError: false,
+			city: 'Kyoto',
+			country: 'Japan',
+			temperatureC: 19.1,
+			windSpeedKph: 10.5,
+			condition: 'Clear Sky & Crisp Light',
+			latitude: 35.0116,
+			longitude: 135.7681,
+			source: 'api.open-meteo.com'
+		},
+		rawEvent: { protocol: 'AG-UI', callType: 'agui:activity' }
+	});
+	assert.equal(state.activeTurn.activities.length, 1);
+	assert.equal(state.activeTurn.activities[0].content.temperatureC, 19.1);
+
+	state = reduceAgUiEvent(state, {
+		type: EventType.ACTIVITY_SNAPSHOT,
+		messageId: 'act-map-places-kyoto',
+		activityType: AGUI_ACTIVITY_TYPES.MAP_PLACES,
+		content: {
+			status: 'OK',
+			isError: false,
+			city: 'Kyoto',
+			country: 'Japan',
+			latitude: 35.0116,
+			longitude: 135.7681,
+			focus: 'Machiya architecture & koto music',
+			pace: 'Unrushed curated walk',
+			stops: [
+				'Fushimi Inari Taisha — Senbon Torii Ridge',
+				'Arashiyama Bamboo Grove & Tenryu-ji Timber Garden'
+			],
+			wikiSourceUrl: 'https://en.wikipedia.org/wiki/Kyoto'
+		}
+	});
+
+	state = reduceAgUiEvent(state, {
+		type: EventType.ACTIVITY_SNAPSHOT,
+		messageId: 'act-security-kyoto',
+		activityType: AGUI_ACTIVITY_TYPES.SECURITY_ADVISORY,
+		content: {
+			status: 'VERIFIED',
+			isError: false,
+			city: 'Kyoto',
+			country: 'Japan',
+			capital: 'Tokyo',
+			region: 'Asia',
+			currencyCode: 'JPY',
+			timezone: 'UTC+09:00',
+			advisoryLevel: 'STANDARD_PRECAUTIONS',
+			advisoryStatus: 'VERIFIED — Country Metadata & Timezone Confirmed',
+			emergencyNumbers: '110 Police • 119 Fire & Ambulance',
+			hitlThresholdUsd: 1500,
+			safetyHighlights: [
+				'Verify passport validity (6+ months recommended) for Japan.',
+				'Confirm local ISO 4217 currency settlement (JPY).',
+				'Nomad HITL financial safeguard active >= $1,500 USD.'
+			],
+			source: 'api.restcountries.com'
+		}
+	});
+
+	state = reduceAgUiEvent(state, {
+		type: EventType.ACTIVITY_SNAPSHOT,
+		messageId: 'act-fx-kyoto',
+		activityType: AGUI_ACTIVITY_TYPES.FX_BUDGET,
+		content: {
+			status: 'OK',
+			isError: false,
+			city: 'Kyoto',
+			country: 'Japan',
+			nights: 4,
+			stopTitle: 'Kyoto Curated Stay',
+			baseCurrency: 'USD',
+			targetCurrency: 'JPY',
+			exchangeRate: 153.2,
+			budgetUsd: 2400,
+			allocatedUsd: 1560,
+			convertedTotal: 367680,
+			hitlThresholdUsd: 1500,
+			source: 'api.frankfurter.dev'
+		}
+	});
+
+	state = reduceAgUiEvent(state, {
+		type: EventType.ACTIVITY_SNAPSHOT,
+		messageId: 'act-culture-kyoto',
+		activityType: AGUI_ACTIVITY_TYPES.CULTURE_AUDIO,
+		content: {
+			status: 'OK',
+			isError: false,
+			city: 'Kyoto',
+			country: 'Japan',
+			culturalSummary: 'Kyoto preserves classical machiya timber joinery and koto chamber traditions.',
+			heroImageUrl: 'https://upload.wikimedia.org/kyoto.jpg',
+			wikiSourceUrl: 'https://en.wikipedia.org/wiki/Kyoto',
+			acousticMood: 'Arashiyama Koto Twilight',
+			listeningWindow: '18:30–20:30 Local Dusk',
+			soundtrack: {
+				trackName: 'Rokudan no Shirabe',
+				artistName: 'Kyoto Ensemble',
+				previewUrl: 'https://audio-ssl.itunes.apple.com/koto.m4a',
+				durationSeconds: 30
+			}
+		}
+	});
+
+	state = reduceAgUiEvent(state, {
+		type: EventType.TEXT_MESSAGE_CONTENT,
+		messageId: 'm-93',
+		delta: 'Complete Kyoto Trip Dossier curated with all 5 AG-UI surfaces.'
+	});
+	state = reduceAgUiEvent(state, {
+		type: EventType.RUN_FINISHED,
+		threadId: 'th-agui-93',
+		runId: 'run-93',
+		outcome: { type: 'success' },
+		result: { status: 'completed', memoryTurns: 2 }
+	});
+
+	const lastTurn = state.messages.at(-1);
+	assert.equal(lastTurn.activities.length, 5);
+
+	const dossierActivities = deriveDossierActivities(state.tripDossierState);
+	assert.deepEqual(
+		dossierActivities.map((a) => a.activityType),
+		[
+			AGUI_ACTIVITY_TYPES.WEATHER,
+			AGUI_ACTIVITY_TYPES.MAP_PLACES,
+			AGUI_ACTIVITY_TYPES.SECURITY_ADVISORY,
+			AGUI_ACTIVITY_TYPES.FX_BUDGET,
+			AGUI_ACTIVITY_TYPES.CULTURE_AUDIO
+		]
+	);
+
+	// Verify Markdown export includes all 5 sections, map links, and security advisory highlights
+	const md = formatTripDossierMarkdown(state.tripDossierState, state.messages);
+	assert.ok(md.includes('## Weather & Microclimate'));
+	assert.ok(md.includes('19.1°C'));
+	assert.ok(md.includes('## Places & Map Links'));
+	assert.ok(md.includes('Google Maps'));
+	assert.ok(md.includes('Apple Maps'));
+	assert.ok(md.includes('OpenStreetMap'));
+	assert.ok(md.includes('## Security & Travel Advisory'));
+	assert.ok(md.includes('110 Police • 119 Fire & Ambulance'));
+	assert.ok(md.includes('## FX & Budget Audit'));
+	assert.ok(md.includes('## Cultural Notes & Acoustic Preview'));
+	assert.ok(md.includes('Rokudan no Shirabe'));
+
+	const links = buildPlaceMapLinks({ city: 'Kyoto', country: 'Japan', latitude: 35.0116, longitude: 135.7681 });
+	assert.ok(links.openStreetMapEmbedUrl.includes('openstreetmap.org'));
 });

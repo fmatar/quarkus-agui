@@ -593,4 +593,44 @@ class NomadTravelAdvisorServiceTest {
         service.checkHealth();
         assertEquals(4, calls.get(), "Degraded health report must expire quickly so transient startup blips self-heal");
     }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void advisoryAndCadenceProvideStructuredSecurityHighlightsEmergencyContactsAndKyotoStops() {
+        service.restCountriesApiKey = java.util.Optional.of("rc-test-key");
+        service.setHttpProbe(url -> new NomadTravelAdvisorService.UpstreamHttpResult(
+                200, REST_COUNTRIES_V5_JAPAN_JSON, null, 18L));
+
+        NomadTravelAdvisorService.AuditResult kyotoAdv = service.performAudit(
+                "verify-travel-advisory", "Verify advisory for Kyoto", Map.of("city", "Kyoto"));
+        assertEquals("OK", kyotoAdv.data().get("status"));
+        assertEquals("STANDARD_PRECAUTIONS", kyotoAdv.data().get("advisoryLevel"));
+        assertTrue(String.valueOf(kyotoAdv.data().get("emergencyNumbers")).contains("110"));
+        assertEquals(1500.0, kyotoAdv.data().get("hitlThresholdUsd"));
+        List<String> highlights = (List<String>) kyotoAdv.data().get("safetyHighlights");
+        assertNotNull(highlights);
+        assertEquals(3, highlights.size());
+
+        // Europe & Americas emergency dispatch coverage
+        service.setHttpProbe(url -> new NomadTravelAdvisorService.UpstreamHttpResult(
+                200, REST_COUNTRIES_V5_FRANCE_JSON, null, 15L));
+        NomadTravelAdvisorService.AuditResult parisAdv = service.performAudit(
+                "verify-travel-advisory", "Verify advisory for Paris", Map.of("city", "Paris"));
+        assertTrue(String.valueOf(parisAdv.data().get("emergencyNumbers")).contains("112"));
+
+        service.setHttpProbe(url -> new NomadTravelAdvisorService.UpstreamHttpResult(
+                200,
+                "{\"data\":{\"objects\":[{\"names\":{\"common\":\"Mexico\"},\"capitals\":[{\"name\":\"Mexico City\"}],\"region\":\"Americas\",\"currencies\":[{\"code\":\"MXN\"}],\"timezones\":[\"UTC-06:00\"]}]}}",
+                null,
+                15L));
+        NomadTravelAdvisorService.AuditResult oaxacaAdv = service.performAudit(
+                "verify-travel-advisory", "Verify advisory for Oaxaca", Map.of("city", "Oaxaca", "country", "Mexico"));
+        assertTrue(String.valueOf(oaxacaAdv.data().get("emergencyNumbers")).contains("911"));
+
+        NomadTravelAdvisorService.AuditResult kyotoCadence = service.performAudit(
+                "curate-neighborhood-cadence", "Curate Kyoto stops", Map.of("city", "Kyoto"));
+        List<String> kyotoStops = (List<String>) kyotoCadence.data().get("stops");
+        assertTrue(kyotoStops.stream().anyMatch(s -> s.contains("Arashiyama")));
+        assertTrue(kyotoStops.stream().anyMatch(s -> s.contains("Gion")));
+    }
 }

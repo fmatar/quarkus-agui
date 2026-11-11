@@ -1,5 +1,6 @@
 <script>
 	import { AlertTriangle, ArrowRight, Check, Copy, ExternalLink, RotateCcw } from '@lucide/svelte';
+	import { sanitizeExternalUrl } from '$lib/agui-client.js';
 	import ProtocolCallBadge from './ProtocolCallBadge.svelte';
 
 	let {
@@ -30,20 +31,21 @@
 		<div class="flex flex-wrap items-center gap-1.5">
 			<span class="text-[11px] font-medium text-[#575551] mr-1">Telemetry & Sources:</span>
 			{#each sources as src (src.title)}
+				{@const safeSourceUrl = sanitizeExternalUrl(src.url)}
 				{#if src.status === 'error'}
 					<span
 						title={src.error || 'Upstream service unavailable'}
-						class="inline-flex items-center gap-1.5 rounded-md border border-[#C84B31]/45 bg-[#FBEEE9] px-2 py-0.5 text-[11px] font-semibold text-[#C84B31]"
+						class="inline-flex items-center gap-1.5 rounded-md border border-[#9E331D]/40 bg-[#FBEEE9] px-2 py-0.5 text-[11px] font-semibold text-[#9E331D]"
 					>
 						<AlertTriangle class="size-3 shrink-0" />
 						<span>{src.title}</span>
-						<span class="rounded bg-[#C84B31] px-1 py-0.2 font-mono text-[9px] font-bold text-white">UNAVAILABLE</span>
+						<span class="rounded bg-[#9E331D] px-1 py-0.2 font-mono text-[9px] font-bold text-white">UNAVAILABLE</span>
 					</span>
-				{:else}
+				{:else if safeSourceUrl}
 					<a
-						href={src.url}
+						href={safeSourceUrl}
 						target="_blank"
-						rel="noreferrer"
+						rel="noopener noreferrer"
 						class="inline-flex items-center gap-1.5 rounded-md border border-[#E4E0D8] bg-[#F6F5F2] px-2 py-0.5 text-[11px] font-medium text-[#141413] transition-colors hover:border-[#CFCAC0] hover:bg-[#EFECE6]"
 					>
 						<span>{src.title}</span>
